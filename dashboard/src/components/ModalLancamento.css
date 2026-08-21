@@ -1,0 +1,313 @@
+.modal-close{
+    width:42px;
+    height:42px;
+    border:none;
+    border-radius:12px;
+    background:none;
+    color:#999;
+    cursor:pointer;
+    font-size:22px;
+}
+
+.modal-close:hover{
+    background:#252b36;
+    color:white;
+}
+
+.input-icon{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    background:#121720;
+    border:1px solid #2d3440;
+    height:54px;
+    border-radius:14px;
+    padding:0 16px;
+}
+
+.input-icon svg{
+    color:#8B949E;
+    flex-shrink:0;
+}
+
+.input-icon input{
+    background:none;
+    border:none;
+    color:white;
+    width:100%;
+    height:100%;
+    font-size:15px;
+    outline:none;
+}
+
+.modal-title h2{
+    font-size:28px;
+    font-weight:800;
+}
+
+.modal-title p{
+    margin-top:6px;
+    color:#8B949E;
+}
+
+.modal-icon{
+    width:64px;
+    height:64px;
+    border-radius:50%;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    background:linear-gradient(135deg,#ff007a,#7100e2);
+    color:white;
+    box-shadow:0 0 30px rgba(255,0,122,.35);
+}
+
+.modal-content{
+    background:#161B22;
+    border:1px solid #30363D;
+    border-radius:18px;
+    width:min(1000px,92vw);
+    max-width:1000px;
+    padding:36px;
+    box-shadow:0 30px 80px rgba(0,0,0,.45);
+}
+
+.modal-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+}
+
+/* Este é o fundo escuro que cobre todo o ecrã */
+.modal-overlay {
+  position: fixed;
+  inset: 0; /* Ocupa o topo, fundo, esquerda e direita */
+  background-color: rgba(0, 0, 0, 0.7); /* Fundo escuro semi-transparente */
+  backdrop-filter: blur(5px); /* Efeito opcional de vidro desfocado */
+  display: flex;
+  align-items: center; /* Centraliza verticalmente */
+  justify-content: center; /* Centraliza horizontalmente */
+  z-index: 9999; /* Garante que fica por cima de QUALQUER elemento do dashboard */
+}
+
+
+/* Estilo base para o container do Total Estimado */
+.total-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px;
+  border-radius: 8px;
+  margin: 20px 0; /* Dá um espaçamento excelente entre os campos */
+  background-color: #1c2128; /* Cor de fundo padrão escura */
+  border: 1px solid #30363d;
+  transition: all 0.25s ease;
+}
+
+/* Quando o estado for receita, o CSS aplica este fundo e borda */
+.total-card.recebido-layout {
+  background-color: rgba(57, 255, 20, 0.06) !important;
+  border-color: rgba(57, 255, 20, 0.25) !important;
+}
+
+/* Quando o estado for despesa, o CSS aplica este fundo e borda */
+.total-card.despesa-layout {
+  background-color: rgba(255, 0, 122, 0.06) !important;
+  border-color: rgba(255, 0, 122, 0.25) !important;
+}
+
+/* Alinhamento dos textos dentro do card */
+.total-card h3 {
+  margin: 0;
+  font-size: 12px;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.total-card span {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.btn-save.despesa{
+    background:#ff2b87;
+}
+
+.btn-save.receita{
+    background:#16c784;
+}
+
+.btn-save.receita:hover{
+    background:#13b374;
+}
+
+.btn-save.despesa:hover{
+    background:#ff1177;
+}
+
+.modal-icon.receita{
+  background:linear-gradient(135deg,#16c784,#09a65d);
+  box-shadow:0 0 35px rgba(22,199,132,.35);
+}
+
+.modal-icon.despesa{
+  background:linear-gradient(135deg,#ff007a,#7d2cff);
+  box-shadow:0 0 35px rgba(255,0,122,.35);
+}
+
+
+@keyframes modalShow{
+  from{
+    opacity:0;
+    transform:translateY(18px) scale(.96);
+  }
+  to{
+    opacity:1;
+    transform:translateY(0) scale(1);
+  }
+}
+.type-toggle{
+  display:flex;
+  background:#10151d;
+  border-radius:12px;
+  padding:4px;
+  gap:4px;
+}
+
+.btn-toggle{
+  flex:1;
+  height:42px;
+  border:none;
+  background:transparent;
+  color:#999;
+  border-radius:10px;
+  cursor:pointer;
+  transition:.2s;
+  font-weight:700;
+}
+
+.btn-toggle.active.recebido{
+  background:#16c784;
+  color:white;
+}
+
+.btn-toggle.active.despesa{
+  background:#ff2b87;
+  color:white;
+}
+.modal-title-row{
+    display:flex;
+    align-items:center;
+    gap:14px;
+}
+
+.modal-title-row h2{
+    margin:0;
+    font-size:32px;
+    font-weight:800;
+    line-height:1.1;
+}
+
+.modal-title-icon{
+    flex-shrink:0;
+}
+
+.modal-title-icon.receita{
+    color:#16c784;
+}
+
+.modal-title-icon.despesa{
+    color:#ff2b87;
+}
+
+.modal-title-icon.receita{
+    color:#16c784;
+}
+
+.modal-title-icon.despesa{
+    color:#ff2b87;
+}
+
+.modal-subtitle{
+    margin-top:8px;
+    margin-left:44px; /* alinha com o texto após o ícone */
+    color:#8b949e;
+    font-size:15px;
+}
+
+.modal-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:24px;
+    margin-top:24px;
+}
+
+.full-width{
+    grid-column:1/-1;
+}
+
+.btn-close{
+    width:42px;
+    height:42px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    border:none;
+    border-radius:50%;
+    background:transparent;
+    color:#8B949E;
+    cursor:pointer;
+    transition:all .2s ease;
+    flex-shrink:0;
+}
+
+.btn-close:hover{
+    background:#252B36;
+    color:white;
+    transform:rotate(90deg);
+}
+
+.btn-close:active{
+    transform:scale(.92);
+}
+
+.left-half{
+    grid-column:1 / -1;   /* ocupa a linha toda */
+    width:calc(50% - 12px); /* mesma largura de uma coluna */
+}
+
+.form-group{
+    width:100%;
+}
+
+.form-row{
+    display:grid;
+    gap:20px;
+}
+
+.form-row.cols-2{
+    grid-template-columns:repeat(2,1fr);
+}
+
+.form-row.cols-3{
+    grid-template-columns:repeat(3,1fr);
+}
+
+.btn-delete {
+    height: 48px;
+    padding: 0 22px;
+    border-radius: 12px;
+    background: transparent;
+    border: 1px solid #ff2b87;
+    color: #ff2b87;
+    cursor: pointer;
+    font-weight: 700;
+    transition: all 0.2s ease;
+}
+
+.btn-delete:hover {
+    background: #ff2b87;
+    color: white;
+    box-shadow: 0 0 15px rgba(255, 43, 135, 0.4);
+}

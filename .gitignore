@@ -1,0 +1,6 @@
+*.7z
+*.zip
+node_modules/
+.next/
+
+.env
