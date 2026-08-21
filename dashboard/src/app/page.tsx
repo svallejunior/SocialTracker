@@ -1859,13 +1859,22 @@ export default function Dashboard() {
   }
 
   async function handleAdd(username: string) {
+    const usernameLower = username.toLowerCase();
     try {
       const res = await fetch('/api/data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: username.toLowerCase() })
+        body: JSON.stringify({ username: usernameLower })
       });
-      if (res.ok) window.location.reload();
+      if (res.ok) {
+        setShowAdd(false);
+        // Navega para a aba Acompanhando
+        setActiveTab('acompanhados');
+        // Recarrega lista de perfis
+        await fetchData();
+        // Dispara ingestão inicial automaticamente
+        await handleRunIngestion(usernameLower);
+      }
     } catch (err) {
       console.error(err);
     }
