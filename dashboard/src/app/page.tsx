@@ -1256,8 +1256,12 @@ export default function Dashboard() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/data');
-      const json = await response.json();
+      // Em vez de fetch('/api/operacoes')
+      const response = await fetch('http://SEU_IP_OU_HOST_DA_VPS:5000/api/operacoes', {
+        cache: 'no-store'
+      });
+      const data = await response.json();
+            const json = await response.json();
 
       if (json.success) {
         setProfiles(json.profiles || []);
