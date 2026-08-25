@@ -1,4 +1,5 @@
 "use client";
+export const dynamic = 'force-dynamic';
 import React, { useState, useEffect } from 'react';
 import {
   TrendingUp, ExternalLink, LogOut, Calendar, Search, Users, MessageSquare, Eye, EyeOff, Heart, Filter,
@@ -1438,8 +1439,12 @@ export default function Dashboard() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/data');
-      const json = await response.json();
+      // Em vez de fetch('/api/operacoes')
+      const response = await fetch('http://SEU_IP_OU_HOST_DA_VPS:5000/api/operacoes', {
+        cache: 'no-store'
+      });
+      const data = await response.json();
+            const json = await response.json();
 
       if (json.success) {
         const rawPosts = json.posts || [];
