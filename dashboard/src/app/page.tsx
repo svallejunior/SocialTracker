@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import {
-  TrendingUp, ExternalLink, LogOut, Calendar, Search, Users, MessageSquare, Eye, Heart, Filter,
+  TrendingUp, ExternalLink, LogOut, Calendar, Search, Users, MessageSquare, Eye, EyeOff, Heart, Filter,
   BarChart3, Play, Hash, Hash as TagIcon, Image as ImageIcon, Film as VideoIcon, Layers as LayersIcon,
   HelpCircle, CheckCircle2, DollarSign, Wallet, FileText, X, Brain, AlertTriangle, BadgeCheck, History
 } from "lucide-react";
@@ -18,6 +18,7 @@ interface Props {
 import ModalLancamento from "../components/ModalLancamento";
 import GraficoProjecao from "../components/GraficoProjecao";
 import CentralAnomalias from "../components/CentralAnomalias";
+import CentralAutomatizacao from "../components/CentralAutomatizacao";
 
 const ModalLancamentoInline = ({ isOpen, onClose, username, onSave, perfisDisponiveis }: any) => {
   useEffect(() => {
@@ -171,6 +172,58 @@ const formatDate = (dateStr: string) => {
   } catch {
     return dateStr;
   }
+};
+
+// Converte ID numérico de mídia do Instagram (ex: 3924559581854350296) para Shortcode base64 (ex: DZ21iWASLvY)
+const idToShortcode = (idInput: string | number): string => {
+  if (!idInput) return '';
+  const strId = String(idInput).split('_')[0].trim();
+  if (/[a-zA-Z]/.test(strId)) return strId;
+  try {
+    let bigId = BigInt(strId);
+    if (bigId <= BigInt(0)) return strId;
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    let shortcode = '';
+    const sixtyFour = BigInt(64);
+    const zero = BigInt(0);
+    while (bigId > zero) {
+      const remainder = Number(bigId % sixtyFour);
+      bigId = bigId / sixtyFour;
+      shortcode = alphabet[remainder] + shortcode;
+    }
+    return shortcode;
+  } catch {
+    return strId;
+  }
+};
+
+const getInstagramPostUrl = (post: any): string => {
+  if (!post) return '#';
+
+  if (post.shortcode && post.shortcode !== 'None' && post.shortcode !== 'null' && /[a-zA-Z]/.test(post.shortcode)) {
+    return `https://www.instagram.com/p/${post.shortcode}/`;
+  }
+
+  const targetLink = post.link || post.url || '';
+  if (targetLink) {
+    const match = String(targetLink).match(/\/p\/(\d+)\/?/);
+    if (match && match[1]) {
+      const converted = idToShortcode(match[1]);
+      return `https://www.instagram.com/p/${converted}/`;
+    }
+    if (targetLink.includes('/p/')) return targetLink;
+  }
+
+  if (post.post_id) {
+    const code = idToShortcode(post.post_id);
+    if (code) return `https://www.instagram.com/p/${code}/`;
+  }
+
+  if (post.username) {
+    return `https://www.instagram.com/${post.username}/`;
+  }
+
+  return '#';
 };
 
 // ============================================================
@@ -569,7 +622,23 @@ function ModalControleEditInline({ perfil, onClose, onSave }: { perfil: any; onC
                 ))}
               </div>
             </div>
-            {field('Reserva', 'reserva', 'text', 'Ex: 50%')}
+            <div>
+              <label style={{ fontSize: 11, color: '#8B949E', display: 'block', marginBottom: 6, fontWeight: 600, letterSpacing: '0.05em' }}>
+                RESERVA (FUTUROS)
+              </label>
+              <div style={{
+                background: '#0D1117',
+                border: '1px solid #30363D',
+                borderRadius: 8,
+                padding: '10px 14px',
+                color: '#58A6FF',
+                fontSize: 13,
+                fontWeight: 700,
+                boxSizing: 'border-box'
+              }}>
+                📅 {form.reserva || 0} {Number(form.reserva) === 1 ? 'post agendado' : 'posts agendados'}
+              </div>
+            </div>
             {field('Linktree', 'linktree', 'text', 'https://linktree.ee/usuario')}
 
             <div>
@@ -851,19 +920,48 @@ function DeleteConfirm({ username, onConfirm, onClose }: { username: string; onC
 
 function ModalPerfilIndisponivel({
   username,
+  ultimoSeguidores = 0,
+  dataUltimaColeta = null,
   onClose,
   onSaveFollowers,
   onConfirmIndisponivel,
   onConfirmZeroFollowers
 }: {
   username: string;
+  ultimoSeguidores?: number;
+  dataUltimaColeta?: string | null;
   onClose: () => void;
   onSaveFollowers: (val: number) => void;
   onConfirmIndisponivel: () => void;
   onConfirmZeroFollowers: () => void;
 }) {
-  const [manualCount, setManualCount] = useState<string>('');
-  const [showInput, setShowInput] = useState<boolean>(false);
+  const [manualCount, setManualCount] = useState<string>(ultimoSeguidores > 0 ? String(ultimoSeguidores) : '');
+  const [showInput, setShowInput] = useState<boolean>(true);
+  const [showConfirmacaoVariacao, setShowConfirmacaoVariacao] = useState<boolean>(false);
+
+  const novoValNum = Number(manualCount);
+  const hasValidNum = !isNaN(novoValNum) && novoValNum >= 0 && manualCount.trim() !== '';
+  const diffSeguidores = hasValidNum && ultimoSeguidores > 0 ? novoValNum - ultimoSeguidores : 0;
+  const pctVariacao = hasValidNum && ultimoSeguidores > 0 ? (diffSeguidores / ultimoSeguidores) * 100 : 0;
+  const isVariacaoAlta = hasValidNum && ultimoSeguidores > 0 && Math.abs(pctVariacao) > 5;
+
+  const dataFormatada = dataUltimaColeta
+    ? new Date(dataUltimaColeta.split('T')[0].split(' ')[0] + 'T00:00:00').toLocaleDateString('pt-BR')
+    : null;
+
+  const handleTentarSalvar = () => {
+    if (!hasValidNum) {
+      alert('Por favor, insira um número válido de seguidores.');
+      return;
+    }
+
+    if (isVariacaoAlta && !showConfirmacaoVariacao) {
+      setShowConfirmacaoVariacao(true);
+      return;
+    }
+
+    onSaveFollowers(novoValNum);
+  };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -884,7 +982,7 @@ function ModalPerfilIndisponivel({
     >
       <div style={{
         background: "#161B22", border: "1px solid #30363D",
-        borderRadius: 16, padding: 28, width: 520, maxWidth: "90vw",
+        borderRadius: 16, padding: 28, width: 540, maxWidth: "92vw",
         boxShadow: "0 20px 40px rgba(0,0,0,0.6)", position: "relative"
       }}>
         {/* Header */}
@@ -899,7 +997,7 @@ function ModalPerfilIndisponivel({
           </div>
           <div>
             <h3 style={{ color: "white", fontSize: 18, fontWeight: 700, margin: 0 }}>
-              Dados não encontrados / Seguidores zerados
+              Dados não encontrados / Perfil Indisponível
             </h3>
             <span style={{ color: "#8B949E", fontSize: 13 }}>
               Perfil: <strong style={{ color: "#00F0FF" }}>@{username}</strong>
@@ -907,12 +1005,12 @@ function ModalPerfilIndisponivel({
           </div>
         </div>
 
-        <p style={{ color: "#C9D1D9", fontSize: 13, lineHeight: 1.5, marginBottom: 20 }}>
-          A API do Instagram não retornou dados para este perfil ou informou 0 seguidores. Como você deseja proceder?
+        <p style={{ color: "#C9D1D9", fontSize: 13, lineHeight: 1.5, marginBottom: 18 }}>
+          A API do Instagram retornou indisponível ou 0 seguidores para este perfil. Como você deseja proceder?
         </p>
 
         {/* 4 Opções */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
 
           {/* Opção 1: Abrir o perfil */}
           <button
@@ -931,51 +1029,64 @@ function ModalPerfilIndisponivel({
           >
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <span style={{ fontSize: 16 }}>1️⃣ 🌐</span>
-              <span>Abrir perfil no Instagram</span>
+              <span>Abrir perfil no Instagram para verificar</span>
             </div>
             <ExternalLink size={14} style={{ color: "#8B949E" }} />
           </button>
 
-          {/* Opção 2: Inserir manualmente os seguidores */}
-          <div style={{ background: "#0D1117", border: `1px solid ${showInput ? '#00F0FF' : '#30363D'}`, borderRadius: 10, padding: 12 }}>
-            <button
-              onClick={() => setShowInput(!showInput)}
-              style={{
-                display: "flex", alignItems: "center", width: "100%", background: "none",
-                border: "none", color: "white", cursor: "pointer", fontSize: 13, fontWeight: 600,
-                textAlign: "left", padding: 0
-              }}
-            >
+          {/* Opção 2: Inserir manualmente os seguidores (com valor pré-preenchido do banco) */}
+          <div style={{
+            background: "#0D1117",
+            border: `1px solid ${showInput ? '#00F0FF' : '#30363D'}`,
+            borderRadius: 10,
+            padding: 14,
+            transition: 'border-color 0.2s'
+          }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ fontSize: 16 }}>2️⃣ ✏️</span>
-                <span>Inserir manualmente os seguidores</span>
+                <span style={{ color: "white", fontSize: 13, fontWeight: 700 }}>
+                  Inserir quantidade de seguidores
+                </span>
               </div>
-            </button>
+              {ultimoSeguidores > 0 && (
+                <span style={{
+                  fontSize: 11,
+                  background: 'rgba(0, 240, 255, 0.12)',
+                  color: '#00F0FF',
+                  border: '1px solid rgba(0, 240, 255, 0.3)',
+                  borderRadius: 6,
+                  padding: '2px 8px',
+                  fontWeight: 600
+                }}>
+                  Último valor: {ultimoSeguidores.toLocaleString('pt-BR')} seg. {dataFormatada ? `(${dataFormatada})` : ''}
+                </span>
+              )}
+            </div>
 
-            {showInput && (
-              <div style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "center" }}>
+            <div style={{ marginTop: 8 }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <input
                   type="number"
                   placeholder="Ex: 2500"
                   value={manualCount}
-                  onChange={e => setManualCount(e.target.value)}
+                  onChange={e => {
+                    setManualCount(e.target.value);
+                    setShowConfirmacaoVariacao(false);
+                  }}
                   autoFocus
                   style={{
-                    flex: 1, background: "#161B22", border: "1px solid #30363D",
-                    borderRadius: 6, padding: "8px 12px", color: "white", fontSize: 13, outline: "none"
+                    flex: 1, background: "#161B22", border: `1px solid ${isVariacaoAlta ? '#F59E0B' : '#30363D'}`,
+                    borderRadius: 6, padding: "8px 12px", color: "white", fontSize: 14, fontWeight: 600, outline: "none"
                   }}
                   onKeyDown={e => {
-                    if (e.key === 'Enter' && manualCount.trim()) {
-                      onSaveFollowers(Number(manualCount));
-                    }
+                    if (e.key === 'Enter') handleTentarSalvar();
                   }}
                 />
                 <button
-                  onClick={() => {
-                    if (manualCount.trim()) onSaveFollowers(Number(manualCount));
-                  }}
+                  onClick={handleTentarSalvar}
                   style={{
-                    padding: "8px 16px", borderRadius: 6, border: "none",
+                    padding: "8px 20px", borderRadius: 6, border: "none",
                     background: "linear-gradient(135deg, #7100E2, #00F0FF)",
                     color: "white", cursor: "pointer", fontWeight: 700, fontSize: 12
                   }}
@@ -983,7 +1094,65 @@ function ModalPerfilIndisponivel({
                   Salvar
                 </button>
               </div>
-            )}
+
+              {/* Alerta / Confirmação de Variação > 5% */}
+              {isVariacaoAlta && (
+                <div style={{
+                  marginTop: 10,
+                  background: 'rgba(245, 158, 11, 0.12)',
+                  border: '1px solid #F59E0B',
+                  borderRadius: 8,
+                  padding: '10px 12px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#F59E0B', fontSize: 12, fontWeight: 700 }}>
+                    <span>⚠️ Variação de {pctVariacao > 0 ? '+' : ''}{pctVariacao.toFixed(1)}% detectada!</span>
+                    <span style={{ fontSize: 11, fontWeight: 500, color: '#C9D1D9' }}>
+                      (De {ultimoSeguidores.toLocaleString('pt-BR')} para {novoValNum.toLocaleString('pt-BR')} seg.)
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#8B949E' }}>
+                    Esta alteração ultrapassa o limite de 5% de variação segura. Deseja realmente confirmar?
+                  </div>
+
+                  {showConfirmacaoVariacao && (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                      <button
+                        onClick={() => onSaveFollowers(novoValNum)}
+                        style={{
+                          background: '#F59E0B',
+                          color: '#000',
+                          border: 'none',
+                          borderRadius: 6,
+                          padding: '6px 14px',
+                          fontSize: 11,
+                          fontWeight: 800,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Sim, Confirmar e Salvar
+                      </button>
+                      <button
+                        onClick={() => setShowConfirmacaoVariacao(false)}
+                        style={{
+                          background: 'transparent',
+                          border: '1px solid #30363D',
+                          color: '#8B949E',
+                          borderRadius: 6,
+                          padding: '6px 12px',
+                          fontSize: 11,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Corrigir Valor
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Opção 3: Confirmar que o perfil está indisponível */}
@@ -1061,18 +1230,22 @@ export default function Dashboard() {
   const [followersHistory, setFollowersHistory] = useState<any>({});
 
   // Estados de Navegação e Filtros
-  const [activeTab, setActiveTab] = useState<'acompanhados' | 'cards' | 'followers' | 'posts' | 'controle' | 'anomalias'>('controle');
+  const [activeTab, setActiveTab] = useState<'acompanhados' | 'cards' | 'followers' | 'posts' | 'controle' | 'anomalias' | 'automatizacao'>('controle');
   const [anomaliasCount, setAnomaliasCount] = useState<number>(0);
   const [selectedProfile, setSelectedProfile] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFormat, setSelectedFormat] = useState('Todos');
   const [selectedProfileFilter, setSelectedProfileFilter] = useState('Todos');
-  const [startDate, setStartDate] = useState('2026-07-01');
-  const [endDate, setEndDate] = useState('2026-07-08');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [sortField, setSortField] = useState<string>('data_postagem');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  // Paginação da Tabela Feed Geral
+  const [postsPage, setPostsPage] = useState<number>(1);
+  const [postsPerPage, setPostsPerPage] = useState<number>(20);
   const [searchAcompanhados, setSearchAcompanhados] = useState('');
   const [acompStatusFilter, setAcompStatusFilter] = useState<'TODOS' | 'ATIVO' | 'INATIVO' | 'INDISPONIVEL' | 'MORREU'>('TODOS');
+  const [incluirTodosPerfis, setIncluirTodosPerfis] = useState(false);
   const [editTarget, setEditTarget] = useState<any>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -1101,20 +1274,23 @@ export default function Dashboard() {
     }
   };
 
-  const countAtivos = profiles.filter(p => (p.status || 'ATIVO').toUpperCase() === 'ATIVO').length;
-  const countInativos = profiles.filter(p => (p.status || 'ATIVO').toUpperCase() === 'INATIVO').length;
-  const countIndisponiveis = profiles.filter(p => {
+  const profilesBase = incluirTodosPerfis ? profiles : profiles.filter(p => p.exibir !== 0);
+  const countOcultos = profiles.filter(p => p.exibir === 0).length;
+
+  const countAtivos = profilesBase.filter(p => (p.status || 'ATIVO').toUpperCase() === 'ATIVO').length;
+  const countInativos = profilesBase.filter(p => (p.status || 'ATIVO').toUpperCase() === 'INATIVO').length;
+  const countIndisponiveis = profilesBase.filter(p => {
     const st = (p.status || 'ATIVO').toUpperCase();
     return st === 'INDISPONIVEL' || st === 'INDISPONÍVEL';
   }).length;
-  const countMorreu = profiles.filter(p => {
+  const countMorreu = profilesBase.filter(p => {
     const st = (p.status || 'ATIVO').toUpperCase();
     const stCtrl = (p.status_controle || '').toUpperCase();
     return st === 'MORREU' || stCtrl.includes('MORREU');
   }).length;
 
   const profilesFiltrados = profiles
-    .filter(p => p.exibir !== 0)
+    .filter(p => (incluirTodosPerfis ? true : p.exibir !== 0))
     .filter(p => p.username.toLowerCase().includes(searchAcompanhados.toLowerCase()))
     .filter(p => {
       if (acompStatusFilter === 'TODOS') return true;
@@ -1134,7 +1310,7 @@ export default function Dashboard() {
       // Se não houver coleta do dia anterior, usa a média diária do intervalo disponível.
       const hist = (followersHistory[p.username] || [])
         .slice()
-        .sort((a: any, b: any) => a.data.localeCompare(b.data));
+        .sort((a: any, b: any) => String(a.data || a.data_coleta || '').localeCompare(String(b.data || b.data_coleta || '')));
 
       let evolucao: number | null = null;
       let pctCrescimento: number | null = null;
@@ -1218,15 +1394,21 @@ export default function Dashboard() {
           av = a.primeira_postagem || '';
           bv = b.primeira_postagem || '';
         } else if (acompSortField === 'dias') {
-          const calcDias = (pp: string | null) => {
-            if (!pp) return -Infinity;
-            const inicio = new Date(pp.split(' ')[0].split('T')[0] + 'T00:00:00');
-            const hoje = new Date();
-            hoje.setHours(0, 0, 0, 0);
-            return Math.max(0, Math.floor((hoje.getTime() - inicio.getTime()) / 86400000));
+          const calcDiasPerfil = (p: any) => {
+            if (!p.primeira_postagem) return -Infinity;
+            const inicio = new Date(p.primeira_postagem.split(' ')[0].split('T')[0] + 'T00:00:00');
+            const isM = p.status === 'MORREU' || p.status_controle === '☠️ Morreu' || (p.status_controle || '').includes('Morreu') || (p.status || '').toUpperCase() === 'MORREU';
+            let fim: Date;
+            if (isM && p.data_coleta) {
+              fim = new Date(p.data_coleta.split(' ')[0].split('T')[0] + 'T00:00:00');
+            } else {
+              fim = new Date();
+              fim.setHours(0, 0, 0, 0);
+            }
+            return Math.max(0, Math.floor((fim.getTime() - inicio.getTime()) / 86400000));
           };
-          av = calcDias(a.primeira_postagem);
-          bv = calcDias(b.primeira_postagem);
+          av = calcDiasPerfil(a);
+          bv = calcDiasPerfil(b);
         } else {
           av = (a[acompSortField] || '').toString().toLowerCase();
           bv = (b[acompSortField] || '').toString().toLowerCase();
@@ -1244,6 +1426,7 @@ export default function Dashboard() {
       return (a.username || '').toLowerCase().localeCompare((b.username || '').toLowerCase());
     });
   const handleSort = (field: string) => {
+    setPostsPage(1);
     if (sortField === field) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
@@ -1259,13 +1442,65 @@ export default function Dashboard() {
       const json = await response.json();
 
       if (json.success) {
-        setProfiles(json.profiles || []);
-        setPosts(json.posts || []);
+        const rawPosts = json.posts || [];
+        const rawProfiles = json.profiles || [];
+
+        // Calcular engajamento médio de posts por perfil
+        const userAvgEng: Record<string, number> = {};
+        const userPostCounts: Record<string, number> = {};
+
+        rawPosts.forEach((p: any) => {
+          const u = (p.username || '').toLowerCase();
+          const eng = (Number(p.likes) || 0) + (Number(p.comentarios) || 0);
+          userAvgEng[u] = (userAvgEng[u] || 0) + eng;
+          userPostCounts[u] = (userPostCounts[u] || 0) + 1;
+        });
+
+        Object.keys(userAvgEng).forEach(u => {
+          if (userPostCounts[u] > 0) {
+            userAvgEng[u] = userAvgEng[u] / userPostCounts[u];
+          }
+        });
+
+        const enrichedPosts = rawPosts.map((p: any) => {
+          const u = (p.username || '').toLowerCase();
+          const eng = (Number(p.likes) || 0) + (Number(p.comentarios) || 0);
+          const avg = userAvgEng[u] || 0;
+          const pMult = typeof p.performanceMultiplier === 'number' && !isNaN(p.performanceMultiplier)
+            ? p.performanceMultiplier
+            : (avg > 0 ? Number((eng / avg).toFixed(2)) : 1.0);
+          // Gerar link do post no Instagram convertendo ID numérico para Shortcode se necessário
+          const postLink = getInstagramPostUrl(p);
+
+          return {
+            ...p,
+            performanceMultiplier: pMult,
+            link: postLink
+          };
+        });
+
+        const enrichedProfiles = rawProfiles.map((prof: any) => {
+          const u = (prof.username || '').toLowerCase();
+          const profPosts = enrichedPosts.filter((p: any) => (p.username || '').toLowerCase() === u);
+          let postMaisViral: any = null;
+          if (profPosts.length > 0) {
+            const sortedByPerf = [...profPosts].sort((a, b) => b.performanceMultiplier - a.performanceMultiplier);
+            postMaisViral = { ...sortedByPerf[0] };
+            postMaisViral.viralStatus = postMaisViral.performanceMultiplier >= 1.8 ? 'Viralizando' : 'Normal';
+          }
+          return {
+            ...prof,
+            postMaisViral
+          };
+        });
+
+        setProfiles(enrichedProfiles);
+        setPosts(enrichedPosts);
         setFollowersHistory(json.followersHistory || {});
 
-        if (json.profiles && json.profiles.length > 0) {
-          const firstActive = json.profiles.find((p: any) => p.exibir !== 0);
-          setSelectedProfile(firstActive ? firstActive.username : json.profiles[0].username);
+        if (enrichedProfiles.length > 0) {
+          const firstActive = enrichedProfiles.find((p: any) => p.exibir !== 0);
+          setSelectedProfile(firstActive ? firstActive.username : enrichedProfiles[0].username);
         }
       } else {
         setError(json.error || "Falha ao ler dados do SQLite");
@@ -1308,13 +1543,14 @@ export default function Dashboard() {
       });
       const json = await res.json();
       if (json.success) {
-        fetchData(); // Recarrega os dados
         if (json.warning && username) {
-          // Se foi para um perfil específico e deu warning/sem dados, abre modal de resolução
+          // Se foi para um perfil específico e deu warning/sem dados, abre modal de resolução sem alterar ou recarregar nada previamente
           setModalPerfilSemDados({ username });
         } else if (json.warning) {
+          fetchData(); // Recarrega os dados
           alert("⚠️ A ingestão foi concluída, mas alguns perfis não retornaram dados (privados ou indisponíveis).");
         } else {
+          fetchData(); // Recarrega os dados
           alert(username ? `✅ Ingestão concluída com sucesso para @${username}!` : "✅ Ingestão concluída para todos os perfis ativos!");
         }
       } else {
@@ -1641,8 +1877,12 @@ export default function Dashboard() {
   }
 
   function calcDias(inicio: string) {
-    if (!inicio) return 1;
-    return Math.max(1, Math.floor((Date.now() - new Date(inicio).getTime()) / 86400000));
+    if (!inicio) return 0;
+    const dataInicioStr = inicio.split(' ')[0].split('T')[0];
+    const dataInicio = new Date(dataInicioStr + 'T00:00:00');
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    return Math.max(0, Math.floor((hoje.getTime() - dataInicio.getTime()) / 86400000));
   }
 
   function fmtBRL(v: number) {
@@ -1791,6 +2031,13 @@ export default function Dashboard() {
     if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
     return 0;
   });
+
+  // Paginação para a Tabela Feed Geral
+  const totalPostsCount = sortedPosts.length;
+  const totalPostsPages = Math.ceil(totalPostsCount / postsPerPage) || 1;
+  const currentPostsPage = Math.min(postsPage, totalPostsPages);
+  const startPostIdx = (currentPostsPage - 1) * postsPerPage;
+  const paginatedPosts = sortedPosts.slice(startPostIdx, startPostIdx + postsPerPage);
 
   async function changeStatus(username: string, novoStatus: string) {
     try {
@@ -1950,6 +2197,13 @@ export default function Dashboard() {
                 <span className="tab-badge">{anomaliasCount}</span>
               )}
             </button>
+            <button
+              className={`tab-btn ${activeTab === 'automatizacao' ? 'active' : ''}`}
+              onClick={() => setActiveTab('automatizacao')}
+            >
+              <span style={{ fontSize: 16 }}>🤖</span>
+              Automatização
+            </button>
           </div>
 
           {/* Seletor de Datas Falso (Visual) */}
@@ -2067,10 +2321,10 @@ export default function Dashboard() {
               </div>
               <div>
                 <div style={{ fontSize: "11px", fontWeight: "600", color: "#8B949E", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                  Total Monitorados
+                  {incluirTodosPerfis ? 'Total no Banco' : 'Perfis em Exibição'}
                 </div>
                 <div style={{ fontSize: "22px", fontWeight: "800", color: "#F0F6FC", marginTop: "2px" }}>
-                  {profiles.length}
+                  {profilesBase.length}
                 </div>
               </div>
             </div>
@@ -2251,11 +2505,71 @@ export default function Dashboard() {
                 }}
               />
             </div>
+
+            {/* BOTÃO LIGA / DESLIGA: Incluir todos os perfis na análise vs apenas os marcados */}
+            <div
+              onClick={() => setIncluirTodosPerfis(prev => !prev)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                background: '#161B22',
+                border: `1px solid ${incluirTodosPerfis ? '#7100E2' : '#30363D'}`,
+                borderRadius: 8,
+                padding: '6px 14px',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                userSelect: 'none',
+                boxShadow: incluirTodosPerfis ? '0 0 14px rgba(113, 0, 226, 0.3)' : 'none'
+              }}
+              title={incluirTodosPerfis ? "Clique para desativar e ver apenas os perfis marcados como ativos na visualização" : "Clique para ativar e incluir todos os perfis do banco (inclusive os tirados de visualização)"}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {incluirTodosPerfis ? (
+                  <Eye size={15} color="#00F0FF" />
+                ) : (
+                  <EyeOff size={15} color="#8B949E" />
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: incluirTodosPerfis ? '#00F0FF' : '#F0F6FC', whiteSpace: 'nowrap' }}>
+                    {incluirTodosPerfis ? '🌐 Todos os Perfis' : '🎯 Apenas Marcados'}
+                  </span>
+                  <span style={{ fontSize: 9, color: incluirTodosPerfis ? '#A855F7' : '#8B949E', whiteSpace: 'nowrap' }}>
+                    {incluirTodosPerfis ? `Mostrando todos (${countOcultos} ocultos inclusos)` : `Ocultos filtrados (${countOcultos})`}
+                  </span>
+                </div>
+              </div>
+
+              {/* Interruptor Liga/Desliga */}
+              <div style={{
+                width: 34,
+                height: 18,
+                borderRadius: 10,
+                background: incluirTodosPerfis ? 'linear-gradient(135deg, #7100E2, #00F0FF)' : '#21262D',
+                border: `1px solid ${incluirTodosPerfis ? '#00F0FF' : '#484F58'}`,
+                position: 'relative',
+                transition: 'all 0.2s ease',
+                flexShrink: 0
+              }}>
+                <div style={{
+                  width: 12,
+                  height: 12,
+                  borderRadius: '50%',
+                  background: 'white',
+                  position: 'absolute',
+                  top: 2,
+                  left: incluirTodosPerfis ? 18 : 2,
+                  transition: 'left 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.5)'
+                }} />
+              </div>
+            </div>
+
             <div style={{
               background: "#161B22", border: "1px solid #30363D",
               borderRadius: 8, padding: "8px 16px", color: "#8B949E", fontSize: 13
             }}>
-              {acompStatusFilter !== 'TODOS' ? `${profilesFiltrados.length} de ${profiles.length} perfis` : `${profiles.length} perfis`}
+              {acompStatusFilter !== 'TODOS' ? `${profilesFiltrados.length} de ${profilesBase.length} perfis` : `${profilesBase.length} perfis`}
             </div>
             <button
               onClick={() => setShowAdd(true)}
@@ -2390,7 +2704,22 @@ export default function Dashboard() {
                         </div>
                       )}
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: 14, textDecoration: "underline", textDecorationColor: "rgba(255,255,255,0.15)" }}>@{perfil.username}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: 600, fontSize: 14, textDecoration: "underline", textDecorationColor: "rgba(255,255,255,0.15)" }}>@{perfil.username}</span>
+                          {perfil.exibir === 0 && (
+                            <span style={{
+                              background: 'rgba(139, 148, 158, 0.15)',
+                              border: '1px solid rgba(139, 148, 158, 0.35)',
+                              color: '#8B949E',
+                              fontSize: 10,
+                              padding: '1px 5px',
+                              borderRadius: 4,
+                              fontWeight: 700
+                            }}>
+                              👁️ Oculto
+                            </span>
+                          )}
+                        </div>
                         <div style={{ color: "#8B949E", fontSize: 11, display: "flex", alignItems: "center", gap: 4 }}>
                           instagram <ExternalLink size={10} style={{ color: "#8B949E" }} />
                         </div>
@@ -2499,7 +2828,6 @@ export default function Dashboard() {
                                 </span>
                               </div>
                             </div>
-                            <span style={{ fontSize: 9, color: '#8B949E', marginTop: 1 }}>{si.emoji}</span>
                           </div>
                         );
                       })() : (
@@ -2601,22 +2929,37 @@ export default function Dashboard() {
                       )}
                     </div>
 
-                    {/* DIAs desde 1ª Postagem */}
+                    {/* DIAs desde 1ª Postagem (se MORREU, calcula até a última data de coleta) */}
                     <div style={{ textAlign: 'center' }}>
                       {perfil.primeira_postagem ? (() => {
                         const inicio = new Date(perfil.primeira_postagem.split(' ')[0].split('T')[0] + 'T00:00:00');
-                        const hoje = new Date();
-                        hoje.setHours(0, 0, 0, 0);
-                        const dias = Math.max(0, Math.floor((hoje.getTime() - inicio.getTime()) / 86400000));
+                        let fim: Date;
+                        let tooltipText = '';
+
+                        if (isMorreu && perfil.data_coleta) {
+                          fim = new Date(perfil.data_coleta.split(' ')[0].split('T')[0] + 'T00:00:00');
+                        } else {
+                          fim = new Date();
+                          fim.setHours(0, 0, 0, 0);
+                        }
+
+                        const dias = Math.max(0, Math.floor((fim.getTime() - inicio.getTime()) / 86400000));
+
+                        if (isMorreu && perfil.data_coleta) {
+                          tooltipText = `${dias} dias de sobrevida (1ª postagem até última coleta em ${formatDate(perfil.data_coleta)})`;
+                        } else {
+                          tooltipText = `${dias} dias desde a primeira postagem`;
+                        }
+
                         return (
                           <span
-                            title={`${dias} dias desde a primeira postagem`}
+                            title={tooltipText}
                             style={{
                               fontSize: 12,
                               fontWeight: 700,
-                              color: dias >= 365 ? '#10B981' : dias >= 90 ? '#F59E0B' : '#8B949E',
-                              background: dias >= 365 ? 'rgba(16,185,129,0.1)' : dias >= 90 ? 'rgba(245,158,11,0.1)' : 'rgba(139,148,158,0.08)',
-                              border: `1px solid ${dias >= 365 ? 'rgba(16,185,129,0.3)' : dias >= 90 ? 'rgba(245,158,11,0.3)' : '#30363D'}`,
+                              color: isMorreu ? '#F85149' : (dias >= 365 ? '#10B981' : dias >= 90 ? '#F59E0B' : '#8B949E'),
+                              background: isMorreu ? 'rgba(248,81,73,0.12)' : (dias >= 365 ? 'rgba(16,185,129,0.1)' : dias >= 90 ? 'rgba(245,158,11,0.1)' : 'rgba(139,148,158,0.08)'),
+                              border: `1px solid ${isMorreu ? 'rgba(248,81,73,0.35)' : (dias >= 365 ? 'rgba(16,185,129,0.3)' : dias >= 90 ? 'rgba(245,158,11,0.3)' : '#30363D')}`,
                               borderRadius: 5,
                               padding: '3px 8px',
                               display: 'inline-block',
@@ -2697,10 +3040,22 @@ export default function Dashboard() {
                             onKeyDown={async e => {
                               if (e.key === 'Enter') {
                                 if (seguidoresDraft.trim() !== '') {
+                                  const novo = Number(seguidoresDraft);
+                                  const anterior = Number(perfil.seguidores || 0);
+                                  if (anterior > 0) {
+                                    const diff = Math.abs(novo - anterior);
+                                    const pct = (diff / anterior) * 100;
+                                    if (pct > 5) {
+                                      const sinal = novo > anterior ? '+' : '-';
+                                      if (!confirm(`⚠️ Variação de ${sinal}${pct.toFixed(1)}% detectada!\n\nDe ${anterior.toLocaleString('pt-BR')} para ${novo.toLocaleString('pt-BR')} seguidores.\nDeseja confirmar a gravação?`)) {
+                                        return;
+                                      }
+                                    }
+                                  }
                                   await fetch('/api/data', {
                                     method: 'PUT',
                                     headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ username: perfil.username, seguidores: Number(seguidoresDraft) })
+                                    body: JSON.stringify({ username: perfil.username, seguidores: novo })
                                   });
                                   setEditingSeguidores(null);
                                   fetchData();
@@ -2714,10 +3069,22 @@ export default function Dashboard() {
                             title="Salvar seguidores"
                             onClick={async () => {
                               if (seguidoresDraft.trim() !== '') {
+                                const novo = Number(seguidoresDraft);
+                                const anterior = Number(perfil.seguidores || 0);
+                                if (anterior > 0) {
+                                  const diff = Math.abs(novo - anterior);
+                                  const pct = (diff / anterior) * 100;
+                                  if (pct > 5) {
+                                    const sinal = novo > anterior ? '+' : '-';
+                                    if (!confirm(`⚠️ Variação de ${sinal}${pct.toFixed(1)}% detectada!\n\nDe ${anterior.toLocaleString('pt-BR')} para ${novo.toLocaleString('pt-BR')} seguidores.\nDeseja confirmar a gravação?`)) {
+                                      return;
+                                    }
+                                  }
+                                }
                                 await fetch('/api/data', {
                                   method: 'PUT',
                                   headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ username: perfil.username, seguidores: Number(seguidoresDraft) })
+                                  body: JSON.stringify({ username: perfil.username, seguidores: novo })
                                 });
                                 setEditingSeguidores(null);
                                 fetchData();
@@ -2874,17 +3241,39 @@ export default function Dashboard() {
                         onMouseEnter={e => { e.currentTarget.style.background = "#30363D"; e.currentTarget.style.color = "white"; }}
                         onMouseLeave={e => { e.currentTarget.style.background = "#21262D"; e.currentTarget.style.color = "#8B949E"; }}
                       >✏️</button>
-                      <button
-                        onClick={() => setDeleteTarget(perfil.username)}
-                        title="Desativar / Colocar em espera"
-                        style={{
-                          background: "#21262D", border: "1px solid #30363D",
-                          borderRadius: 6, padding: "5px 9px", cursor: "pointer",
-                          color: "#8B949E", fontSize: 13
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.background = "#F8514920"; e.currentTarget.style.color = "#F85149"; e.currentTarget.style.borderColor = "#F85149"; }}
-                        onMouseLeave={e => { e.currentTarget.style.background = "#21262D"; e.currentTarget.style.color = "#8B949E"; e.currentTarget.style.borderColor = "#30363D"; }}
-                      >🗑️</button>
+
+                      {perfil.exibir === 0 ? (
+                        <button
+                          onClick={async () => {
+                            setProfiles(prev => prev.map(p => p.username === perfil.username ? { ...p, exibir: 1, status: p.status === 'INATIVO' ? 'ATIVO' : p.status } : p));
+                            await fetch('/api/data', {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ username: perfil.username, exibir: 1, status: perfil.status === 'INATIVO' ? 'ATIVO' : perfil.status })
+                            });
+                          }}
+                          title="Restaurar perfil para a visualização ativa (exibir=1)"
+                          style={{
+                            background: "rgba(0, 240, 255, 0.12)", border: "1px solid rgba(0, 240, 255, 0.35)",
+                            borderRadius: 6, padding: "5px 9px", cursor: "pointer",
+                            color: "#00F0FF", fontSize: 13
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.background = "rgba(0, 240, 255, 0.25)"; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = "rgba(0, 240, 255, 0.12)"; }}
+                        >👁️</button>
+                      ) : (
+                        <button
+                          onClick={() => setDeleteTarget(perfil.username)}
+                          title="Tirar da visualização / Desativar"
+                          style={{
+                            background: "#21262D", border: "1px solid #30363D",
+                            borderRadius: 6, padding: "5px 9px", cursor: "pointer",
+                            color: "#8B949E", fontSize: 13
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.background = "#F8514920"; e.currentTarget.style.color = "#F85149"; e.currentTarget.style.borderColor = "#F85149"; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = "#21262D"; e.currentTarget.style.color = "#8B949E"; e.currentTarget.style.borderColor = "#30363D"; }}
+                        >🗑️</button>
+                      )}
                     </div>
                   </div>
                 );
@@ -3013,8 +3402,8 @@ export default function Dashboard() {
                     <strong>
                       {topPost
                         ? (topPost.viralStatus === 'Viralizando'
-                          ? `Um post está performando ${topPost.performanceMultiplier.toFixed(1).replace('.', ',')}x a média histórica da conta, e o ganho de seguidores acelerou no mesmo período — forte indício de que o post está atraindo novos seguidores.`
-                          : `A melhor publicação performou ${topPost.performanceMultiplier.toFixed(1).replace('.', ',')}x a média da conta, mantendo o nível estável de crescimento de seguidores.`)
+                          ? `Um post está performando ${(topPost.performanceMultiplier || 1.0).toFixed(1).replace('.', ',')}x a média histórica da conta, e o ganho de seguidores acelerou no mesmo período — forte indício de que o post está atraindo novos seguidores.`
+                          : `A melhor publicação performou ${(topPost.performanceMultiplier || 1.0).toFixed(1).replace('.', ',')}x a média da conta, mantendo o nível estável de crescimento de seguidores.`)
                         : "Aguardando mais coletas para computar desvios de desempenho."
                       }
                     </strong>
@@ -3154,7 +3543,7 @@ export default function Dashboard() {
                     <span>confiança alta — {perfil.diaMonitoramento}d de base</span>
                     {topPost ? (
                       <a
-                        href={topPost.link}
+                        href={getInstagramPostUrl(topPost)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="post-link"
@@ -3273,14 +3662,23 @@ export default function Dashboard() {
           {/* Análise de Seguidores do Perfil Selecionado */}
           {selectedProfile && (() => {
             const perfil = profiles.find(p => p.username === selectedProfile);
-            const rawHist = followersHistory[selectedProfile] || [];
+            const isDead = perfil?.status === 'MORREU' || perfil?.status === 'INATIVO' || perfil?.status_controle === '☠️ Morreu' || (perfil?.status_controle || '').includes('Morreu');
+            const rawHist = (followersHistory[selectedProfile] || []).slice().sort((a: any, b: any) => String(a.data || '').localeCompare(String(b.data || '')));
+
+            let lastValid = 0;
             const histData = rawHist.map((pt: any, idx: number) => {
-              const seguidores = pt.total_seguidores;
-              const segAnterior = idx > 0 ? rawHist[idx - 1].total_seguidores : seguidores;
+              let seguidores = Number(pt.total_seguidores) || 0;
+              if (seguidores > 0) {
+                lastValid = seguidores;
+              } else if (!isDead && lastValid > 0) {
+                seguidores = lastValid;
+              }
+              const segAnterior = idx > 0 ? (Number(rawHist[idx - 1].total_seguidores) || seguidores) : seguidores;
               const diff = seguidores - segAnterior;
               return {
                 // Formata a data para visualização curta (ex: 22/01 12:12)
                 data: pt.data.substring(8, 10) + '/' + pt.data.substring(5, 7) + ' ' + pt.data.substring(11, 16),
+                rawDate: pt.data,
                 seguidores,
                 diff
               };
@@ -3396,68 +3794,120 @@ export default function Dashboard() {
               '#F97316', '#D946EF', '#6366F1', '#14B8A6', '#FBBF24', '#E11D48', '#22C55E'
             ];
 
-            // Coleta todas as datas únicas de todos os meus perfis
-            const todasDatas = Array.from(new Set(
-              meusPerfis.flatMap(p =>
-                (followersHistory[p.username] || []).map((h: any) => h.data)
-              )
-            )).sort();
+            // Gera range contínuo de datas (YYYY-MM-DD) do primeiro ao último dia com coleta
+            // Assim dias sem nenhuma coleta também aparecem no gráfico (preenchidos por forward-fill)
+            const diasComColeta = meusPerfis.flatMap(p =>
+              (followersHistory[p.username] || []).map((h: any) => (h.data || '').substring(0, 10))
+            ).filter(Boolean);
 
-            // Monta array { name: 'DD/MM', username1: valor, username2: valor, username1_diff: valor, ... }
-            const dadosComparativo = todasDatas.map(data => {
-              const entry: any = {
-                name: data.substring(8, 10) + '/' + data.substring(5, 7)
+            const minDia = diasComColeta.length > 0 ? diasComColeta.reduce((a, b) => a < b ? a : b) : '';
+            const maxDia = diasComColeta.length > 0 ? diasComColeta.reduce((a, b) => a > b ? a : b) : '';
+
+            const todasDatas: string[] = [];
+            if (minDia && maxDia) {
+              const cur = new Date(minDia + 'T00:00:00');
+              const end = new Date(maxDia + 'T00:00:00');
+              while (cur <= end) {
+                todasDatas.push(cur.toISOString().substring(0, 10));
+                cur.setDate(cur.getDate() + 1);
+              }
+            }
+
+            // Prepara histórico limpo com forward-fill para cada perfil
+            // Chave de dadosPorData: 'YYYY-MM-DD' (apenas data, sem hora)
+            const perfisHistLimpo: Record<string, {
+              isDead: boolean;
+              primeiraDia: string;
+              ultimaDiaComDados: string;
+              dadosPorDia: Record<string, number>;
+            }> = {};
+
+            meusPerfis.forEach(p => {
+              const isDead = p.status === 'MORREU' || p.status === 'INATIVO' || p.status_controle === '☠️ Morreu' || (p.status_controle || '').includes('Morreu');
+              const raw = (followersHistory[p.username] || []).slice().sort((a: any, b: any) => String(a.data || '').localeCompare(String(b.data || '')));
+
+              let lastVal = 0;
+              let primeiraDia = '';
+              let ultimaDiaComDados = '';
+              const dadosPorDia: Record<string, number> = {};
+
+              for (const pt of raw) {
+                const dia = (pt.data || '').substring(0, 10); // 'YYYY-MM-DD'
+                if (!dia) continue;
+                let seg = Number(pt.total_seguidores) || 0;
+                if (seg > 0) {
+                  lastVal = seg;
+                  if (!primeiraDia) primeiraDia = dia;
+                  ultimaDiaComDados = dia;
+                } else if (!isDead && lastVal > 0) {
+                  seg = lastVal;
+                }
+
+                if (seg > 0 || (primeiraDia && !isDead)) {
+                  const finalVal = seg > 0 ? seg : lastVal;
+                  // Mantém apenas o maior valor do dia (o registro mais tardio já foi deduplicado na API, mas por garantia)
+                  if (dadosPorDia[dia] === undefined || finalVal > dadosPorDia[dia]) {
+                    dadosPorDia[dia] = finalVal;
+                  }
+                }
+              }
+
+              perfisHistLimpo[p.username] = {
+                isDead,
+                primeiraDia,
+                ultimaDiaComDados,
+                dadosPorDia
               };
+            });
+
+            // Monta array linear { name: 'DD/MM', username1: valor, ... } com forward-fill contínuo
+            const ultimoValorRastreado: Record<string, number> = {};
+            const segAnteriorRastreado: Record<string, number> = {};
+
+            const dadosComparativo = todasDatas.map(dia => {
+              const entry: any = {
+                // Exibe como DD/MM
+                name: dia.substring(8, 10) + '/' + dia.substring(5, 7)
+              };
+
               meusPerfis.forEach(p => {
-                const hist = (followersHistory[p.username] || [])
-                  .slice()
-                  .sort((a: any, b: any) => a.data.localeCompare(b.data));
-                const idx = hist.findIndex((h: any) => h.data === data);
-                if (idx !== -1) {
-                  const pt = hist[idx];
-                  const total = Number(pt.total_seguidores);
-                  const segAnterior = idx > 0 ? Number(hist[idx - 1].total_seguidores) : total;
-                  const diff = total - segAnterior;
+                const info = perfisHistLimpo[p.username];
+                if (!info || !info.primeiraDia) return;
+
+                // Não plota pontos antes da primeira leitura do perfil
+                if (dia < info.primeiraDia) return;
+
+                let valAtual = info.dadosPorDia[dia];
+
+                if (valAtual !== undefined && valAtual > 0) {
+                  ultimoValorRastreado[p.username] = valAtual;
+                } else {
+                  // Forward-fill: assume o último valor válido anterior
+                  valAtual = ultimoValorRastreado[p.username];
+                }
+
+                if (valAtual !== undefined) {
+                  const segAnterior = segAnteriorRastreado[p.username] !== undefined ? segAnteriorRastreado[p.username] : valAtual;
+                  const diff = valAtual - segAnterior;
+                  segAnteriorRastreado[p.username] = valAtual;
 
                   if (comparativoMode === 'percentual') {
-                    // Crescimento diário relativo ao dia anterior, limitado a um teto de 50%
-                    const pct = segAnterior > 0 ? (((total - segAnterior) / segAnterior) * 100) : 0;
-                    const limitedPct = Math.min(50, pct);
+                    const pct = segAnterior > 0 ? (((valAtual - segAnterior) / segAnterior) * 100) : 0;
+                    const limitedPct = Math.min(50, Math.max(-50, pct));
                     entry[p.username] = Number(limitedPct.toFixed(2));
-                    entry[`${p.username}_diff`] = diff; // Guardamos a diferença absoluta para o Tooltip
+                    entry[`${p.username}_diff`] = diff;
                   } else {
-                    entry[p.username] = total;
+                    entry[p.username] = valAtual;
                     entry[`${p.username}_diff`] = diff;
                   }
                 }
               });
+
               return entry;
             });
 
-            // Dados para o gráfico de evolução percentual (teto 50%)
-            const dadosEvolucaoPercentual = todasDatas.map(data => {
-              const entry: any = {
-                name: data.substring(8, 10) + '/' + data.substring(5, 7)
-              };
-              meusPerfis.forEach(p => {
-                const hist = (followersHistory[p.username] || [])
-                  .slice()
-                  .sort((a: any, b: any) => a.data.localeCompare(b.data));
-                const idx = hist.findIndex((h: any) => h.data === data);
-                if (idx !== -1) {
-                  const pt = hist[idx];
-                  const total = Number(pt.total_seguidores);
-                  const segAnterior = idx > 0 ? Number(hist[idx - 1].total_seguidores) : total;
-                  const diff = total - segAnterior;
-
-                  const pct = segAnterior > 0 ? (((total - segAnterior) / segAnterior) * 100) : 0;
-                  const limitedPct = Math.min(50, pct);
-                  entry[p.username] = Number(limitedPct.toFixed(2));
-                  entry[`${p.username}_diff`] = diff;
-                }
-              });
-              return entry;
-            });
+            // Dados para o gráfico de evolução percentual
+            const dadosEvolucaoPercentual = dadosComparativo;
 
             return (
               <div style={{ marginTop: 32 }}>
@@ -3584,7 +4034,7 @@ export default function Dashboard() {
                                 name={p.username}
                                 stroke={cores[i % cores.length]}
                                 strokeWidth={2.5}
-                                dot={{ r: 3, fill: cores[i % cores.length] }}
+                                dot={false}
                                 activeDot={{ r: 5 }}
                                 connectNulls
                                 hide={linhasOcultas.has(p.username)}
@@ -3666,13 +4116,13 @@ export default function Dashboard() {
                 placeholder="🔍 Buscar na legenda..."
                 className="filter-input"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => { setSearchQuery(e.target.value); setPostsPage(1); }}
               />
 
               <select
                 className="filter-select"
                 value={selectedProfileFilter}
-                onChange={(e) => setSelectedProfileFilter(e.target.value)}
+                onChange={(e) => { setSelectedProfileFilter(e.target.value); setPostsPage(1); }}
               >
                 <option value="Todos">Todos Perfis</option>
                 {profiles.filter(p => p.exibir !== 0).map(p => (
@@ -3685,13 +4135,50 @@ export default function Dashboard() {
               <select
                 className="filter-select"
                 value={selectedFormat}
-                onChange={(e) => setSelectedFormat(e.target.value)}
+                onChange={(e) => { setSelectedFormat(e.target.value); setPostsPage(1); }}
               >
                 <option value="Todos">Todos Formatos</option>
                 <option value="Reels">Reels</option>
                 <option value="Carrossel">Carrossel</option>
                 <option value="Imagem">Imagem</option>
               </select>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <input
+                  type="date"
+                  className="filter-input"
+                  title="Data Inicial"
+                  value={startDate}
+                  onChange={(e) => { setStartDate(e.target.value); setPostsPage(1); }}
+                  style={{ width: 'auto', fontSize: '12px' }}
+                />
+                <span style={{ color: '#8B949E', fontSize: '12px' }}>até</span>
+                <input
+                  type="date"
+                  className="filter-input"
+                  title="Data Final"
+                  value={endDate}
+                  onChange={(e) => { setEndDate(e.target.value); setPostsPage(1); }}
+                  style={{ width: 'auto', fontSize: '12px' }}
+                />
+                {(startDate || endDate) && (
+                  <button
+                    onClick={() => { setStartDate(''); setEndDate(''); setPostsPage(1); }}
+                    style={{
+                      background: 'transparent',
+                      border: '1px solid #30363D',
+                      color: '#8B949E',
+                      borderRadius: '6px',
+                      padding: '4px 8px',
+                      fontSize: '11px',
+                      cursor: 'pointer'
+                    }}
+                    title="Limpar filtro de data"
+                  >
+                    ✕ Limpar Datas
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -3726,9 +4213,10 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedPosts.map(post => {
+                  {paginatedPosts.map(post => {
                     // Determinar classe de performance
-                    const pMult = post.performanceMultiplier;
+                    const rawMult = post.performanceMultiplier;
+                    const pMult = typeof rawMult === 'number' && !isNaN(rawMult) ? rawMult : 1.0;
                     const performanceClass = pMult >= 1.8
                       ? 'high'
                       : pMult >= 1.0
@@ -3787,7 +4275,7 @@ export default function Dashboard() {
                         </td>
                         <td>
                           <a
-                            href={post.link}
+                            href={getInstagramPostUrl(post)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="post-link"
@@ -3807,8 +4295,75 @@ export default function Dashboard() {
               </div>
             )}
           </div>
-          <div style={{ marginTop: '16px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-            Exibindo {sortedPosts.length} posts.
+          <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', background: '#161B22', padding: '12px 18px', borderRadius: '10px', border: '1px solid #21262D' }}>
+            <div style={{ fontSize: '13px', color: '#8B949E' }}>
+              Exibindo <strong style={{ color: 'white' }}>{totalPostsCount > 0 ? startPostIdx + 1 : 0}–{Math.min(startPostIdx + postsPerPage, totalPostsCount)}</strong> de <strong style={{ color: 'white' }}>{totalPostsCount}</strong> posts gravados.
+            </div>
+
+            {/* Controles de Paginação */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <select
+                value={postsPerPage}
+                onChange={(e) => { setPostsPerPage(Number(e.target.value)); setPostsPage(1); }}
+                style={{
+                  background: '#0D1117',
+                  border: '1px solid #30363D',
+                  color: 'white',
+                  borderRadius: '6px',
+                  padding: '5px 10px',
+                  fontSize: '12px',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value={20}>20 por página</option>
+                <option value={50}>50 por página</option>
+                <option value={100}>100 por página</option>
+              </select>
+
+              {totalPostsPages > 1 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button
+                    onClick={() => setPostsPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPostsPage === 1}
+                    style={{
+                      padding: '6px 14px',
+                      borderRadius: '6px',
+                      background: currentPostsPage === 1 ? '#21262D' : '#7100E2',
+                      border: '1px solid #30363D',
+                      color: currentPostsPage === 1 ? '#484F58' : 'white',
+                      cursor: currentPostsPage === 1 ? 'not-allowed' : 'pointer',
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    ◀ Anterior
+                  </button>
+
+                  <span style={{ fontSize: '12px', fontWeight: '700', color: 'white', padding: '0 4px' }}>
+                    {currentPostsPage} / {totalPostsPages}
+                  </span>
+
+                  <button
+                    onClick={() => setPostsPage(prev => Math.min(totalPostsPages, prev + 1))}
+                    disabled={currentPostsPage === totalPostsPages}
+                    style={{
+                      padding: '6px 14px',
+                      borderRadius: '6px',
+                      background: currentPostsPage === totalPostsPages ? '#21262D' : '#7100E2',
+                      border: '1px solid #30363D',
+                      color: currentPostsPage === totalPostsPages ? '#484F58' : 'white',
+                      cursor: currentPostsPage === totalPostsPages ? 'not-allowed' : 'pointer',
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    Próxima ▶
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -3841,157 +4396,199 @@ export default function Dashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {controleData
-                      .slice() // Cria uma cópia para não mutar o array original
-                      .sort((a: any, b: any) => {
-                        const dataA = a.inicio ? new Date(a.inicio).getTime() : 0;
-                        const dataB = b.inicio ? new Date(b.inicio).getTime() : 0;
-                        return dataA - dataB;
-                      })
-                      .map((p: any, i: number) => {
-                        // Proteção de dados e cálculos
-                        const dataInicio = p.inicio || null;
-                        const dataNasc = p.nascimento || null;
-                        const lancamentosSeguros = Array.isArray(p.lancamentos) ? p.lancamentos : [];
-                        const dias = dataInicio ? calcDias(dataInicio) : 1;
-                        const diasValidos = dias > 0 ? dias : 1;
+                    {(() => {
+                      const getDiasPerfil = (p: any) => {
+                        const isMorreu = (p.status || '').toLowerCase().includes('morreu') || (p.status_controle || '').toLowerCase().includes('morreu') || (p.status || '').toUpperCase() === 'MORREU';
+                        if (isMorreu && p.inicio && p.ultima_coleta) {
+                          const dataInicioStr = p.inicio.split(' ')[0].split('T')[0];
+                          const dataColetaStr = p.ultima_coleta.split(' ')[0].split('T')[0];
+                          const dtInicio = new Date(dataInicioStr + 'T00:00:00').getTime();
+                          const dtColeta = new Date(dataColetaStr + 'T00:00:00').getTime();
+                          return Math.max(0, Math.floor((dtColeta - dtInicio) / 86400000));
+                        }
+                        if (p.inicio) return calcDias(p.inicio);
+                        return 0;
+                      };
 
-                        // Dias de sobrevida: diferença em dias entre inicio e a última coleta
-                        const diasSobrevida = (p.inicio && p.ultima_coleta)
-                          ? Math.max(0, Math.floor(
-                            (new Date(p.ultima_coleta.split(' ')[0].split('T')[0] + 'T00:00:00').getTime() -
-                              new Date(p.inicio.split(' ')[0].split('T')[0] + 'T00:00:00').getTime()) / 86400000
-                          ))
-                          : null;
+                      return controleData
+                        .slice() // Cria uma cópia para não mutar o array original
+                        .sort((a: any, b: any) => {
+                          const isDeadA = (a.status || '').toLowerCase().includes('morreu') || (a.status_controle || '').toLowerCase().includes('morreu') || (a.status || '').toUpperCase() === 'MORREU';
+                          const isDeadB = (b.status || '').toLowerCase().includes('morreu') || (b.status_controle || '').toLowerCase().includes('morreu') || (b.status || '').toUpperCase() === 'MORREU';
 
-                        const totalR = lancamentosSeguros.filter((l: any) => l.tipo === 'recebido').reduce((s: number, l: any) => s + (Number(l.valor_brl) || 0), 0);
-                        const totalD = lancamentosSeguros.filter((l: any) => l.tipo === 'despesa').reduce((s: number, l: any) => s + (Number(l.valor_brl) || 0), 0);
-                        const lucro = totalR - totalD;
-                        const diaTrabalho = lucro / diasValidos;
+                          // 1. Perfis "morreu" sempre no final
+                          if (isDeadA && !isDeadB) return 1;
+                          if (!isDeadA && isDeadB) return -1;
 
-                        const isMorreu = (p.status || '').includes('Morreu');
-                        const isAtivo = !isMorreu;
+                          // 2. Ordenar por dias do maior para o menor
+                          const diasA = getDiasPerfil(a);
+                          const diasB = getDiasPerfil(b);
 
-                        return (
-                          <tr
-                            key={p.username || i}
-                            onClick={() => setModalControleEdit(p)}
-                            onMouseEnter={e => { e.currentTarget.style.backgroundColor = isMorreu ? 'rgba(248,81,73,0.18)' : (isAtivo ? 'rgba(46,160,67,0.18)' : '#1C2128'); }}
-                            onMouseLeave={e => { e.currentTarget.style.backgroundColor = isMorreu ? 'rgba(248,81,73,0.08)' : (isAtivo ? 'rgba(46,160,67,0.08)' : (i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)')); }}
-                            style={{
-                              borderBottom: '1px solid #21262D',
-                              borderLeft: isMorreu ? '3px solid #F85149' : (isAtivo ? '3px solid #2ea043' : '3px solid transparent'),
-                              background: isMorreu ? 'rgba(248,81,73,0.08)' : (isAtivo ? 'rgba(46,160,67,0.08)' : (i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)')),
-                              cursor: 'pointer',
-                              transition: 'background-color 0.15s'
-                            }}
-                          >
-                            <td style={{ padding: '12px 12px', whiteSpace: 'nowrap' }}>
-                              <a
-                                href={`https://www.instagram.com/${(p.username || '').replace(/^@/, '')}/`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={e => e.stopPropagation()}
-                                title={`Abrir @${p.username} no Instagram`}
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 10,
-                                  textDecoration: 'none',
-                                  color: 'inherit',
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                <div style={{
-                                  width: 32, height: 32, borderRadius: '50%',
-                                  overflow: 'hidden',
-                                  background: 'linear-gradient(135deg, #7100E2, #00F0FF)',
-                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                  fontWeight: 800, fontSize: 13, color: 'white', flexShrink: 0
-                                }}>
-                                  {p.foto_url ? (
-                                    <img src={p.foto_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                  ) : (
-                                    (p.nome || p.username || '?')[0].toUpperCase()
-                                  )}
-                                </div>
-                                <div>
-                                  <div style={{ fontWeight: 700, color: 'white' }}>{p.nome || p.username}</div>
-                                  <div style={{ color: '#8B949E', fontSize: 11 }}>@{p.username}</div>
-                                </div>
-                              </a>
-                            </td>
-                            <td style={{ padding: '12px 12px', color: '#8B949E', whiteSpace: 'nowrap' }}>
-                              {dataNasc ? formatDate(dataNasc) : '—'}
-                            </td>
-                            <td style={{ padding: '12px 12px', whiteSpace: 'nowrap', color: 'white' }}>
-                              {dataNasc ? calcIdade(dataNasc) : '—'}
-                            </td>
-                            <td style={{ padding: '12px 12px', textAlign: 'center' }}>
-                              <span style={{ background: (p.seguidores || 0) > 0 ? 'rgba(0,240,255,0.08)' : 'rgba(255,0,122,0.1)', color: (p.seguidores || 0) > 0 ? '#00F0FF' : '#FF007A', padding: '2px 8px', borderRadius: 20, fontWeight: 700, fontFamily: 'monospace' }}>
-                                {p.seguidores ? Number(p.seguidores).toLocaleString('pt-BR') : '—'}
-                              </span>
-                            </td>
-                            <td style={{ padding: '12px 12px', maxWidth: 180 }}>
-                              {(p.email || '').split('\n').map((line: string, j: number) => (
-                                <div key={j} style={{ color: j % 2 === 0 ? 'white' : '#8B949E', fontSize: 11, lineHeight: 1.6 }}>{line}</div>
-                              ))}
-                            </td>
-                            <td style={{ padding: '12px 12px', color: '#8B949E' }}>{p.reserva || '—'}</td>
-                            <td style={{ padding: '12px 12px', textAlign: 'center' }}>
-                              {p.linktree ? (
+                          if (diasB !== diasA) {
+                            return diasB - diasA; // Do maior para o menor
+                          }
+
+                          // 3. Desempate pela data de início (mais antiga primeiro)
+                          const dataA = a.inicio ? new Date(a.inicio.split(' ')[0].split('T')[0] + 'T00:00:00').getTime() : 0;
+                          const dataB = b.inicio ? new Date(b.inicio.split(' ')[0].split('T')[0] + 'T00:00:00').getTime() : 0;
+                          return dataA - dataB;
+                        })
+                        .map((p: any, i: number) => {
+                          // Proteção de dados e cálculos
+                          const dataInicio = p.inicio || null;
+                          const dataNasc = p.nascimento || null;
+                          const lancamentosSeguros = Array.isArray(p.lancamentos) ? p.lancamentos : [];
+                          const diasTotal = getDiasPerfil(p);
+                          const diasValidos = diasTotal > 0 ? diasTotal : 1;
+
+                          const totalR = lancamentosSeguros.filter((l: any) => l.tipo === 'recebido').reduce((s: number, l: any) => s + (Number(l.valor_brl) || 0), 0);
+                          const totalD = lancamentosSeguros.filter((l: any) => l.tipo === 'despesa').reduce((s: number, l: any) => s + (Number(l.valor_brl) || 0), 0);
+                          const lucro = totalR - totalD;
+                          const diaTrabalho = lucro / diasValidos;
+
+                          const isMorreu = (p.status || '').toLowerCase().includes('morreu') || (p.status_controle || '').toLowerCase().includes('morreu') || (p.status || '').toUpperCase() === 'MORREU';
+                          const isAtivo = !isMorreu;
+
+                          return (
+                            <tr
+                              key={p.username || i}
+                              onClick={() => setModalControleEdit(p)}
+                              onMouseEnter={e => { e.currentTarget.style.backgroundColor = isMorreu ? 'rgba(248,81,73,0.18)' : (isAtivo ? 'rgba(46,160,67,0.18)' : '#1C2128'); }}
+                              onMouseLeave={e => { e.currentTarget.style.backgroundColor = isMorreu ? 'rgba(248,81,73,0.08)' : (isAtivo ? 'rgba(46,160,67,0.08)' : (i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)')); }}
+                              style={{
+                                borderBottom: '1px solid #21262D',
+                                borderLeft: isMorreu ? '3px solid #F85149' : (isAtivo ? '3px solid #2ea043' : '3px solid transparent'),
+                                background: isMorreu ? 'rgba(248,81,73,0.08)' : (isAtivo ? 'rgba(46,160,67,0.08)' : (i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)')),
+                                cursor: 'pointer',
+                                transition: 'background-color 0.15s'
+                              }}
+                            >
+                              <td style={{ padding: '12px 12px', whiteSpace: 'nowrap' }}>
                                 <a
-                                  href={p.linktree.startsWith('http') ? p.linktree : `https://${p.linktree}`}
+                                  href={`https://www.instagram.com/${(p.username || '').replace(/^@/, '')}/`}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   onClick={e => e.stopPropagation()}
-                                  title={p.linktree}
+                                  title={`Abrir @${p.username} no Instagram`}
                                   style={{
-                                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                    width: 28, height: 28, borderRadius: 6,
-                                    background: 'rgba(0, 240, 255, 0.1)',
-                                    border: '1px solid rgba(0, 240, 255, 0.3)',
-                                    color: '#00F0FF',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 10,
                                     textDecoration: 'none',
-                                    transition: 'all 0.2s'
+                                    color: 'inherit',
+                                    cursor: 'pointer'
                                   }}
-                                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0, 240, 255, 0.25)'; e.currentTarget.style.borderColor = '#00F0FF'; }}
-                                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(0, 240, 255, 0.1)'; e.currentTarget.style.borderColor = 'rgba(0, 240, 255, 0.3)'; }}
                                 >
-                                  <ExternalLink size={13} />
+                                  <div style={{
+                                    width: 32, height: 32, borderRadius: '50%',
+                                    overflow: 'hidden',
+                                    background: 'linear-gradient(135deg, #7100E2, #00F0FF)',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    fontWeight: 800, fontSize: 13, color: 'white', flexShrink: 0
+                                  }}>
+                                    {p.foto_url ? (
+                                      <img src={p.foto_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                    ) : (
+                                      (p.nome || p.username || '?')[0].toUpperCase()
+                                    )}
+                                  </div>
+                                  <div>
+                                    <div style={{ fontWeight: 700, color: 'white' }}>{p.nome || p.username}</div>
+                                    <div style={{ color: '#8B949E', fontSize: 11 }}>@{p.username}</div>
+                                  </div>
                                 </a>
-                              ) : (
-                                <span style={{ opacity: 0.25 }}>—</span>
-                              )}
-                            </td>
-                            <td style={{ padding: '12px 12px', whiteSpace: 'nowrap', color: '#8B949E' }}>
-                              {dataInicio ? formatDate(dataInicio) : '—'}
-                            </td>
-                            <td style={{ padding: '12px 12px', textAlign: 'center' }}>
-                              {p.telegram === 'SIM' ? (
-                                <span
-                                  title="Tem grupo de retenção no Telegram"
-                                  style={{
-                                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                    width: 28, height: 28, borderRadius: 6,
-                                    background: 'rgba(38, 168, 235, 0.12)',
-                                    border: '1px solid rgba(38, 168, 235, 0.35)',
-                                    fontSize: 14
-                                  }}
-                                >
-                                  📦
+                              </td>
+                              <td style={{ padding: '12px 12px', color: '#8B949E', whiteSpace: 'nowrap' }}>
+                                {dataNasc ? formatDate(dataNasc) : '—'}
+                              </td>
+                              <td style={{ padding: '12px 12px', whiteSpace: 'nowrap', color: 'white' }}>
+                                {dataNasc ? calcIdade(dataNasc) : '—'}
+                              </td>
+                              <td style={{ padding: '12px 12px', textAlign: 'center' }}>
+                                <span style={{ background: (p.seguidores || 0) > 0 ? 'rgba(0,240,255,0.08)' : 'rgba(255,0,122,0.1)', color: (p.seguidores || 0) > 0 ? '#00F0FF' : '#FF007A', padding: '2px 8px', borderRadius: 20, fontWeight: 700, fontFamily: 'monospace' }}>
+                                  {p.seguidores ? Number(p.seguidores).toLocaleString('pt-BR') : '—'}
                                 </span>
-                              ) : (
-                                <span style={{ opacity: 0.25 }}>—</span>
-                              )}
-                            </td>
-                            <td style={{ padding: '12px 12px', whiteSpace: 'nowrap', color: '#00F0FF', fontWeight: 700 }}>
-                              {dataInicio ? calcProntaEm(dataInicio) : '—'}
-                            </td>
-                            <td style={{ padding: '12px 12px', textAlign: 'center' }}>
-                              {diasSobrevida !== null ? (
+                              </td>
+                              <td style={{ padding: '12px 12px', maxWidth: 180 }}>
+                                {(p.email || '').split('\n').map((line: string, j: number) => (
+                                  <div key={j} style={{ color: j % 2 === 0 ? 'white' : '#8B949E', fontSize: 11, lineHeight: 1.6 }}>{line}</div>
+                                ))}
+                              </td>
+                              <td style={{ padding: '12px 12px', textAlign: 'center' }}>
+                                {Number(p.reserva) > 0 ? (
+                                  <span
+                                    title={`${p.reserva} postagem(ns) agendada(s) futura(s)`}
+                                    style={{
+                                      background: 'rgba(56, 139, 253, 0.15)',
+                                      color: '#58A6FF',
+                                      border: '1px solid rgba(56, 139, 253, 0.35)',
+                                      padding: '2px 8px',
+                                      borderRadius: 12,
+                                      fontWeight: 800,
+                                      fontSize: 12,
+                                      fontFamily: 'monospace',
+                                      display: 'inline-block'
+                                    }}
+                                  >
+                                    {p.reserva}
+                                  </span>
+                                ) : (
+                                  <span style={{ color: '#484F58', fontSize: 12 }}>0</span>
+                                )}
+                              </td>
+                              <td style={{ padding: '12px 12px', textAlign: 'center' }}>
+                                {p.linktree ? (
+                                  <a
+                                    href={p.linktree.startsWith('http') ? p.linktree : `https://${p.linktree}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={e => e.stopPropagation()}
+                                    title={p.linktree}
+                                    style={{
+                                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                      width: 28, height: 28, borderRadius: 6,
+                                      background: 'rgba(0, 240, 255, 0.1)',
+                                      border: '1px solid rgba(0, 240, 255, 0.3)',
+                                      color: '#00F0FF',
+                                      textDecoration: 'none',
+                                      transition: 'all 0.2s'
+                                    }}
+                                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0, 240, 255, 0.25)'; e.currentTarget.style.borderColor = '#00F0FF'; }}
+                                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(0, 240, 255, 0.1)'; e.currentTarget.style.borderColor = 'rgba(0, 240, 255, 0.3)'; }}
+                                  >
+                                    <ExternalLink size={13} />
+                                  </a>
+                                ) : (
+                                  <span style={{ opacity: 0.25 }}>—</span>
+                                )}
+                              </td>
+                              <td style={{ padding: '12px 12px', whiteSpace: 'nowrap', color: '#8B949E' }}>
+                                {dataInicio ? formatDate(dataInicio) : '—'}
+                              </td>
+                              <td style={{ padding: '12px 12px', textAlign: 'center' }}>
+                                {p.telegram === 'SIM' ? (
+                                  <span
+                                    title="Tem grupo de retenção no Telegram"
+                                    style={{
+                                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                      width: 28, height: 28, borderRadius: 6,
+                                      background: 'rgba(38, 168, 235, 0.12)',
+                                      border: '1px solid rgba(38, 168, 235, 0.35)',
+                                      fontSize: 14
+                                    }}
+                                  >
+                                    📦
+                                  </span>
+                                ) : (
+                                  <span style={{ opacity: 0.25 }}>—</span>
+                                )}
+                              </td>
+                              <td style={{ padding: '12px 12px', whiteSpace: 'nowrap', color: '#00F0FF', fontWeight: 700 }}>
+                                {dataInicio ? calcProntaEm(dataInicio) : '—'}
+                              </td>
+                              <td style={{ padding: '12px 12px', textAlign: 'center' }}>
                                 <span
-                                  title={`Início: ${formatDate(p.inicio)} | Último registro: ${formatDate(p.ultima_coleta)}`}
+                                  title={isMorreu && p.ultima_coleta ? `Início: ${formatDate(p.inicio)} | Último registro: ${formatDate(p.ultima_coleta)}` : (p.inicio ? `Início: ${formatDate(p.inicio)}` : undefined)}
                                   style={{
                                     fontWeight: 700,
                                     color: 'white',
@@ -4004,34 +4601,31 @@ export default function Dashboard() {
                                     fontSize: 13,
                                   }}
                                 >
-                                  {diasSobrevida}
+                                  {diasTotal}
                                 </span>
-                              ) : (
-                                <span style={{ color: '#444C56', fontSize: 12 }}>—</span>
-                              )}
-                            </td>
-                            <td style={{ padding: '12px 12px', textAlign: 'center' }}>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setLancamentoSelecionado(null);
-                                  setModalLancamento({ username: p.username, tipo: lucro >= 0 ? "recebido" : "despesa" });
-                                }}
-                                style={{
-                                  background: lucro >= 0 ? 'rgba(57,255,20,0.1)' : 'rgba(255,0,122,0.15)',
-                                  border: `1px solid ${lucro >= 0 ? '#39FF14' : '#FF007A'}`,
-                                  color: lucro >= 0 ? '#39FF14' : '#FF007A',
-                                  borderRadius: 8,
-                                  padding: '5px 10px',
-                                  cursor: 'pointer',
-                                  fontSize: 11,
-                                  fontWeight: 700,
-                                  whiteSpace: 'nowrap'
-                                }}
-                              >
-                                {lucro >= 0 ? '💰' : '💸'} {fmtBRL(lucro)}
-                              </button>
-                            </td>
+                              </td>
+                              <td style={{ padding: '12px 12px', textAlign: 'center' }}>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setLancamentoSelecionado(null);
+                                    setModalLancamento({ username: p.username, tipo: lucro >= 0 ? "recebido" : "despesa" });
+                                  }}
+                                  style={{
+                                    background: lucro >= 0 ? 'rgba(57,255,20,0.1)' : 'rgba(255,0,122,0.15)',
+                                    border: `1px solid ${lucro >= 0 ? '#39FF14' : '#FF007A'}`,
+                                    color: lucro >= 0 ? '#39FF14' : '#FF007A',
+                                    borderRadius: 8,
+                                    padding: '5px 10px',
+                                    cursor: 'pointer',
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                >
+                                  {lucro >= 0 ? '💰' : '💸'} {fmtBRL(lucro)}
+                                </button>
+                              </td>
                             <td style={{ padding: '12px 12px', whiteSpace: 'nowrap' }}>
                               <span style={{ background: '#161B22', border: '1px solid #30363D', borderRadius: 20, padding: '3px 10px', fontSize: 11, color: 'white' }}>
                                 {p.status || '—'}
@@ -4048,7 +4642,8 @@ export default function Dashboard() {
                             </td>
                           </tr>
                         );
-                      })}
+                      });
+                    })()}
                   </tbody>
                 </table>
               </div>
@@ -4397,16 +4992,39 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* ====================================================
+        ABA: AUTOMATIZAÇÃO
+      ==================================================== */}
+      {activeTab === 'automatizacao' && (
+        <CentralAutomatizacao profiles={profiles} onRefresh={fetchData} />
+      )}
+
       {/* Modal Global de Resolução de Perfil Sem Dados / Indisponível */}
       {modalPerfilSemDados && (
         <ModalPerfilIndisponivel
           username={modalPerfilSemDados.username}
+          ultimoSeguidores={(() => {
+            const u = modalPerfilSemDados.username.toLowerCase();
+            const p = profiles.find(pr => pr.username.toLowerCase() === u);
+            if (p && p.seguidores != null && Number(p.seguidores) > 0) return Number(p.seguidores);
+            const hist = followersHistory[u] || [];
+            if (hist.length > 0) {
+              const valid = hist.filter((h: any) => Number(h.total_seguidores || h.seguidores || 0) > 0);
+              if (valid.length > 0) return Number(valid[valid.length - 1].total_seguidores || valid[valid.length - 1].seguidores);
+            }
+            return 0;
+          })()}
+          dataUltimaColeta={(() => {
+            const u = modalPerfilSemDados.username.toLowerCase();
+            const p = profiles.find(pr => pr.username.toLowerCase() === u);
+            return p?.data_coleta || null;
+          })()}
           onClose={() => setModalPerfilSemDados(null)}
           onSaveFollowers={async (val) => {
             await fetch('/api/data', {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ username: modalPerfilSemDados.username, seguidores: val, inativo: 0 })
+              body: JSON.stringify({ username: modalPerfilSemDados.username, seguidores: val, inativo: 0, status: 'ATIVO' })
             });
             setModalPerfilSemDados(null);
             fetchData();

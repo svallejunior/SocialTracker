@@ -14,9 +14,14 @@ if hasattr(sys.stderr, 'reconfigure'):
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
-APIFY_TOKEN = os.getenv("APIFY_API_TOKEN")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+env_path = os.path.join(BASE_DIR, ".env")
+if os.path.exists(env_path):
+    load_dotenv(dotenv_path=env_path)
+else:
+    load_dotenv()
+
+APIFY_TOKEN = os.getenv("APIFY_API_TOKEN") or os.getenv("APIFY_TOKEN")
 DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "instagram_tracker.db"))
 
 
@@ -51,6 +56,20 @@ def format_datetime(dt):
     return dt.strftime('%Y-%m-%d %H:%M:%S')
 
 
+def id_to_shortcode(media_id):
+    try:
+        clean_id = int(str(media_id).split('_')[0])
+        alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
+        shortcode = ''
+        while clean_id > 0:
+            remainder = clean_id % 64
+            clean_id = clean_id // 64
+            shortcode = alphabet[remainder] + shortcode
+        return shortcode
+    except (ValueError, TypeError):
+        return str(media_id)
+
+
 def get_local_posts(username, data_coleta_dt):
     """Busca posts salvos no banco local para o perfil."""
     conn = sqlite3.connect(DB_PATH)
@@ -73,12 +92,11 @@ def get_local_posts(username, data_coleta_dt):
         post_id = str(r["post_id"])
         
         # Link do post
-        if shortcode and shortcode != 'None':
+        if shortcode and shortcode != 'None' and shortcode != 'null' and any(c.isalpha() for c in shortcode):
             url = f"https://www.instagram.com/p/{shortcode}/"
-        elif post_id and '_' in post_id:
-            url = f"https://www.instagram.com/p/{post_id.split('_')[0]}/"
         elif post_id:
-            url = f"https://www.instagram.com/p/{post_id}/"
+            sc = id_to_shortcode(post_id)
+            url = f"https://www.instagram.com/p/{sc}/" if sc else f"https://www.instagram.com/{username}/"
         else:
             url = f"https://www.instagram.com/{username}/"
 
@@ -305,8 +323,8 @@ def processar_busca(username, data_coleta_str, force_api=False):
     if not data_coleta_dt:
         data_coleta_dt = datetime.now()
 
-    # Janela de até 48 horas anteriores à data da leitura clicada
-    janela_inicio = data_coleta_dt - timedelta(hours=48)
+    # Janela de até 72 horas anteriores à data da leitura clicada (ampliada para capturar virais)
+    janela_inicio = data_coleta_dt - timedelta(hours=72)
     janela_fim = data_coleta_dt
 
     # 1. Busca primeiro no banco local
@@ -322,7 +340,8 @@ def processar_busca(username, data_coleta_str, force_api=False):
 
     # 2. Se não encontrar no banco local ou se foi forçado, chama o Apify
     if (not posts_na_janela or force_api):
-        apify_posts = buscar_posts_apify(username_clean, limit=6)
+        # Busca 15 posts para garantir que posts mais antigos (até 72h) sejam encontrados
+        apify_posts = buscar_posts_apify(username_clean, limit=15)
         if apify_posts:
             salvar_posts_no_banco(username_clean, apify_posts)
             origem = "APIFY_API"
@@ -349,8 +368,18 @@ def processar_busca(username, data_coleta_str, force_api=False):
     posts_na_janela.sort(key=lambda x: x["score_tracao"], reverse=True)
     top_post = posts_na_janela[0] if posts_na_janela else None
 
-    # Posts recentes fora da janela
-    outros_posts = [p for p in local_posts if not any(w["post_id"] == p["post_id"] for w in posts_na_janela)][:5]
+    # Posts recentes fora da janela, ordenados por tração
+    outros_posts = [p for p in local_posts if not any(w["post_id"] == p["post_id"] for w in posts_na_janela)]
+    outros_posts.sort(key=lambda x: x["score_tracao"], reverse=True)
+
+    # Se não houver post na janela de 72h, mas existir um post recente com tração relevante
+    sugestao_viral = None
+    if not top_post and outros_posts:
+        # Threshold reduzido para funcionar com contas menores
+        if outros_posts[0]["score_tracao"] >= 500 or outros_posts[0]["views"] >= 1000 or outros_posts[0]["likes"] >= 50:
+            sugestao_viral = outros_posts[0]
+
+    outros_posts_limitados = outros_posts[:5]
 
     # Remove objeto datetime antes de serializar
     for p in local_posts:
@@ -360,12 +389,16 @@ def processar_busca(username, data_coleta_str, force_api=False):
         "success": True,
         "username": username_clean,
         "data_coleta": format_datetime(data_coleta_dt),
+        "janela_inicio": format_datetime(janela_inicio),
+        "janela_fim": format_datetime(janela_fim),
+        # Mantém chave legada para compatibilidade
         "janela_48h_inicio": format_datetime(janela_inicio),
         "janela_48h_fim": format_datetime(janela_fim),
         "total_posts_janela": len(posts_na_janela),
         "top_post": top_post,
+        "sugestao_viral": sugestao_viral,
         "posts_na_janela": posts_na_janela,
-        "outros_posts_recentes": outros_posts,
+        "outros_posts_recentes": outros_posts_limitados,
         "origem": origem
     }
 

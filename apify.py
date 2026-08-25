@@ -4,8 +4,14 @@ from apify_client import ApifyClient
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
-APIFY_TOKEN = os.getenv("APIFY_API_TOKEN")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+env_path = os.path.join(BASE_DIR, ".env")
+if os.path.exists(env_path):
+    load_dotenv(dotenv_path=env_path)
+else:
+    load_dotenv()
+
+APIFY_TOKEN = os.getenv("APIFY_API_TOKEN") or os.getenv("APIFY_TOKEN")
 
 def consultar_perfil_instagram(username):
     # Configuração otimizada para gastar o MÍNIMO de créditos

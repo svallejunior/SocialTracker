@@ -1,7 +1,8 @@
 """
 escanear_anomalias_historicas.py
-Varre todo o histórico existente na tabela perfis_historico, calcula as métricas
-e marca como 'ADS' (pendente de triagem) os registros não revisados que dispararam gatilhos.
+Varre todo o histórico existente na tabela perfis_historico:
+- Coletas com variação de seguidores > 2% E > 10 seguidores: marcadas para análise/validação (se não revisadas).
+- Coletas dentro do parâmetro normal (<= 2% ou <= 10 seguidores): marcadas automaticamente como ORGANICO e validado.
 """
 
 import os
@@ -17,9 +18,8 @@ if hasattr(sys.stderr, 'reconfigure'):
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "instagram_tracker.db"))
 
-LIMIAR_DELTA_S_VOLUME = 150
-LIMIAR_PERCENTUAL_EXPLOSAO = 25
-LIMIAR_S_ANTERIOR_MINIMO = 500
+LIMIAR_DELTA_S_MINIMO = 10
+LIMIAR_PERCENTUAL_MINIMO = 2.0
 
 
 def escanear_historico():
@@ -35,8 +35,9 @@ def escanear_historico():
     rows = cursor.fetchall()
 
     ultimo_por_perfil = {}
-    marcados = 0
+    marcados_analise = 0
     ignorados_ja_revisados = 0
+    auto_validados_organico = 0
 
     for r in rows:
         rid, uname, data_coleta, segs, posts, inativo, tipo_janela, revisado = r
@@ -50,13 +51,9 @@ def escanear_historico():
             delta_posts = (posts or 0) - (posts_ant or 0)
             pct_delta_s = ((segs - seg_ant) / seg_ant * 100) if seg_ant > 0 else 0
 
-            gatilho_disparado = False
-            if delta_s > LIMIAR_DELTA_S_VOLUME and delta_posts == 0:
-                gatilho_disparado = True
-            if pct_delta_s >= LIMIAR_PERCENTUAL_EXPLOSAO and seg_ant > LIMIAR_S_ANTERIOR_MINIMO:
-                gatilho_disparado = True
+            precisa_analise = (pct_delta_s > LIMIAR_PERCENTUAL_MINIMO) and (delta_s > LIMIAR_DELTA_S_MINIMO)
 
-            if gatilho_disparado:
+            if precisa_analise:
                 if revisado == 1:
                     ignorados_ja_revisados += 1
                 else:
@@ -65,17 +62,33 @@ def escanear_historico():
                         SET tipo_janela = 'ADS', revisado_manualmente = 0
                         WHERE id = ?
                     """, (rid,))
-                    marcados += 1
-                    print(f"  🔴 Registro #{rid} | @{uname} | {data_coleta} | ΔS={int(delta_s):+d} | ΔP={int(delta_posts):+d} | %ΔS={pct_delta_s:.1f}% → marcado como ADS")
+                    marcados_analise += 1
+                    print(f"  🔴 Registro #{rid} | @{uname} | {data_coleta} | ΔS={int(delta_s):+d} | %ΔS={pct_delta_s:.1f}% → enviado para análise/validação")
+            else:
+                cursor.execute("""
+                    UPDATE perfis_historico
+                    SET tipo_janela = 'ORGANICO', revisado_manualmente = 1
+                    WHERE id = ?
+                """, (rid,))
+                auto_validados_organico += 1
+        else:
+            # Primeira coleta
+            cursor.execute("""
+                UPDATE perfis_historico
+                SET tipo_janela = 'ORGANICO', revisado_manualmente = 1
+                WHERE id = ?
+            """, (rid,))
+            auto_validados_organico += 1
 
         ultimo_por_perfil[uname] = (segs, posts or 0)
 
     conn.commit()
     conn.close()
 
-    print(f"\n✅ Varrida concluída!")
-    print(f"   - Anomalias marcadas como ADS para triagem: {marcados}")
-    print(f"   - Registros com anomalia já revisados anteriormente: {ignorados_ja_revisados}")
+    print(f"\n✅ Varrida concluída com sucesso!")
+    print(f"   - Validados automaticamente como Orgânico (variação <= 2% ou <= 10 seg): {auto_validados_organico}")
+    print(f"   - Enviados para análise/validação manual (variação > 2% e > 10 seg): {marcados_analise}")
+    print(f"   - Registros com variação > 2% e > 10 seg já revisados previamente: {ignorados_ja_revisados}")
 
 
 if __name__ == "__main__":

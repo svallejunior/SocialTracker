@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -8,9 +8,14 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  CartesianGrid
+  CartesianGrid,
+  ReferenceArea,
+  Brush
 } from 'recharts';
-import { TrendingUp, RefreshCw, Percent, Hash, Award, CheckCircle2, AlertTriangle, BarChart3, Search, Filter } from 'lucide-react';
+import {
+  TrendingUp, RefreshCw, Percent, Hash, Award, CheckCircle2, AlertTriangle,
+  BarChart3, Search, Filter, Eye, EyeOff, ZoomIn, RotateCcw, SlidersHorizontal, Check
+} from 'lucide-react';
 
 interface Profile {
   username: string;
@@ -47,6 +52,78 @@ export default function GraficoProjecao({ meusPerfis, todosPerfis = [] }: Grafic
   const [listaTodosPerfis, setListaTodosPerfis] = useState<PerfilItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Estados de Visibilidade das Linhas (Perfis e Benchmark)
+  const [perfisOcultos, setPerfisOcultos] = useState<string[]>([]);
+  const [ocultarFaixaBenchmark, setOcultarFaixaBenchmark] = useState<boolean>(false);
+  const [ocultarMedianaBenchmark, setOcultarMedianaBenchmark] = useState<boolean>(false);
+
+  // Estados de Zoom / Recorte Temporal
+  const [zoomIndices, setZoomIndices] = useState<{ start: number; end: number } | null>(null);
+  const [refAreaLeft, setRefAreaLeft] = useState<string | null>(null);
+  const [refAreaRight, setRefAreaRight] = useState<string | null>(null);
+  const [isSelectingZoom, setIsSelectingZoom] = useState<boolean>(false);
+  const [showBrush, setShowBrush] = useState<boolean>(false);
+
+  // Dados fatiados pelo Zoom atual (para o gráfico e o eixo Y auto-escalarem dinamicamente)
+  const visibleData = useMemo(() => {
+    if (!data || data.length === 0) return [];
+    if (!zoomIndices) return data;
+    const start = Math.max(0, Math.min(zoomIndices.start, data.length - 1));
+    const end = Math.max(0, Math.min(zoomIndices.end, data.length - 1));
+    const minI = Math.min(start, end);
+    const maxI = Math.max(start, end);
+    return data.slice(minI, maxI + 1);
+  }, [data, zoomIndices]);
+
+  // Ações de Zoom
+  const aplicarZoomDias = (maxDias: number | 'TODOS') => {
+    if (maxDias === 'TODOS') {
+      setZoomIndices(null);
+      return;
+    }
+    if (!data || data.length === 0) return;
+    const endIdx = data.findIndex(d => d.dia_num > maxDias);
+    if (endIdx === -1) {
+      setZoomIndices(null);
+    } else {
+      setZoomIndices({ start: 0, end: Math.max(1, endIdx - 1) });
+    }
+  };
+
+  const resetarZoom = () => {
+    setZoomIndices(null);
+    setRefAreaLeft(null);
+    setRefAreaRight(null);
+    setIsSelectingZoom(false);
+  };
+
+  // Ações de Visibilidade
+  const togglePerfilVisibilidade = (uname: string) => {
+    setPerfisOcultos(prev =>
+      prev.includes(uname) ? prev.filter(u => u !== uname) : [...prev, uname]
+    );
+  };
+
+  const isolarPerfil = (uname: string) => {
+    const outros = meusPerfisRetornados.filter(u => u !== uname);
+    const todosOutrosOcultos = outros.every(u => perfisOcultos.includes(u));
+    if (todosOutrosOcultos && !perfisOcultos.includes(uname)) {
+      setPerfisOcultos([]);
+    } else {
+      setPerfisOcultos(outros);
+    }
+  };
+
+  const mostrarTodosPerfis = () => {
+    setPerfisOcultos([]);
+    setOcultarFaixaBenchmark(false);
+    setOcultarMedianaBenchmark(false);
+  };
+
+  const ocultarTodosPerfis = () => {
+    setPerfisOcultos([...meusPerfisRetornados]);
+  };
 
   const perfisParaDropdown = (todosPerfis && todosPerfis.length > 0 ? todosPerfis : meusPerfis)
     .slice()
@@ -144,23 +221,29 @@ export default function GraficoProjecao({ meusPerfis, todosPerfis = [] }: Grafic
         </div>
 
         {/* Expectativa do Mercado (Benchmark) */}
-        <div style={{ marginBottom: 10 }}>
-          <div style={{ fontSize: 11, color: '#8B949E', fontWeight: 700, textTransform: 'uppercase', marginBottom: 4 }}>
-            {titleBenchmark}
+        {(!ocultarFaixaBenchmark || !ocultarMedianaBenchmark) && (
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 11, color: '#8B949E', fontWeight: 700, textTransform: 'uppercase', marginBottom: 4 }}>
+              {titleBenchmark}
+            </div>
+            {!ocultarMedianaBenchmark && (
+              <div style={{ marginBottom: 3, display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#00F0FF', fontWeight: 600 }}>P50 Mediana Esperada:</span>
+                <span style={{ fontWeight: 800, color: '#00F0FF' }}>
+                  {formatValue(p50Val, modoMedida)}
+                </span>
+              </div>
+            )}
+            {!ocultarFaixaBenchmark && (
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#7100E2', fontWeight: 600 }}>Faixa [P25 Conservador, P75 Otimista]:</span>
+                <span style={{ fontWeight: 700, color: '#B0B0C0' }}>
+                  [{formatValue(p25Val, modoMedida)}, {formatValue(p75Val, modoMedida)}]
+                </span>
+              </div>
+            )}
           </div>
-          <div style={{ marginBottom: 3, display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ color: '#00F0FF', fontWeight: 600 }}>P50 Mediana Esperada:</span>
-            <span style={{ fontWeight: 800, color: '#00F0FF' }}>
-              {formatValue(p50Val, modoMedida)}
-            </span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ color: '#7100E2', fontWeight: 600 }}>Faixa [P25 Conservador, P75 Otimista]:</span>
-            <span style={{ fontWeight: 700, color: '#B0B0C0' }}>
-              [{formatValue(p25Val, modoMedida)}, {formatValue(p75Val, modoMedida)}]
-            </span>
-          </div>
-        </div>
+        )}
 
         {/* Performance dos Perfis Exibidos */}
         {Object.keys(detalhesMeusPerfis).length > 0 && (
@@ -172,7 +255,7 @@ export default function GraficoProjecao({ meusPerfis, todosPerfis = [] }: Grafic
               }):
             </div>
             {meusPerfisRetornados
-              .filter(uname => selectedUsername === 'TODOS' || selectedUsername === uname)
+              .filter(uname => (selectedUsername === 'TODOS' || selectedUsername === uname) && !perfisOcultos.includes(uname))
               .map((uname, idx) => {
                 const info = detalhesMeusPerfis[uname];
                 if (!info) return null;
@@ -615,10 +698,131 @@ export default function GraficoProjecao({ meusPerfis, todosPerfis = [] }: Grafic
         </div>
       </div>
 
-      {/* Legenda Informativa dos Percentis e Perfis */}
+      {/* Barra de Ferramentas de Zoom & Recorte Temporal */}
       <div style={{
         display: 'flex',
-        gap: 16,
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: 10,
+        marginBottom: 12,
+        background: 'rgba(13, 17, 23, 0.85)',
+        padding: '10px 14px',
+        borderRadius: '10px',
+        border: '1px solid rgba(48, 54, 61, 0.8)'
+      }}>
+        {/* Atalhos Rápidos de Zoom */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#00F0FF', fontSize: 12, fontWeight: 700, marginRight: 4 }}>
+            <ZoomIn size={15} />
+            <span>Recorte / Zoom:</span>
+          </div>
+
+          {[
+            { id: 'TODOS', label: '🌐 Tudo' },
+            { id: 7, label: 'D0–D7 (1ª Sem.)' },
+            { id: 14, label: 'D0–D14 (2 Sem.)' },
+            { id: 30, label: 'D0–D30 (1º Mês)' },
+            { id: 60, label: 'D0–D60' },
+            { id: 90, label: 'D0–D90' }
+          ].map(opt => {
+            const isSelected = opt.id === 'TODOS'
+              ? zoomIndices === null
+              : zoomIndices !== null &&
+                visibleData.length > 0 &&
+                visibleData[0]?.dia_num === 0 &&
+                visibleData[visibleData.length - 1]?.dia_num <= (opt.id as number);
+
+            return (
+              <button
+                key={opt.id}
+                onClick={() => aplicarZoomDias(opt.id as any)}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  border: isSelected ? '1px solid #00F0FF' : '1px solid #30363D',
+                  background: isSelected ? 'rgba(0, 240, 255, 0.15)' : '#161B22',
+                  color: isSelected ? '#00F0FF' : '#8B949E',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+
+          {/* Botão para Ligar/Desligar Slider Brush */}
+          <button
+            onClick={() => setShowBrush(prev => !prev)}
+            title="Exibir slider deslizante no rodapé do gráfico para ajuste fino milimétrico"
+            style={{
+              padding: '4px 10px',
+              borderRadius: '6px',
+              border: showBrush ? '1px solid #7100E2' : '1px solid #30363D',
+              background: showBrush ? 'rgba(113, 0, 226, 0.25)' : '#161B22',
+              color: showBrush ? '#A855F7' : '#8B949E',
+              fontSize: '11px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              transition: 'all 0.15s ease'
+            }}
+          >
+            <SlidersHorizontal size={12} />
+            <span>Slider Fino</span>
+          </button>
+        </div>
+
+        {/* Status do Zoom e Botão de Reset */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {zoomIndices !== null && visibleData.length > 0 && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              background: 'rgba(0, 240, 255, 0.08)',
+              border: '1px solid rgba(0, 240, 255, 0.3)',
+              padding: '3px 8px',
+              borderRadius: 6,
+              fontSize: 11,
+              color: '#00F0FF',
+              fontWeight: 600
+            }}>
+              <span>🔍 Janela: <strong>{visibleData[0]?.dia_relativo}</strong> até <strong>{visibleData[visibleData.length - 1]?.dia_relativo}</strong> ({visibleData.length} dias)</span>
+              <button
+                onClick={resetarZoom}
+                title="Resetar Zoom para todos os dias"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#FF007A',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: 0,
+                  marginLeft: 4
+                }}
+              >
+                <RotateCcw size={12} />
+              </button>
+            </div>
+          )}
+
+          <span style={{ fontSize: 11, color: '#586069' }}>
+            💡 Dica: Arraste com o mouse no gráfico para dar zoom em qualquer área
+          </span>
+        </div>
+      </div>
+
+      {/* Legenda Informativa Interativa (Clique para Ocultar/Exibir Linhas) */}
+      <div style={{
+        display: 'flex',
+        gap: 10,
         marginBottom: 16,
         fontSize: 12,
         flexWrap: 'wrap',
@@ -628,31 +832,164 @@ export default function GraficoProjecao({ meusPerfis, todosPerfis = [] }: Grafic
         border: '1px solid rgba(48, 54, 61, 0.6)',
         alignItems: 'center'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <div style={{ width: 14, height: 14, background: 'rgba(113, 0, 226, 0.3)', borderRadius: 3, border: '1px dashed #7100E2' }} />
-          <span style={{ color: '#B0B0C0', fontWeight: 600 }}>Faixa Esperada Benchmark (P25–P75)</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <div style={{ width: 16, height: 2, borderTop: '2px dashed #00F0FF' }} />
-          <span style={{ color: '#00F0FF', fontWeight: 600 }}>P50 Mediana Esperada Benchmark</span>
-        </div>
+        {/* Controle da Faixa do Benchmark */}
+        <button
+          onClick={() => setOcultarFaixaBenchmark(prev => !prev)}
+          title="Clique para ocultar/exibir a faixa de expectativa do benchmark"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            background: ocultarFaixaBenchmark ? '#161B22' : 'rgba(113, 0, 226, 0.15)',
+            border: ocultarFaixaBenchmark ? '1px solid #30363D' : '1px solid #7100E2',
+            padding: '4px 10px',
+            borderRadius: 6,
+            cursor: 'pointer',
+            opacity: ocultarFaixaBenchmark ? 0.5 : 1,
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <div style={{
+            width: 12,
+            height: 12,
+            background: ocultarFaixaBenchmark ? '#586069' : 'rgba(113, 0, 226, 0.4)',
+            borderRadius: 2,
+            border: `1px dashed ${ocultarFaixaBenchmark ? '#586069' : '#7100E2'}`
+          }} />
+          <span style={{
+            color: ocultarFaixaBenchmark ? '#8B949E' : '#B0B0C0',
+            fontWeight: 600,
+            fontSize: 11,
+            textDecoration: ocultarFaixaBenchmark ? 'line-through' : 'none'
+          }}>
+            Faixa Benchmark (P25–P75)
+          </span>
+          {ocultarFaixaBenchmark ? <EyeOff size={12} color="#8B949E" /> : <Eye size={12} color="#7100E2" />}
+        </button>
+
+        {/* Controle da Mediana do Benchmark */}
+        <button
+          onClick={() => setOcultarMedianaBenchmark(prev => !prev)}
+          title="Clique para ocultar/exibir a linha de mediana P50 do benchmark"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            background: ocultarMedianaBenchmark ? '#161B22' : 'rgba(0, 240, 255, 0.1)',
+            border: ocultarMedianaBenchmark ? '1px solid #30363D' : '1px solid #00F0FF',
+            padding: '4px 10px',
+            borderRadius: 6,
+            cursor: 'pointer',
+            opacity: ocultarMedianaBenchmark ? 0.5 : 1,
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <div style={{
+            width: 14,
+            height: 2,
+            borderTop: `2px dashed ${ocultarMedianaBenchmark ? '#586069' : '#00F0FF'}`
+          }} />
+          <span style={{
+            color: ocultarMedianaBenchmark ? '#8B949E' : '#00F0FF',
+            fontWeight: 600,
+            fontSize: 11,
+            textDecoration: ocultarMedianaBenchmark ? 'line-through' : 'none'
+          }}>
+            Mediana P50
+          </span>
+          {ocultarMedianaBenchmark ? <EyeOff size={12} color="#8B949E" /> : <Eye size={12} color="#00F0FF" />}
+        </button>
+
         <div style={{ borderLeft: '1px solid #30363D', height: 16, margin: '0 4px' }} />
-        <span style={{ color: '#8B949E', fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>Destaque:</span>
+
+        {/* Perfis em Destaque Clicáveis */}
+        <span style={{ color: '#8B949E', fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>
+          Perfis:
+        </span>
+
         {meusPerfisRetornados
           .filter(uname => selectedUsername === 'TODOS' || selectedUsername === uname)
           .map((uname, idx) => {
             const cor = PALETA_CORES_MEUS_PERFIS[idx % PALETA_CORES_MEUS_PERFIS.length];
+            const isOculto = perfisOcultos.includes(uname);
+
             return (
-              <div key={uname} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <div style={{ width: 12, height: 3, background: cor, borderRadius: 2 }} />
-                <span style={{ color: cor, fontWeight: 700 }}>@{uname}</span>
-              </div>
+              <button
+                key={uname}
+                onClick={() => togglePerfilVisibilidade(uname)}
+                onDoubleClick={() => isolarPerfil(uname)}
+                title={`Clique para ${isOculto ? 'exibir' : 'ocultar'} a linha de @${uname} no gráfico (Duplo clique para isolar)`}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  background: isOculto ? '#161B22' : `${cor}18`,
+                  border: isOculto ? '1px solid #30363D' : `1px solid ${cor}`,
+                  padding: '4px 10px',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  opacity: isOculto ? 0.45 : 1,
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <div style={{
+                  width: 10,
+                  height: 3,
+                  background: isOculto ? '#586069' : cor,
+                  borderRadius: 2
+                }} />
+                <span style={{
+                  color: isOculto ? '#8B949E' : cor,
+                  fontWeight: 700,
+                  fontSize: 12,
+                  textDecoration: isOculto ? 'line-through' : 'none'
+                }}>
+                  @{uname}
+                </span>
+                {isOculto ? <EyeOff size={12} color="#8B949E" /> : <Eye size={12} color={cor} />}
+              </button>
             );
           })}
+
+        {/* Botões Rápidos de Mostrar/Ocultar Todos os Perfis */}
+        <div style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
+          <button
+            onClick={mostrarTodosPerfis}
+            title="Exibir todas as linhas"
+            style={{
+              background: '#161B22',
+              border: '1px solid #30363D',
+              color: '#8B949E',
+              borderRadius: 6,
+              padding: '3px 8px',
+              fontSize: 10,
+              fontWeight: 700,
+              cursor: 'pointer'
+            }}
+          >
+            👁️ Mostrar Todos
+          </button>
+          <button
+            onClick={ocultarTodosPerfis}
+            title="Ocultar todas as linhas de perfis"
+            style={{
+              background: '#161B22',
+              border: '1px solid #30363D',
+              color: '#8B949E',
+              borderRadius: 6,
+              padding: '3px 8px',
+              fontSize: 10,
+              fontWeight: 700,
+              cursor: 'pointer'
+            }}
+          >
+            🚫 Ocultar Todos
+          </button>
+        </div>
       </div>
 
-      {/* Gráfico Recharts */}
-      <div style={{ width: '100%', height: 400 }}>
+      {/* Gráfico Recharts com Suporte a Drag-to-Zoom e Auto-Escala */}
+      <div style={{ width: '100%', height: showBrush ? 450 : 400, userSelect: 'none' }}>
         {loading ? (
           <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#8B949E' }}>
             Carregando curva de projeção...
@@ -667,7 +1004,35 @@ export default function GraficoProjecao({ meusPerfis, todosPerfis = [] }: Grafic
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={data} margin={{ top: 10, right: 30, left: 20, bottom: 10 }}>
+            <ComposedChart
+              data={visibleData}
+              margin={{ top: 10, right: 30, left: 20, bottom: showBrush ? 10 : 10 }}
+              onMouseDown={(e: any) => {
+                if (e && e.activeLabel) {
+                  setRefAreaLeft(e.activeLabel);
+                  setIsSelectingZoom(true);
+                }
+              }}
+              onMouseMove={(e: any) => {
+                if (isSelectingZoom && e && e.activeLabel) {
+                  setRefAreaRight(e.activeLabel);
+                }
+              }}
+              onMouseUp={() => {
+                if (refAreaLeft && refAreaRight && refAreaLeft !== refAreaRight) {
+                  const idxLeft = data.findIndex(d => d.dia_relativo === refAreaLeft);
+                  const idxRight = data.findIndex(d => d.dia_relativo === refAreaRight);
+                  if (idxLeft !== -1 && idxRight !== -1) {
+                    const start = Math.min(idxLeft, idxRight);
+                    const end = Math.max(idxLeft, idxRight);
+                    setZoomIndices({ start, end });
+                  }
+                }
+                setRefAreaLeft(null);
+                setRefAreaRight(null);
+                setIsSelectingZoom(false);
+              }}
+            >
               <defs>
                 <linearGradient id="colorFaixa" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#7100E2" stopOpacity={0.4} />
@@ -695,34 +1060,38 @@ export default function GraficoProjecao({ meusPerfis, todosPerfis = [] }: Grafic
               <Tooltip content={<CustomTooltip />} />
 
               {/* Banda Sombreada entre P25 e P75 do Benchmark */}
-              <Area
-                type="monotone"
-                dataKey={
-                  modoMedida === 'PERCENTUAL' ? 'pct_faixa_expectativa' :
-                  modoMedida === 'TOTAL_ABSOLUTO' ? 'total_faixa_expectativa' : 'faixa_expectativa'
-                }
-                stroke="none"
-                fill="url(#colorFaixa)"
-                name="Faixa P25-P75 Benchmark"
-              />
+              {!ocultarFaixaBenchmark && (
+                <Area
+                  type="monotone"
+                  dataKey={
+                    modoMedida === 'PERCENTUAL' ? 'pct_faixa_expectativa' :
+                    modoMedida === 'TOTAL_ABSOLUTO' ? 'total_faixa_expectativa' : 'faixa_expectativa'
+                  }
+                  stroke="none"
+                  fill="url(#colorFaixa)"
+                  name="Faixa P25-P75 Benchmark"
+                />
+              )}
 
               {/* Linha Tracejada Neutra: Mediana P50 do Benchmark */}
-              <Line
-                type="monotone"
-                dataKey={
-                  modoMedida === 'PERCENTUAL' ? 'pct_p50_mediana' :
-                  modoMedida === 'TOTAL_ABSOLUTO' ? 'total_p50_mediana' : 'p50_mediana'
-                }
-                stroke="#00F0FF"
-                strokeWidth={2}
-                strokeDasharray="5 5"
-                dot={false}
-                name="Mediana P50 Benchmark"
-              />
+              {!ocultarMedianaBenchmark && (
+                <Line
+                  type="monotone"
+                  dataKey={
+                    modoMedida === 'PERCENTUAL' ? 'pct_p50_mediana' :
+                    modoMedida === 'TOTAL_ABSOLUTO' ? 'total_p50_mediana' : 'p50_mediana'
+                  }
+                  stroke="#00F0FF"
+                  strokeWidth={2}
+                  strokeDasharray="5 5"
+                  dot={false}
+                  name="Mediana P50 Benchmark"
+                />
+              )}
 
               {/* Linhas Sólidas para Perfis em Destaque */}
               {meusPerfisRetornados
-                .filter(uname => selectedUsername === 'TODOS' || selectedUsername === uname)
+                .filter(uname => (selectedUsername === 'TODOS' || selectedUsername === uname) && !perfisOcultos.includes(uname))
                 .map((uname, idx) => {
                   const cor = PALETA_CORES_MEUS_PERFIS[idx % PALETA_CORES_MEUS_PERFIS.length];
                   return (
@@ -742,6 +1111,30 @@ export default function GraficoProjecao({ meusPerfis, todosPerfis = [] }: Grafic
                     />
                   );
                 })}
+
+              {/* Retângulo de Seleção Visual de Zoom por Arrasto */}
+              {refAreaLeft && refAreaRight && (
+                <ReferenceArea
+                  x1={refAreaLeft}
+                  x2={refAreaRight}
+                  stroke="#00F0FF"
+                  strokeOpacity={0.8}
+                  fill="#00F0FF"
+                  fillOpacity={0.18}
+                />
+              )}
+
+              {/* Navegador Deslizante Brush (Opcional quando Slider Fino ativado) */}
+              {showBrush && (
+                <Brush
+                  dataKey="dia_relativo"
+                  height={32}
+                  stroke="#7100E2"
+                  fill="#0D1117"
+                  travellerWidth={12}
+                  tickFormatter={(v) => v}
+                />
+              )}
             </ComposedChart>
           </ResponsiveContainer>
         )}
