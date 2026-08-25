@@ -6,37 +6,35 @@ O sistema cobre três frentes:
 
 1. **Coleta & Análise (Python + Apify)** — ingestão diária de seguidores, detecção automática de anomalias de crescimento e identificação do post responsável por cada salto.
 2. **Dashboard Web (Next.js 16 + React 19)** — painel escuro premium com benchmark dinâmico, controle financeiro com rateio, curadoria de anomalias e central de automação.
-3. **Motor de Automação (Meta Graph API)** — agendamento e publicação automática de Feed, Carrossel, Reels e Stories, com worker rodando em background.
+3. **Motor de Automação (Meta Graph API)** — agendamento e publicação automática de Feed, Carrossel, Reels e Stories, via daemon local.
 
 ---
 
 ## 🏗️ Arquitetura
+
+Tudo roda na mesma máquina, com o SQLite como fonte única de verdade. O dashboard Next.js abre o banco diretamente (pacotes `sqlite`/`sqlite3`) e dispara os scripts Python via `child_process` — não há servidor de API intermediário.
 
 ```text
 ┌──────────────────┐     Apify Actors      ┌─────────────────────┐
 │  ingestion.py    │ ────────────────────▶ │                     │
 │  buscar_viral.py │                       │ instagram_tracker.db│
 └──────────────────┘                       │      (SQLite)       │
-                                           │                     │
-┌──────────────────┐   Meta Graph API      │                     │
+        ▲                                  │                     │
+        │                                  │                     │
+┌───────┴──────────┐   Meta Graph API      │                     │
 │ publicador_      │ ◀──────────────────── │                     │
 │ instagram.py     │                       └──────────┬──────────┘
 └──────────────────┘                                  │
         ▲                                             │ leitura/escrita direta
-        │ subprocess                                  │
-┌───────┴──────────┐                       ┌──────────┴──────────┐
-│  api_server.py   │                       │  dashboard/ (Next)  │
-│  Flask :5000     │                       │  App Router :3000   │
-│  + worker publish│                       │  + rotas /api/*     │
-└──────────────────┘                       └─────────────────────┘
+        │ spawn / exec                                │
+        └──────────────────────────────────┬──────────┴──────────┐
+                                           │  dashboard/ (Next)  │
+                                           │  App Router :3000   │
+                                           │  + rotas /api/*     │
+                                           └─────────────────────┘
 ```
 
-**Dois modos de operação:**
-
-| Modo | Como funciona |
-| --- | --- |
-| **All-in-one (atual)** | O Next.js abre o `instagram_tracker.db` diretamente (pacotes `sqlite`/`sqlite3`) e dispara os scripts Python via `child_process`. É o modo usado em desenvolvimento e no deploy em VPS única. |
-| **Vercel + VPS (preparado)** | `api_server.py` expõe os mesmos dados via REST na porta 5000 e `dashboard/src/lib/vps-proxy.ts` contém os helpers de proxy (`vpsGet`/`vpsPost`/`vpsPut`/`vpsDelete`). ⚠️ **Nenhuma rota importa o `vps-proxy` ainda** — o helper e as variáveis `VPS_API_URL`/`VPS_API_KEY` estão prontos, mas a migração das rotas para o proxy ainda não foi feita. |
+Como as rotas do Next.js acessam o arquivo do banco e executam Python locais, o dashboard **precisa rodar na mesma máquina** que os scripts. Hospedagem serverless (Vercel e afins) exigiria uma camada de API remota, que não existe no projeto.
 
 ---
 
@@ -44,18 +42,16 @@ O sistema cobre três frentes:
 
 ```text
 SocialTracker/
-├── api_server.py                    # API REST Flask (:5000) + worker de publicação em background
 ├── ingestion.py                     # Coleta diária de seguidores (Apify) + classificação de anomalias
 ├── buscar_viral.py                  # Localiza o post responsável por um salto de seguidores (janela 72h)
 ├── escanear_anomalias_historicas.py # Reclassifica todo o histórico de perfis_historico
-├── publicador_instagram.py          # Publicador Meta Graph API (Feed/Carrossel/Reels/Stories)
+├── publicador_instagram.py          # Publicador Meta Graph API (Feed/Carrossel/Reels/Stories) + daemon
 ├── apify.py                         # Sandbox de testes dos actors do Apify
 ├── sql_projecao.py                  # Benchmark P50 via SQL puro (recursivo + LOCF + window functions)
 ├── perfis_monitorados.py            # Semeia a lista inicial de perfis-alvo
 ├── criar_tabelas.py                 # Executa schema_controle.sql no banco
 ├── migrate_tipo_janela.py           # Migração idempotente das colunas de classificação
 ├── schema_controle.sql              # Schema da tabela de controle operacional
-├── deploy_socialtracker.sh          # Deploy automatizado em Ubuntu/VPS (PM2 + cron)
 ├── instagram_tracker.db             # 🗄️ Banco SQLite principal (fonte única de verdade)
 ├── app.py                           # Dashboard legado em Streamlit (mantido para consulta)
 ├── automacao/                       # Mídias de agendamento, uma pasta por conta Meta
@@ -66,19 +62,18 @@ SocialTracker/
     ├── src/app/api/                 # Rotas de API (ver tabela abaixo)
     ├── src/app/page.tsx             # Dashboard com as 7 abas de navegação
     ├── src/app/globals.css          # Design system (SaaS Premium Dark)
-    ├── src/components/
-    │   ├── CentralAnomalias.tsx     # Curadoria de anomalias + busca de post viral
-    │   ├── CentralAutomatizacao.tsx # Calendário e formulário de agendamentos
-    │   ├── GraficoProjecao.tsx      # Curva de benchmark P25/P50/P75
-    │   └── ModalLancamento.tsx      # Lançamentos financeiros (com rateio)
-    └── src/lib/vps-proxy.ts         # Helpers de proxy Vercel → VPS (ainda não conectados)
+    └── src/components/
+        ├── CentralAnomalias.tsx     # Curadoria de anomalias + busca de post viral
+        ├── CentralAutomatizacao.tsx # Calendário e formulário de agendamentos
+        ├── GraficoProjecao.tsx      # Curva de benchmark P25/P50/P75
+        └── ModalLancamento.tsx      # Lançamentos financeiros (com rateio)
 ```
 
 ---
 
 ## 💾 Modelagem do Banco (`instagram_tracker.db`)
 
-As migrações são **idempotentes e automáticas**: tanto `api_server.py` (`run_migrations()`) quanto as rotas do Next.js (`getDb()`) e o `publicador_instagram.py` (`init_db_schema()`) criam tabelas e adicionam colunas faltantes na primeira conexão.
+As migrações são **idempotentes e automáticas**: tanto as rotas do Next.js (`getDb()`) quanto o `publicador_instagram.py` (`init_db_schema()`) criam tabelas e adicionam colunas faltantes na primeira conexão.
 
 ### Monitoramento
 
@@ -127,8 +122,6 @@ As migrações são **idempotentes e automáticas**: tanto `api_server.py` (`run
 | `rateado` | `1` quando o lançamento foi dividido entre perfis |
 | `grupo_rateio` | UUID que agrupa as parcelas de um mesmo rateio |
 
-> ⚠️ Os endpoints `POST/DELETE /api/controle` do `api_server.py` ainda usam os nomes antigos (`perfil_id`, `rateio`, `perfis_rateio`) e divergem deste schema. As rotas equivalentes do Next.js (`dashboard/src/app/api/controle/route.ts`) estão corretas — use-as como referência.
-
 ### Automação de publicações
 
 **`automacao_config`** — credenciais da Meta por conta (PK `id`, que é o `meta_account_id`, o `username` ou `default_config`): `app_id`, `app_secret`, `access_token`, `public_base_url`.
@@ -160,7 +153,7 @@ As migrações são **idempotentes e automáticas**: tanto `api_server.py` (`run
 ### 1. Dependências Python
 
 ```bash
-pip install apify-client python-dotenv flask requests pandas plotly streamlit Pillow
+pip install apify-client python-dotenv requests pandas plotly streamlit Pillow
 ```
 
 `Pillow` é opcional (conversão de imagens no publicador) e `streamlit`/`plotly` só são necessários para o `app.py` legado. Para dividir vídeos longos em partes de Stories o publicador também usa **ffmpeg/ffprobe** no PATH (no Windows ele procura automaticamente na instalação do winget).
@@ -178,9 +171,6 @@ Copie `.env.example` para `.env` na raiz e preencha os valores. O `.env` está n
 | `PUBLIC_MEDIA_BASE_URL` / `PUBLIC_BASE_URL` | `publicador_instagram.py` | URL pública que serve `automacao/` para a Meta baixar a mídia |
 | `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_BUCKET` | publicador + upload | Storage público das mídias (bucket default `Postagens`) |
 | `NEXT_PUBLIC_SUPABASE_*` | rotas do Next.js | Mesmos valores acima, no lado do dashboard |
-| `PORT` | `api_server.py` | Porta do Flask (default `5000`) |
-| `VPS_API_KEY` | `api_server.py` + dashboard | Bearer token da API. **Vazio desativa a autenticação** |
-| `VPS_API_URL` | `vps-proxy.ts` | Base da API na VPS (sem barra final) |
 | `PYTHON_BIN` | `/api/automacao/executar` | Executável Python usado pelo dashboard (default `python`) |
 
 ### 3. Coleta de dados
@@ -199,61 +189,17 @@ cd dashboard && npm install && npm run dev
 
 Abra `http://localhost:3000`. O dashboard resolve o banco em `../instagram_tracker.db` automaticamente (ou em `DB_PATH`, se definido).
 
-### 5. Publicador (opcional, fora do `api_server.py`)
+### 5. Publicador automático (opcional)
 
 ```bash
-python publicador_instagram.py --daemon --interval 60
+python publicador_instagram.py --daemon
 ```
 
----
-
-## 🖥️ Deploy em VPS (Ubuntu)
-
-```bash
-chmod +x deploy_socialtracker.sh
-VPS_API_KEY=minha_chave_secreta ./deploy_socialtracker.sh
-```
-
-O script:
-
-1. Instala pacotes do sistema (`python3`, `sqlite3`, `build-essential`, `tmux`, …).
-2. Instala Node.js 20 LTS e PM2 se ausentes.
-3. Instala as dependências Python.
-4. Sobe o Flask como processo PM2 `socialtracker-api` na porta 5000.
-5. Gera `dashboard/.env.local`, roda `npm install && npm run build` e sobe o PM2 `socialtracker-dashboard` na porta 3000.
-6. Registra dois cron jobs de ingestão: **06:00** e **18:00** diariamente, com log em `ingestion.log`.
-
-```bash
-pm2 status                          # estado dos processos
-pm2 logs socialtracker-api          # logs do Flask
-pm2 logs socialtracker-dashboard    # logs do Next.js
-tail -f ingestion.log               # logs da coleta
-```
-
-> ⚠️ Dois pontos de atenção conhecidos no `deploy_socialtracker.sh`:
-> o corpo do script está **duplicado** (a partir da linha 150 repete uma versão anterior de 5 etapas, sem o passo do Flask), e o `pip3 install` **não inclui `python-dotenv` nem `Pillow`**, que o publicador precisa. Instale-os manualmente na VPS até a correção.
+Mantenha esse processo vivo em paralelo ao dashboard para que os agendamentos sejam publicados na hora marcada. Cada ciclo do daemon atualiza `automacao_daemon_status`, que a aba **Automatização** consulta para exibir a saúde do worker.
 
 ---
 
 ## 🔌 Referência de API
-
-### Flask (`api_server.py`, porta 5000)
-
-Todos os endpoints aceitam `Authorization: Bearer $VPS_API_KEY` (obrigatório quando a variável está definida) e respondem com CORS liberado.
-
-| Método | Rota | Descrição |
-| --- | --- | --- |
-| `GET` | `/health` | Status do serviço e caminho do banco |
-| `GET` | `/api/data` | Perfis ativos e visíveis + histórico completo |
-| `POST` `DELETE` | `/api/data` | Ativa (`{username}`) / desativa (`?username=`) um perfil |
-| `POST` | `/api/ingestion` | Executa `ingestion.py` (timeout 300 s) |
-| `GET` `PUT` | `/api/anomalias` | Lista as 500 leituras mais recentes (filtros `username`, `tipo_janela`) e atualiza `tipo_janela`/`revisado_manualmente` |
-| `POST` | `/api/anomalias/buscar-viral` | Executa `buscar_viral.py` (timeout 180 s) |
-| `GET` `POST` `DELETE` | `/api/controle` | Perfis e lançamentos financeiros |
-| `GET` | `/api/projecao?username=` | Histórico e lançamentos de um perfil |
-| `GET` `POST` | `/api/automacao/config` | Lê e grava credenciais da Meta |
-| `POST` | `/api/automacao/executar` | Executa `publicador_instagram.py` (`id`, `force`, `dryRun`) |
-| `GET` | `/api/automacao/media/<path>` | Serve os arquivos de `automacao/` (sem autenticação) |
 
 ### Next.js (`dashboard/src/app/api/`)
 
@@ -350,7 +296,7 @@ Publica via **Meta Graph API v20.0** (`https://graph.facebook.com/v20.0`).
 ```bash
 python publicador_instagram.py --id ABC123 --force   # publica um agendamento agora
 python publicador_instagram.py --dry-run             # simula sem chamar a Meta
-python publicador_instagram.py --daemon --interval 60
+python publicador_instagram.py --daemon              # loop contínuo (modo inteligente)
 ```
 
 | Flag | Efeito |
@@ -359,11 +305,9 @@ python publicador_instagram.py --daemon --interval 60
 | `--force` | Ignora a checagem de horário |
 | `--dry-run` | Simula, sem chamar a API da Meta |
 | `--daemon` | Loop contínuo |
-| `--interval` | Intervalo do daemon em segundos (default 60) |
+| `--interval` | Aceito, mas **sem efeito**: `run_daemon()` recebe o valor e o ignora (o modo inteligente calcula o próprio tempo de espera) |
 
-### Worker embutido no `api_server.py`
-
-Ao subir, o Flask inicia uma thread `start_background_publisher()` em modo inteligente: calcula o próximo agendamento e **dorme até ele**; se não houver nenhum pendente, revisita em 1 h. Ao chegar a hora, faz polling a cada 5 s por 60 s para garantir a publicação. Cada ciclo atualiza `automacao_daemon_status`, que o dashboard consulta para exibir a saúde do worker.
+No modo `--daemon` o publicador calcula o próximo agendamento e **dorme até 30 s antes dele**; se não houver nenhum pendente, revisita em 1 h (`MAX_IDLE_SLEEP`). Ao chegar a hora, faz polling a cada 5 s por 60 s (`POLL_AFTER_DUE`) para garantir a entrega. A cada ciclo grava `automacao_daemon_status`, que o dashboard lê para mostrar se o worker está vivo.
 
 ---
 

@@ -44,14 +44,13 @@ As rotas rodam migrações idempotentes ao abrir a conexão, então colunas e ta
 
 ## ⚙️ Variáveis de Ambiente
 
-Copie `.env.example` para `.env.local`. As chaves de Supabase e Meta são compartilhadas com o `.env` da raiz — ver a tabela completa no [README principal](../README.md#2-variáveis-de-ambiente).
+Crie um `.env.local` aqui. As chaves de Supabase e Meta são as mesmas do `.env` da raiz — use [`../.env.example`](../.env.example) como base e a tabela completa no [README principal](../README.md#2-variáveis-de-ambiente).
 
 | Variável | Uso |
 | --- | --- |
 | `DB_PATH` | Sobrescreve o caminho do SQLite |
 | `PYTHON_BIN` | Executável Python usado por `/api/automacao/executar` (default `python`) |
 | `NEXT_PUBLIC_SUPABASE_URL` · `NEXT_PUBLIC_SUPABASE_ANON_KEY` · `NEXT_PUBLIC_SUPABASE_BUCKET` | Upload de mídia dos agendamentos |
-| `VPS_API_URL` · `VPS_API_KEY` | Proxy para o `api_server.py` da VPS — helpers prontos em `src/lib/vps-proxy.ts`, **ainda não usados por nenhuma rota** |
 
 `next.config.ts` libera `192.168.0.4` em `allowedDevOrigins` para acesso pela rede local em desenvolvimento.
 
@@ -73,7 +72,9 @@ Copie `.env.example` para `.env.local`. As chaves de Supabase e Meta são compar
 | `/api/automacao/upload` | POST | Salva a mídia em `../automacao/<conta>/` e no Supabase Storage |
 | `/api/automacao/media/[...path]` | GET | Serve as mídias locais de `../automacao/` |
 
-Rotas que executam Python usam `child_process` e assumem que os scripts estão no diretório pai. Isso só funciona quando o dashboard roda na mesma máquina que os scripts — em deploy separado (ex.: Vercel), é preciso migrar as rotas para o `vps-proxy`.
+Rotas que executam Python usam `child_process` e assumem que os scripts estão no diretório pai. Somado ao acesso direto ao arquivo do SQLite, isso significa que **o dashboard só funciona na mesma máquina que os scripts** — hospedagem serverless (Vercel e afins) não é suportada.
+
+O componente `page.tsx` carrega o estado inicial de `GET /api/data`, que devolve `{ success, profiles, posts, followersHistory }`.
 
 ## 🧩 Componentes
 

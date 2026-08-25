@@ -1573,7 +1573,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                 </label>
                 <input
                   type="text"
-                  placeholder="ex: https://socialtracker.seudominio.com ou http://IP_VPS:3000"
+                  placeholder="ex: https://socialtracker.seudominio.com ou http://192.168.0.4:3000"
                   value={metaApiSettings.publicBaseUrl}
                   onChange={e => setMetaApiSettings({ ...metaApiSettings, publicBaseUrl: e.target.value })}
                   style={{
@@ -1587,7 +1587,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                   }}
                 />
                 <span style={{ fontSize: 10, color: '#8B949E', marginTop: 3, display: 'block' }}>
-                  Deixe vazio para usar o padrão local (<code style={{ color: '#60A5FA' }}>http://localhost:3000</code>). Na VPS, informe o IP ou domínio público.
+                  Deixe vazio para usar o padrão local (<code style={{ color: '#60A5FA' }}>http://localhost:3000</code>). Só é necessário quando as mídias não vão pelo Supabase Storage — nesse caso informe um IP ou domínio que a Meta consiga acessar.
                 </span>
               </div>
             </div>

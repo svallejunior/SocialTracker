@@ -1439,12 +1439,10 @@ export default function Dashboard() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      // Em vez de fetch('/api/operacoes')
-      const response = await fetch('http://SEU_IP_OU_HOST_DA_VPS:5000/api/operacoes', {
+      const response = await fetch('/api/data', {
         cache: 'no-store'
       });
-      const data = await response.json();
-            const json = await response.json();
+      const json = await response.json();
 
       if (json.success) {
         const rawPosts = json.posts || [];
