@@ -283,7 +283,17 @@ O gráfico exibe a mediana `P50` e a faixa sombreada `P25–P75` em três modos:
 
 Publica via **Meta Graph API v20.0** (`https://graph.facebook.com/v20.0`).
 
-**Formatos suportados:** foto única e carrossel no Feed, Reels (com espera ativa pelo processamento do vídeo) e Stories de foto ou vídeo. Vídeos acima de **60 s** são divididos automaticamente em partes de Stories via ffmpeg. Vídeos grandes usam o **upload resumável** da Meta.
+**Formatos suportados:** foto única e carrossel no Feed, Reels (com espera ativa pelo processamento do vídeo) e Stories de foto ou vídeo. Vídeos grandes usam o **upload resumável** da Meta.
+
+**Tratamento de vídeo para Stories** (`split_video_for_stories`): antes de enviar, o arquivo é medido com ffprobe (`get_media_specs`) e comparado com a spec da Meta (`motivos_fora_de_spec_stories`). Se estiver tudo dentro, vai como está; qualquer violação dispara um re-encode via ffmpeg para **H.264/AVC, ≤4,5 Mbps de vídeo, AAC 128 kbps 44,1 kHz estéreo, 30 fps CFR**. As violações verificadas são: codec diferente de H.264 (HEVC é o padrão de exportação do TikTok e do iPhone, e o Instagram recusa), bitrate de vídeo acima de **5 Mbps**, bitrate de áudio acima de 128 kbps (+10% de tolerância), codec de áudio diferente de AAC e mais de 60 fps.
+
+Vídeos acima de **60 s** são divididos em partes de duração **igual** (77 s → 2 × 38,7 s, não 60 s + 17 s), evitando um último trecho curto demais. Cada parte é cortada com **0,5 s de folga** sob o limite: como o AAC só encerra em fronteira de frame (1024 amostras ≈ 23 ms), cortar exatamente em 60 s gera um container de 60,023 s. Após o encode, a duração do container de cada parte é reconferida com ffprobe.
+
+> 🚫 **Publicação de vídeo está bloqueada no lado da Meta (verificado em 25/08/2026).** Todo `media_publish` de vídeo desta app é recusado com `message: "Fatal"`, `code: -1`, `is_transient: false` e o subcode **não documentado** `2207085`; toda publicação de imagem passa. Foi descartado por teste direto: arquivo, codec, bitrate e duração (um clipe gerado de 5 s, 19 KB, 1080×1920, H.264, áudio silencioso, 100% dentro da spec falha igual), `media_type` (STORIES e REELS falham), modo de ingestão (`video_url` e upload resumável falham), conta (as duas falham, com o mesmo token) e versão da API (v20 auto-upgraded e v26 explícita falham). Em todos os casos o container chega a `FINISHED`, *"ready to be published"*. **Reprocessar o vídeo não resolve** — o subcode entrou em `SUBCODES_PERMANENTES` justamente para não gastar 3 tentativas numa recusa garantida. Resolver depende da Meta (revisão da app / suporte), não do repositório.
+
+> ℹ️ A `v20.0` do código é nominal: a Meta **auto-upgrada** qualquer chamada de v18 a v25 para a **v26.0** (o `Location` do upload resumável volta como `rupload.facebook.com/ig-api-upload/v26.0/`). Ou seja, o comportamento em produção é o da v26.0, não o da versão escrita na URL.
+
+Para STORIES o publicador usa apenas o **primeiro** arquivo de `arquivos`; enviar vários não gera vários Stories.
 
 **Entrega da mídia:** a Meta precisa baixar o arquivo de uma URL pública. Cada upload é gravado em `automacao/<meta_account_id>/` (backup local) e enviado ao **Supabase Storage**; a URL pública do Supabase é o que vai para a API. `PUBLIC_MEDIA_BASE_URL` serve como alternativa quando o próprio servidor expõe a pasta.
 

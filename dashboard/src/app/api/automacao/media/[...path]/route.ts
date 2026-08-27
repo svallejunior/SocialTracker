@@ -56,7 +56,7 @@ export async function GET(
           .jpeg({ quality: 95 })
           .toBuffer();
 
-        return new NextResponse(jpegBuffer, {
+        return new NextResponse(new Uint8Array(jpegBuffer), {
           status: 200,
           headers: {
             'Content-Type': 'image/jpeg',
@@ -75,7 +75,7 @@ export async function GET(
     const contentType = MIME_TYPES[ext] || 'application/octet-stream';
     const fileBuffer = fs.readFileSync(targetPath);
 
-    return new NextResponse(fileBuffer, {
+    return new NextResponse(new Uint8Array(fileBuffer), {
       status: 200,
       headers: {
         'Content-Type': contentType,

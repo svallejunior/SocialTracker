@@ -23,6 +23,10 @@ export async function POST(request: NextRequest) {
       : process.cwd();
     const scriptPath = path.resolve(rootDir, 'buscar_viral.py');
     const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+    const dbPath =
+      process.env.DB_PATH && path.isAbsolute(process.env.DB_PATH)
+        ? process.env.DB_PATH
+        : path.resolve(rootDir, 'instagram_tracker.db');
 
     let command = `${pythonCmd} "${scriptPath}" --username "${sanitizedUsername}"`;
     if (sanitizedData) {
@@ -35,34 +39,42 @@ export async function POST(request: NextRequest) {
     console.log(`[API Buscar Viral] Executando: ${command}`);
 
     return new Promise<NextResponse>((resolve) => {
-      exec(command, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
-        if (error) {
-          console.error(`[API Buscar Viral] Erro:`, error.message, stderr);
+      exec(
+        command,
+        {
+          cwd: rootDir,
+          maxBuffer: 10 * 1024 * 1024,
+          env: { ...process.env, DB_PATH: dbPath }
+        },
+        (error, stdout, stderr) => {
+          if (error) {
+            console.error(`[API Buscar Viral] Erro:`, error.message, stderr);
+            try {
+              const errJson = JSON.parse(stdout);
+              resolve(NextResponse.json(errJson, { status: 500 }));
+            } catch {
+              resolve(NextResponse.json({
+                success: false,
+                error: error.message,
+                stderr
+              }, { status: 500 }));
+            }
+            return;
+          }
+
           try {
-            const errJson = JSON.parse(stdout);
-            resolve(NextResponse.json(errJson, { status: 500 }));
-          } catch {
+            const resultJson = JSON.parse(stdout);
+            resolve(NextResponse.json(resultJson));
+          } catch (parseErr: any) {
+            console.error(`[API Buscar Viral] Falha ao fazer parse do JSON:`, stdout);
             resolve(NextResponse.json({
               success: false,
-              error: error.message,
-              stderr
+              error: 'Resposta inválida do script de busca viral',
+              raw: stdout
             }, { status: 500 }));
           }
-          return;
         }
-
-        try {
-          const resultJson = JSON.parse(stdout);
-          resolve(NextResponse.json(resultJson));
-        } catch (parseErr: any) {
-          console.error(`[API Buscar Viral] Falha ao fazer parse do JSON:`, stdout);
-          resolve(NextResponse.json({
-            success: false,
-            error: 'Resposta inválida do script de busca viral',
-            raw: stdout
-          }, { status: 500 }));
-        }
-      });
+      );
     });
   } catch (error: any) {
     console.error(`[API Buscar Viral] Exception:`, error);

@@ -16,7 +16,9 @@ if hasattr(sys.stderr, 'reconfigure'):
     sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "instagram_tracker.db"))
+# DB_PATH relativo é resolvido a partir da pasta do projeto, e não do cwd do processo chamador.
+_raw_db = os.environ.get("DB_PATH", "instagram_tracker.db")
+DB_PATH = _raw_db if os.path.isabs(_raw_db) else os.path.join(BASE_DIR, _raw_db)
 
 LIMIAR_DELTA_S_MINIMO = 10
 LIMIAR_PERCENTUAL_MINIMO = 2.0

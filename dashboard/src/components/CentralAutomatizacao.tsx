@@ -6,7 +6,7 @@ import {
   Plus, ExternalLink, Sliders, Image as ImageIcon, Sparkles, Check,
   AlertCircle, ChevronDown, Zap, X, Calendar, Clock, Film, UploadCloud,
   FileText, Repeat, Shuffle, ArrowDownAZ, ListOrdered, Layers,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, Music, Link2, MapPin, AtSign, Info
 } from 'lucide-react';
 
 interface Profile {
@@ -61,12 +61,35 @@ export interface Agendamento {
   variacao_minutos: number;
   recorrencia: 'UNICA' | 'DIARIA' | 'SEMANAL' | 'DIAS_UTEIS' | 'PERSONALIZADA';
   legenda: string;
-  status: 'AGENDADO' | 'PUBLICADO' | 'PAUSADO' | 'ERRO';
+  status: 'AGENDADO' | 'PUBLICADO' | 'PUBLICANDO' | 'PAUSADO' | 'ERRO' | 'ENCERRADO';
   meta_media_id?: string;
   publicado_em?: string;
   erro_detalhe?: string;
+  ultima_execucao?: string;
   criado_em?: string;
   atualizado_em?: string;
+}
+
+/**
+ * Linha de `automacao_publicacoes`: o histórico real do que foi publicado.
+ * Diferente de `Agendamento`, aqui as datas já vêm em hora LOCAL (o publicador
+ * grava `data_local`/`hora_local` prontos), então o calendário compara direto.
+ */
+export interface Publicacao {
+  id: string;
+  agendamento_id?: string;
+  username: string;
+  meta_account_id?: string;
+  tipo_postagem: 'FEED' | 'REELS' | 'STORIES';
+  data_local: string;
+  hora_local: string;
+  publicado_em: string;
+  status: 'PUBLICADO' | 'ERRO';
+  meta_media_id?: string;
+  erro_detalhe?: string;
+  arquivos?: AgendamentoArquivo[];
+  legenda?: string;
+  origem?: string;
 }
 
 // Opção de Reels na Grade default DESABILITADA
@@ -85,8 +108,49 @@ function getPseudoMetaId(username: string): string {
   return `288${String(positive).padStart(8, '0')}472${username.length % 10}9`;
 }
 
+/** 'YYYY-MM-DD' no fuso local — mesma chave usada em automacao_publicacoes.data_local. */
+export function dataIsoLocal(d: Date): string {
+  const yyyy = String(d.getFullYear());
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/**
+ * `criado_em` é gravado pelas rotas com `datetime('now')`, ou seja UTC, enquanto o
+ * calendário raciocina em datas locais. Sem esta conversão uma rotina criada às 22h
+ * (01h UTC do dia seguinte) já "existiria" um dia antes do que deveria.
+ */
+function criadoEmIsoLocal(ag: Agendamento): string | null {
+  if (!ag.criado_em) return null;
+  const txt = String(ag.criado_em).trim().replace(' ', 'T').split('.')[0];
+  const comFuso = /(Z|[+-]\d{2}:?\d{2})$/.test(txt) ? txt : `${txt}Z`;
+  const dt = new Date(comFuso);
+  if (isNaN(dt.getTime())) return null;
+  return dataIsoLocal(dt);
+}
+
+/**
+ * A partir de que dia a rotina pode gerar ocorrências: nunca antes da criação e
+ * nunca antes de `data_inicio`. É o que impede o calendário de pintar SEG/QUA/SEX
+ * de meses anteriores à existência da rotina.
+ */
+function limiteInferiorRotina(ag: Agendamento): string | null {
+  const limites = [criadoEmIsoLocal(ag), ag.data_inicio || null].filter(
+    (v): v is string => !!v && /^\d{4}-\d{2}-\d{2}$/.test(v)
+  );
+  if (limites.length === 0) return null;
+  return limites.sort()[limites.length - 1];
+}
+
+/**
+ * Previsão: este agendamento gera uma ocorrência neste dia?
+ * Só descreve o que *deveria* acontecer — o que de fato aconteceu vem de
+ * `automacao_publicacoes` (ver getHistoricoDoDia). Por isso deve ser usada apenas
+ * para hoje e datas futuras (ver isPrevisaoNoDia).
+ */
 export function isAgendamentoNoDia(ag: Agendamento, dataObj: Date): boolean {
-  if (ag.status === 'PAUSADO') return false;
+  if (ag.status === 'PAUSADO' || ag.status === 'ENCERRADO') return false;
 
   const diaSemanaMap: { [key: number]: string } = {
     0: 'DOM',
@@ -98,26 +162,27 @@ export function isAgendamentoNoDia(ag: Agendamento, dataObj: Date): boolean {
     6: 'SAB'
   };
   const diaSemana = diaSemanaMap[dataObj.getDay()];
-  const yyyy = String(dataObj.getFullYear());
-  const mm = String(dataObj.getMonth() + 1).padStart(2, '0');
-  const dd = String(dataObj.getDate()).padStart(2, '0');
-  const isoDate = `${yyyy}-${mm}-${dd}`;
+  const isoDate = dataIsoLocal(dataObj);
+  const [yyyy, mm, dd] = isoDate.split('-');
   const brDate = `${dd}/${mm}/${yyyy}`;
 
   const isDataEspecifica = ag.tipo_agendamento === 'DATA_ESPECIFICA' || ag.recorrencia === 'UNICA';
 
   if (isDataEspecifica) {
-    if (ag.data_especifica && (ag.data_especifica === isoDate || ag.data_especifica === brDate)) return true;
-    if (Array.isArray(ag.dias_selecionados) && (ag.dias_selecionados.includes(isoDate) || ag.dias_selecionados.includes(brDate))) return true;
-    if (ag.criado_em && ag.criado_em.startsWith(isoDate)) return true;
-    return false;
+    if (ag.data_especifica) {
+      return ag.data_especifica === isoDate || ag.data_especifica === brDate;
+    }
+    if (Array.isArray(ag.dias_selecionados) && ag.dias_selecionados.length > 0) {
+      return ag.dias_selecionados.includes(isoDate) || ag.dias_selecionados.includes(brDate);
+    }
+    // Último recurso para linhas antigas sem data alguma: o dia em que foi criada.
+    return criadoEmIsoLocal(ag) === isoDate;
   }
 
-  // Validação de intervalo de período da rotina
-  if (ag.duracao_recorrencia === 'PERIODO') {
-    if (ag.data_inicio && isoDate < ag.data_inicio) return false;
-    if (ag.data_fim && isoDate > ag.data_fim) return false;
-  }
+  // Rotina recorrente: janela de validade primeiro, padrão de semana depois.
+  const limiteInferior = limiteInferiorRotina(ag);
+  if (limiteInferior && isoDate < limiteInferior) return false;
+  if (ag.data_fim && isoDate > ag.data_fim) return false;
 
   if (ag.recorrencia === 'DIARIA' || (Array.isArray(ag.dias_selecionados) && ag.dias_selecionados.length === 7)) return true;
   if (ag.recorrencia === 'DIAS_UTEIS') {
@@ -129,6 +194,12 @@ export function isAgendamentoNoDia(ag: Agendamento, dataObj: Date): boolean {
   }
 
   return false;
+}
+
+/** Previsão válida apenas para hoje/futuro: o passado é histórico, não palpite. */
+export function isPrevisaoNoDia(ag: Agendamento, dataObj: Date, hojeIso: string): boolean {
+  if (dataIsoLocal(dataObj) < hojeIso) return false;
+  return isAgendamentoNoDia(ag, dataObj);
 }
 
 function formatDaemonTime(dateStr?: string) {
@@ -151,6 +222,71 @@ function formatDaemonTime(dateStr?: string) {
   } catch (e) {
     return dateStr;
   }
+}
+
+/** Retorna a hora atual + 5 minutos no formato 'HH:MM' (fuso local) */
+export function getHora5MinAFrente(): string {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() + 5);
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${hh}:${mm}`;
+}
+
+/** Paleta de cores e temas oficiais dos tipos de postagem */
+export const TIPO_POSTAGEM_THEMES = {
+  REELS: {
+    key: 'REELS' as const,
+    label: '🎬 Reels',
+    color: '#EF4444',
+    colorLight: '#F87171',
+    bgPill: 'rgba(239, 68, 68, 0.08)',
+    bgPillBorder: 'rgba(239, 68, 68, 0.25)',
+    bgSelected: 'rgba(239, 68, 68, 0.18)',
+    borderSelected: '#EF4444',
+    glow: '0 8px 28px rgba(239, 68, 68, 0.18)',
+    formBorder: '#EF4444',
+    btnGradient: 'linear-gradient(135deg, #DC2626, #EF4444)'
+  },
+  FEED: {
+    key: 'FEED' as const,
+    label: '🖼️ Post (Feed)',
+    color: '#388BFD',
+    colorLight: '#60A5FA',
+    bgPill: 'rgba(59, 130, 246, 0.08)',
+    bgPillBorder: 'rgba(59, 130, 246, 0.25)',
+    bgSelected: 'rgba(56, 139, 253, 0.18)',
+    borderSelected: '#388BFD',
+    glow: '0 8px 28px rgba(56, 139, 253, 0.18)',
+    formBorder: '#388BFD',
+    btnGradient: 'linear-gradient(135deg, #2563EB, #388BFD)'
+  },
+  STORIES: {
+    key: 'STORIES' as const,
+    label: '📱 Stories',
+    color: '#F59E0B',
+    colorLight: '#FBBF24',
+    bgPill: 'rgba(245, 158, 11, 0.08)',
+    bgPillBorder: 'rgba(245, 158, 11, 0.25)',
+    bgSelected: 'rgba(245, 158, 11, 0.18)',
+    borderSelected: '#F59E0B',
+    glow: '0 8px 28px rgba(245, 158, 11, 0.18)',
+    formBorder: '#F59E0B',
+    btnGradient: 'linear-gradient(135deg, #D97706, #F59E0B)'
+  }
+};
+
+/** Helper para verificar se um arquivo ou nome é imagem */
+export function isImageFile(fileOrName: any): boolean {
+  if (!fileOrName) return false;
+  if (typeof fileOrName === 'string') {
+    return /\.(jpg|jpeg|png|webp|gif|bmp|heic|svg)$/i.test(fileOrName);
+  }
+  if (fileOrName.type && typeof fileOrName.type === 'string' && fileOrName.type.startsWith('image/')) {
+    return true;
+  }
+  const name = fileOrName.name || fileOrName.savedName || fileOrName.path || '';
+  return /\.(jpg|jpeg|png|webp|gif|bmp|heic|svg)$/i.test(name);
 }
 
 const DIAS_SEMANA = [
@@ -296,8 +432,13 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
     return isMeu && !isMorreu;
   });
 
+  type SortMode = 'agendamentos_dia' | 'personalizada' | 'alfabetica';
+  const [sortMode, setSortMode] = useState<SortMode>('personalizada');
+  const [profileOrderMap, setProfileOrderMap] = useState<{ [username: string]: number }>({});
+
   const [configs, setConfigs] = useState<{ [username: string]: AutomacaoConfig }>({});
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
+  const [publicacoes, setPublicacoes] = useState<Publicacao[]>([]);
   const [loadingAgendamentos, setLoadingAgendamentos] = useState(false);
   const [formOpenMap, setFormOpenMap] = useState<{ [username: string]: boolean }>({});
   const [editingAgendamentoMap, setEditingAgendamentoMap] = useState<{ [username: string]: Agendamento | null }>({});
@@ -350,6 +491,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
       const data = await res.json();
       if (data.success) {
         setAgendamentos(data.agendamentos || []);
+        setPublicacoes(data.publicacoes || []);
       }
     } catch (err) {
       console.error('Erro ao buscar agendamentos:', err);
@@ -369,15 +511,24 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
         const parsed = JSON.parse(storedApi);
         setMetaApiSettings(prev => ({ ...prev, ...parsed }));
       }
+      const storedSort = localStorage.getItem('socialtracker_automacao_sort_mode');
+      if (storedSort && ['agendamentos_dia', 'personalizada', 'alfabetica'].includes(storedSort)) {
+        setSortMode(storedSort as SortMode);
+      }
+      const storedOrder = localStorage.getItem('socialtracker_automacao_profile_order');
+      if (storedOrder) {
+        setProfileOrderMap(JSON.parse(storedOrder));
+      }
     } catch (e) {
       console.error('Erro ao ler localStorage de automação:', e);
     }
 
-    // Polling a cada 10 segundos para atualizar o status do daemon
+    // Polling do status do daemon. O daemon renova o heartbeat a cada ~20s, então
+    // 30s aqui basta — o intervalo de 10s antigo só multiplicava requisições.
     const interval = setInterval(() => {
       fetchMetaConfig();
       fetchAgendamentos();
-    }, 10000);
+    }, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -421,6 +572,13 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
       } else {
         const errMsg = data.error || data.message || JSON.stringify(data);
         console.error(`[Automação] ❌ Erro ao publicar agendamento ${id}:`, errMsg);
+        // O publicador loga o payload cru da Meta no stderr e a rota o devolve aqui.
+        // Sem isso, erros que a Meta não classifica (ex.: subcode 2207085) chegam
+        // como "Fatal" e não há como diagnosticar. Vai no console, não no alert,
+        // para não despejar o log inteiro na cara do operador.
+        if (data.stderr) {
+          console.error(`[Automação] 📄 Log completo do publicador (${id}):\n${data.stderr}`);
+        }
         alert(`Falha ao publicar: ${errMsg}`);
       }
       fetchAgendamentos();
@@ -559,6 +717,120 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
     return `${programacaoStr} às ${horaStr}`;
   };
 
+  const handleSortModeChange = (mode: SortMode) => {
+    setSortMode(mode);
+    try {
+      localStorage.setItem('socialtracker_automacao_sort_mode', mode);
+    } catch (e) {}
+    showToast(`Ordenação: ${mode === 'agendamentos_dia' ? 'Mais agendamentos no dia' : mode === 'personalizada' ? 'Ordem Personalizada' : 'Alfabética'}`);
+  };
+
+  const moveProfilePosition = (username: string, targetPosition: number) => {
+    const list = [...perfisAtivos];
+    const currentOrdered = list.sort((a, b) => {
+      const ordA = profileOrderMap[a.username.toLowerCase()] ?? 9999;
+      const ordB = profileOrderMap[b.username.toLowerCase()] ?? 9999;
+      if (ordA !== ordB) return ordA - ordB;
+      return a.username.localeCompare(b.username);
+    });
+
+    const currentIndex = currentOrdered.findIndex(p => p.username.toLowerCase() === username.toLowerCase());
+    if (currentIndex === -1) return;
+
+    const [item] = currentOrdered.splice(currentIndex, 1);
+    const targetIdx = Math.max(0, Math.min(targetPosition - 1, currentOrdered.length));
+    currentOrdered.splice(targetIdx, 0, item);
+
+    const newMap: { [username: string]: number } = {};
+    currentOrdered.forEach((p, idx) => {
+      newMap[p.username.toLowerCase()] = idx + 1;
+    });
+
+    setProfileOrderMap(newMap);
+    if (sortMode !== 'personalizada') {
+      setSortMode('personalizada');
+      try {
+        localStorage.setItem('socialtracker_automacao_sort_mode', 'personalizada');
+      } catch (e) {}
+    }
+    try {
+      localStorage.setItem('socialtracker_automacao_profile_order', JSON.stringify(newMap));
+    } catch (e) {}
+    showToast(`@${username} posicionado como #${targetIdx + 1}`);
+  };
+
+  // Ordenação dinâmica dos perfis
+  const perfisOrdenados = [...perfisAtivos].sort((a, b) => {
+    if (sortMode === 'agendamentos_dia') {
+      const dateA = selectedDateMap[a.username] || new Date();
+      const dateB = selectedDateMap[b.username] || new Date();
+      const agsA = agendamentos.filter(ag => ag.username.toLowerCase() === a.username.toLowerCase() && isAgendamentoNoDia(ag, dateA)).length;
+      const agsB = agendamentos.filter(ag => ag.username.toLowerCase() === b.username.toLowerCase() && isAgendamentoNoDia(ag, dateB)).length;
+      if (agsB !== agsA) return agsB - agsA; // Mais posts agendados no topo
+    }
+    if (sortMode === 'alfabetica') {
+      const cfgA = getConfigForUser(a.username);
+      const cfgB = getConfigForUser(b.username);
+      const nameA = cfgA.displayName || a.username;
+      const nameB = cfgB.displayName || b.username;
+      return nameA.localeCompare(nameB, 'pt-BR', { sensitivity: 'base' });
+    }
+    // 'personalizada'
+    const ordA = profileOrderMap[a.username.toLowerCase()] ?? 9999;
+    const ordB = profileOrderMap[b.username.toLowerCase()] ?? 9999;
+    if (ordA !== ordB) return ordA - ordB;
+    return a.username.localeCompare(b.username);
+  });
+
+  // ─── CÁLCULOS DO SCORE TOTALIZADOR GERAL ─────────────────────────────────
+  const hojeDate = new Date();
+  const hojeIso = dataIsoLocal(hojeDate);
+  const meusUsernames = new Set(perfisAtivos.map(p => p.username.toLowerCase()));
+
+  // Todos os agendamentos dos perfis ativos
+  const agsMeus = agendamentos.filter(a => meusUsernames.has(a.username.toLowerCase()));
+
+  // Todas as publicações dos perfis ativos
+  const pubsMinhas = publicacoes.filter(p => meusUsernames.has(p.username.toLowerCase()));
+
+  // 1. Agendamentos Totais
+  const totalGeral = agsMeus.length;
+  const totalGeralReels = agsMeus.filter(a => a.tipo_postagem === 'REELS').length;
+  const totalGeralPost = agsMeus.filter(a => a.tipo_postagem === 'FEED').length;
+  const totalGeralStories = agsMeus.filter(a => a.tipo_postagem === 'STORIES').length;
+
+  // 2. Agendamentos Previstos (status 'AGENDADO' ou ativos)
+  const previstos = agsMeus.filter(a => a.status === 'AGENDADO');
+  const previstosTotal = previstos.length;
+  const previstosReels = previstos.filter(a => a.tipo_postagem === 'REELS').length;
+  const previstosPost = previstos.filter(a => a.tipo_postagem === 'FEED').length;
+  const previstosStories = previstos.filter(a => a.tipo_postagem === 'STORIES').length;
+
+  // 3. Agendamentos Postados (Histórico total de publicações com sucesso)
+  const postadosSucesso = pubsMinhas.filter(p => p.status === 'PUBLICADO');
+  const postadosTotal = Math.max(postadosSucesso.length, agsMeus.filter(a => a.status === 'PUBLICADO').length);
+  const postadosReels = postadosSucesso.filter(p => p.tipo_postagem === 'REELS').length;
+  const postadosPost = postadosSucesso.filter(p => p.tipo_postagem === 'FEED').length;
+  const postadosStories = postadosSucesso.filter(p => p.tipo_postagem === 'STORIES').length;
+
+  // 4. Agendamentos que Faltam pra Hoje (programados para hoje que ainda não foram concluídos hoje)
+  const agsHoje = agsMeus.filter(a => isAgendamentoNoDia(a, hojeDate));
+  const pubsHojeSucessoIds = new Set(
+    pubsMinhas.filter(p => p.data_local === hojeIso && p.status === 'PUBLICADO').map(p => p.agendamento_id).filter(Boolean)
+  );
+  const faltamHoje = agsHoje.filter(a => a.status === 'AGENDADO' && !pubsHojeSucessoIds.has(a.id));
+  const faltamHojeTotal = faltamHoje.length;
+  const faltamHojeReels = faltamHoje.filter(a => a.tipo_postagem === 'REELS').length;
+  const faltamHojePost = faltamHoje.filter(a => a.tipo_postagem === 'FEED').length;
+  const faltamHojeStories = faltamHoje.filter(a => a.tipo_postagem === 'STORIES').length;
+
+  // 5. Concluídos Hoje (publicados hoje com sucesso)
+  const concluidosHoje = pubsMinhas.filter(p => p.data_local === hojeIso && p.status === 'PUBLICADO');
+  const concluidosHojeTotal = concluidosHoje.length;
+  const concluidosHojeReels = concluidosHoje.filter(p => p.tipo_postagem === 'REELS').length;
+  const concluidosHojePost = concluidosHoje.filter(p => p.tipo_postagem === 'FEED').length;
+  const concluidosHojeStories = concluidosHoje.filter(p => p.tipo_postagem === 'STORIES').length;
+
   return (
     <div style={{ padding: '4px 0 40px 0', minHeight: '80vh', color: '#E6EDF3' }}>
       
@@ -592,7 +864,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 28,
+        marginBottom: 20,
         borderBottom: '1px solid #21262D',
         paddingBottom: 20
       }}>
@@ -664,6 +936,363 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
             <Settings size={14} />
             Configurar API
           </button>
+        </div>
+      </div>
+
+      {/* =========================================================================
+          SCORE / TOTALIZADORES GERAIS DA AUTOMAÇÃO (5 CARDS COM REELS/POST/STORIES)
+      ========================================================================= */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+        gap: 14,
+        marginBottom: 20
+      }}>
+        {/* 1. Agendamentos Totais */}
+        <div style={{
+          background: '#161B22',
+          border: '1px solid #30363D',
+          borderRadius: 12,
+          padding: '14px 16px',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          transition: 'all 0.2s ease',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.25)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{
+              width: 40,
+              height: 40,
+              borderRadius: 10,
+              background: 'rgba(168, 85, 247, 0.15)',
+              border: '1px solid rgba(168, 85, 247, 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#A855F7',
+              flexShrink: 0
+            }}>
+              <Layers size={19} />
+            </div>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Agendamentos Totais
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: '#F0F6FC', marginTop: 2, lineHeight: 1.1 }}>
+                {totalGeral}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, marginTop: 10, borderTop: '1px solid #21262D', paddingTop: 8 }}>
+            <div title="Reels Totais" style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: '#F87171' }}>🎬</span>
+              <span style={{ fontSize: 11, fontWeight: 800, color: '#EF4444' }}>{totalGeralReels}</span>
+            </div>
+            <div title="Posts Totais" style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: '#60A5FA' }}>🖼️</span>
+              <span style={{ fontSize: 11, fontWeight: 800, color: '#60A5FA' }}>{totalGeralPost}</span>
+            </div>
+            <div title="Stories Totais" style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: '#FBBF24' }}>📱</span>
+              <span style={{ fontSize: 11, fontWeight: 800, color: '#FBBF24' }}>{totalGeralStories}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 2. Agendamentos Previstos */}
+        <div style={{
+          background: '#161B22',
+          border: '1px solid #30363D',
+          borderRadius: 12,
+          padding: '14px 16px',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          transition: 'all 0.2s ease',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.25)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{
+              width: 40,
+              height: 40,
+              borderRadius: 10,
+              background: 'rgba(56, 139, 253, 0.15)',
+              border: '1px solid rgba(56, 139, 253, 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#388BFD',
+              flexShrink: 0
+            }}>
+              <Clock size={19} />
+            </div>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Agendamentos Previstos
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: '#58A6FF', marginTop: 2, lineHeight: 1.1 }}>
+                {previstosTotal}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, marginTop: 10, borderTop: '1px solid #21262D', paddingTop: 8 }}>
+            <div title="Reels Previstos" style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: '#F87171' }}>🎬</span>
+              <span style={{ fontSize: 11, fontWeight: 800, color: '#EF4444' }}>{previstosReels}</span>
+            </div>
+            <div title="Posts Previstos" style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: '#60A5FA' }}>🖼️</span>
+              <span style={{ fontSize: 11, fontWeight: 800, color: '#60A5FA' }}>{previstosPost}</span>
+            </div>
+            <div title="Stories Previstos" style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: '#FBBF24' }}>📱</span>
+              <span style={{ fontSize: 11, fontWeight: 800, color: '#FBBF24' }}>{previstosStories}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 3. Agendamentos Postados */}
+        <div style={{
+          background: '#161B22',
+          border: '1px solid #30363D',
+          borderRadius: 12,
+          padding: '14px 16px',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          transition: 'all 0.2s ease',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.25)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{
+              width: 40,
+              height: 40,
+              borderRadius: 10,
+              background: 'rgba(34, 197, 94, 0.15)',
+              border: '1px solid rgba(34, 197, 94, 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#22C55E',
+              flexShrink: 0
+            }}>
+              <CheckCircle2 size={19} />
+            </div>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Agendamentos Postados
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: '#4ADE80', marginTop: 2, lineHeight: 1.1 }}>
+                {postadosTotal}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, marginTop: 10, borderTop: '1px solid #21262D', paddingTop: 8 }}>
+            <div title="Reels Postados" style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: '#F87171' }}>🎬</span>
+              <span style={{ fontSize: 11, fontWeight: 800, color: '#EF4444' }}>{postadosReels}</span>
+            </div>
+            <div title="Posts Postados" style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: '#60A5FA' }}>🖼️</span>
+              <span style={{ fontSize: 11, fontWeight: 800, color: '#60A5FA' }}>{postadosPost}</span>
+            </div>
+            <div title="Stories Postados" style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: '#FBBF24' }}>📱</span>
+              <span style={{ fontSize: 11, fontWeight: 800, color: '#FBBF24' }}>{postadosStories}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 4. Faltam pra Hoje */}
+        <div style={{
+          background: '#161B22',
+          border: '1px solid #30363D',
+          borderRadius: 12,
+          padding: '14px 16px',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          transition: 'all 0.2s ease',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.25)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{
+              width: 40,
+              height: 40,
+              borderRadius: 10,
+              background: 'rgba(245, 158, 11, 0.15)',
+              border: '1px solid rgba(245, 158, 11, 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#F59E0B',
+              flexShrink: 0
+            }}>
+              <AlertCircle size={19} />
+            </div>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Faltam pra Hoje
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: '#FBBF24', marginTop: 2, lineHeight: 1.1 }}>
+                {faltamHojeTotal}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, marginTop: 10, borderTop: '1px solid #21262D', paddingTop: 8 }}>
+            <div title="Reels Restantes Hoje" style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: '#F87171' }}>🎬</span>
+              <span style={{ fontSize: 11, fontWeight: 800, color: '#EF4444' }}>{faltamHojeReels}</span>
+            </div>
+            <div title="Posts Restantes Hoje" style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: '#60A5FA' }}>🖼️</span>
+              <span style={{ fontSize: 11, fontWeight: 800, color: '#60A5FA' }}>{faltamHojePost}</span>
+            </div>
+            <div title="Stories Restantes Hoje" style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: '#FBBF24' }}>📱</span>
+              <span style={{ fontSize: 11, fontWeight: 800, color: '#FBBF24' }}>{faltamHojeStories}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 5. Concluídos Hoje */}
+        <div style={{
+          background: '#161B22',
+          border: '1px solid #30363D',
+          borderRadius: 12,
+          padding: '14px 16px',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          transition: 'all 0.2s ease',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.25)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{
+              width: 40,
+              height: 40,
+              borderRadius: 10,
+              background: 'rgba(16, 185, 129, 0.15)',
+              border: '1px solid rgba(16, 185, 129, 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#10B981',
+              flexShrink: 0
+            }}>
+              <Sparkles size={19} />
+            </div>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Concluídos Hoje
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: '#34D399', marginTop: 2, lineHeight: 1.1 }}>
+                {concluidosHojeTotal}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, marginTop: 10, borderTop: '1px solid #21262D', paddingTop: 8 }}>
+            <div title="Reels Concluídos Hoje" style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: '#F87171' }}>🎬</span>
+              <span style={{ fontSize: 11, fontWeight: 800, color: '#EF4444' }}>{concluidosHojeReels}</span>
+            </div>
+            <div title="Posts Concluídos Hoje" style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: '#60A5FA' }}>🖼️</span>
+              <span style={{ fontSize: 11, fontWeight: 800, color: '#60A5FA' }}>{concluidosHojePost}</span>
+            </div>
+            <div title="Stories Concluídos Hoje" style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: '#FBBF24' }}>📱</span>
+              <span style={{ fontSize: 11, fontWeight: 800, color: '#FBBF24' }}>{concluidosHojeStories}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+      {/* --- CARD DE LIMITAÇÕES DA API DA META (LARGURA TOTAL DA LINHA) --- */}
+      <div style={{
+        width: '100%',
+        marginBottom: 16,
+        background: 'linear-gradient(90deg, #0D1117 0%, #161B22 100%)',
+        border: '1px solid rgba(245, 158, 11, 0.3)',
+        borderRadius: 12,
+        padding: '14px 20px',
+        boxShadow: '0 4px 14px rgba(0, 0, 0, 0.25)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 38,
+            height: 38,
+            borderRadius: '50%',
+            background: 'rgba(245, 158, 11, 0.12)',
+            border: '1px solid rgba(245, 158, 11, 0.3)',
+            flexShrink: 0
+          }}>
+            <Info size={18} color="#F59E0B" />
+          </div>
+
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#F0F6FC' }}>
+                Limitações da Publicação Automática
+              </span>
+              <span style={{
+                fontSize: 10,
+                fontWeight: 700,
+                color: '#FBBF24',
+                background: 'rgba(245, 158, 11, 0.15)',
+                border: '1px solid rgba(245, 158, 11, 0.3)',
+                padding: '2px 8px',
+                borderRadius: 12
+              }}>
+                RESTRIÇÕES DA META API
+              </span>
+            </div>
+            <div style={{ fontSize: 12, color: '#8B949E', marginTop: 4 }}>
+              Recursos abaixo <strong style={{ color: '#C9D1D9' }}>não</strong> estão disponíveis via API e precisam ser feitos manualmente pelo app do Instagram:
+            </div>
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+              gap: 8,
+              marginTop: 12
+            }}>
+              {[
+                { icon: Music, texto: 'Escolher músicas da biblioteca do Instagram' },
+                { icon: Link2, texto: 'Inserir links na publicação ou no Story' },
+                { icon: MapPin, texto: 'Definir a localização da publicação' },
+                { icon: AtSign, texto: 'Marcar outras pessoas na publicação' }
+              ].map(({ icon: Icone, texto }) => (
+                <div
+                  key={texto}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    background: '#0D1117',
+                    border: '1px solid #21262D',
+                    borderRadius: 8,
+                    padding: '8px 12px'
+                  }}
+                >
+                  <Icone size={14} color="#F59E0B" style={{ flexShrink: 0 }} />
+                  <span style={{ fontSize: 11.5, color: '#C9D1D9', lineHeight: 1.35 }}>
+                    {texto}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -775,8 +1404,108 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
         </div>
       </div>
 
+      {/* --- BARRA DE ORDENAÇÃO DE PERFIS --- */}
+      {perfisAtivos.length > 0 && (
+        <div style={{
+          marginBottom: 16,
+          background: '#161B22',
+          border: '1px solid #30363D',
+          borderRadius: 10,
+          padding: '10px 14px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 10
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Ordenar Perfis:
+            </span>
+            <div style={{ display: 'flex', background: '#0D1117', padding: 2, borderRadius: 8, border: '1px solid #21262D', gap: 2 }}>
+              <button
+                type="button"
+                onClick={() => handleSortModeChange('agendamentos_dia')}
+                style={{
+                  padding: '5px 10px',
+                  borderRadius: 6,
+                  border: sortMode === 'agendamentos_dia' ? '1px solid #388BFD' : '1px solid transparent',
+                  background: sortMode === 'agendamentos_dia' ? 'rgba(56, 139, 253, 0.15)' : 'transparent',
+                  color: sortMode === 'agendamentos_dia' ? '#58A6FF' : '#8B949E',
+                  fontSize: 11,
+                  fontWeight: sortMode === 'agendamentos_dia' ? 700 : 500,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 5
+                }}
+              >
+                <Calendar size={12} />
+                Mais Agendamentos no Dia
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSortModeChange('personalizada')}
+                style={{
+                  padding: '5px 10px',
+                  borderRadius: 6,
+                  border: sortMode === 'personalizada' ? '1px solid #388BFD' : '1px solid transparent',
+                  background: sortMode === 'personalizada' ? 'rgba(56, 139, 253, 0.15)' : 'transparent',
+                  color: sortMode === 'personalizada' ? '#58A6FF' : '#8B949E',
+                  fontSize: 11,
+                  fontWeight: sortMode === 'personalizada' ? 700 : 500,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 5
+                }}
+              >
+                <ListOrdered size={12} />
+                Ordem Personalizada (1º, 2º...)
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSortModeChange('alfabetica')}
+                style={{
+                  padding: '5px 10px',
+                  borderRadius: 6,
+                  border: sortMode === 'alfabetica' ? '1px solid #388BFD' : '1px solid transparent',
+                  background: sortMode === 'alfabetica' ? 'rgba(56, 139, 253, 0.15)' : 'transparent',
+                  color: sortMode === 'alfabetica' ? '#58A6FF' : '#8B949E',
+                  fontSize: 11,
+                  fontWeight: sortMode === 'alfabetica' ? 700 : 500,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 5
+                }}
+              >
+                <ArrowDownAZ size={12} />
+                Alfabética (A-Z)
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{
+              fontSize: 10,
+              fontWeight: 700,
+              color: '#388BFD',
+              background: 'rgba(56, 139, 253, 0.12)',
+              border: '1px solid rgba(56, 139, 253, 0.25)',
+              padding: '3px 8px',
+              borderRadius: 12
+            }}>
+              {perfisOrdenados.length} {perfisOrdenados.length === 1 ? 'perfil próprio' : 'perfis próprios'}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* --- AVISO SE NÃO HOUVER PERFIS ELEGÍVEIS --- */}
-      {perfisAtivos.length === 0 ? (
+      {perfisOrdenados.length === 0 ? (
         <div style={{
           background: '#161B22',
           border: '1px dashed #30363D',
@@ -802,7 +1531,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
           gap: 18,
           alignItems: 'start'
         }}>
-          {perfisAtivos.map(perfil => {
+          {perfisOrdenados.map((perfil, profileIndex) => {
             const cfg = getConfigForUser(perfil.username);
             const selectedDate = selectedDateMap[perfil.username] || new Date();
             const hojeObj = new Date();
@@ -825,6 +1554,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
 
             const isFormOpen = !!formOpenMap[perfil.username];
             const currentEditing = editingAgendamentoMap[perfil.username] || null;
+            const posicaoAtual = profileIndex + 1;
 
             return (
               <div
@@ -842,7 +1572,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                   position: 'relative'
                 }}
               >
-                {/* 1. Header do Card: Foto de Perfil + Username + ID Numérico */}
+                {/* 1. Header do Card: Foto de Perfil + Username + Posição + ID Numérico */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <div style={{
                     width: 48,
@@ -858,7 +1588,8 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                     overflow: 'hidden',
                     flexShrink: 0,
                     border: '2px solid #30363D',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.4)'
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+                    position: 'relative'
                   }}>
                     {(perfil.foto_url || perfil.foto_perfil) ? (
                       <img
@@ -876,16 +1607,46 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                   </div>
 
                   <div style={{ overflow: 'hidden', flex: 1 }}>
-                    <div style={{
-                      fontWeight: 700,
-                      fontSize: 14,
-                      color: '#F0F6FC',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis'
-                    }}>
-                      {cfg.displayName || perfil.username}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                      <div style={{
+                        fontWeight: 700,
+                        fontSize: 14,
+                        color: '#F0F6FC',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}>
+                        {cfg.displayName || perfil.username}
+                      </div>
+
+                      {/* 5. Seletor de Posição do Perfil (Posição 1, 2, 3...) */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                        <span style={{ fontSize: 9, fontWeight: 700, color: '#8B949E' }}>Posição:</span>
+                        <select
+                          value={posicaoAtual}
+                          onChange={(e) => moveProfilePosition(perfil.username, Number(e.target.value))}
+                          title="Alterar posição deste perfil na grade"
+                          style={{
+                            background: '#161B22',
+                            border: '1px solid #388BFD',
+                            color: '#58A6FF',
+                            fontSize: 10,
+                            fontWeight: 800,
+                            padding: '1px 5px',
+                            borderRadius: 6,
+                            cursor: 'pointer',
+                            outline: 'none'
+                          }}
+                        >
+                          {perfisOrdenados.map((_, i) => (
+                            <option key={i + 1} value={i + 1}>
+                              #{i + 1}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
+
                     {/* Campo editável de Meta Account ID */}
                     <MetaIdEditor
                       username={perfil.username}
@@ -937,6 +1698,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
 
                 {/* =========================================================================
                     2. TOTALIZADOR DE AGENDAMENTOS DO DIA (SCORE)
+                    Ordem & Cores: 1- Reels (vermelho), 2- Post (Feed) (azul), 3- Stories (amarelo)
                 ========================================================================= */}
                 <div style={{
                   borderTop: '1px solid #21262D',
@@ -982,23 +1744,23 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                     </span>
                   </div>
 
-                  {/* 3 Pills de Contagem do Dia: REELS, POST, STORIES */}
+                  {/* 3 Pills de Contagem do Dia: 1- REELS (VERMELHO), 2- POST (AZUL), 3- STORIES (AMARELO) */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 12 }}>
-                    {/* REELS */}
+                    {/* 1. REELS (VERMELHO) */}
                     <div style={{
-                      background: 'rgba(236, 72, 153, 0.08)',
-                      border: '1px solid rgba(236, 72, 153, 0.25)',
+                      background: 'rgba(239, 68, 68, 0.08)',
+                      border: '1px solid rgba(239, 68, 68, 0.25)',
                       borderRadius: 8,
                       padding: '6px 8px',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between'
                     }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: '#F472B6' }}>🎬 REELS</span>
-                      <span style={{ fontSize: 13, fontWeight: 800, color: '#F472B6' }}>{totalReels}</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: '#F87171' }}>🎬 REELS</span>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: '#EF4444' }}>{totalReels}</span>
                     </div>
 
-                    {/* POST / FEED */}
+                    {/* 2. POST / FEED (AZUL) */}
                     <div style={{
                       background: 'rgba(59, 130, 246, 0.08)',
                       border: '1px solid rgba(59, 130, 246, 0.25)',
@@ -1012,7 +1774,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                       <span style={{ fontSize: 13, fontWeight: 800, color: '#60A5FA' }}>{totalPost}</span>
                     </div>
 
-                    {/* STORIES */}
+                    {/* 3. STORIES (AMARELO) */}
                     <div style={{
                       background: 'rgba(245, 158, 11, 0.08)',
                       border: '1px solid rgba(245, 158, 11, 0.25)',
@@ -1184,8 +1946,8 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                               padding: '3px 7px',
                               borderRadius: 5,
                               flexShrink: 0,
-                              background: ag.tipo_postagem === 'REELS' ? 'rgba(236,72,153,0.2)' : ag.tipo_postagem === 'FEED' ? 'rgba(59,130,246,0.2)' : 'rgba(245,158,11,0.2)',
-                              color: ag.tipo_postagem === 'REELS' ? '#F472B6' : ag.tipo_postagem === 'FEED' ? '#60A5FA' : '#FBBF24'
+                              background: ag.tipo_postagem === 'REELS' ? 'rgba(239,68,68,0.2)' : ag.tipo_postagem === 'FEED' ? 'rgba(59,130,246,0.2)' : 'rgba(245,158,11,0.2)',
+                              color: ag.tipo_postagem === 'REELS' ? '#F87171' : ag.tipo_postagem === 'FEED' ? '#60A5FA' : '#FBBF24'
                             }}>
                               {ag.tipo_postagem === 'FEED' ? (ag.arquivos && ag.arquivos.length > 1 ? `🖼️ Carrossel (${ag.arquivos.length})` : '🖼️ Feed') : ag.tipo_postagem === 'REELS' ? '🎬 Reels' : '📱 Stories'}
                             </span>
@@ -1951,7 +2713,7 @@ function CalendarioAgendamentos({ agendamentos, selectedDate, onSelectDate }: Ca
                 {temAgendamento && (
                   <div style={{ display: 'flex', gap: 1.5, marginTop: -2 }}>
                     {temReels && (
-                      <span style={{ width: 3.5, height: 3.5, borderRadius: '50%', background: '#F472B6' }} />
+                      <span style={{ width: 3.5, height: 3.5, borderRadius: '50%', background: '#EF4444' }} />
                     )}
                     {temFeed && (
                       <span style={{ width: 3.5, height: 3.5, borderRadius: '50%', background: '#60A5FA' }} />
@@ -2032,6 +2794,7 @@ function FormularioAgendamento({
   const [tipoPostagem, setTipoPostagem] = useState<'FEED' | 'REELS' | 'STORIES'>(
     initialData?.tipo_postagem || 'REELS'
   );
+  const [avisoFoto, setAvisoFoto] = useState<string | null>(null);
   const [arquivos, setArquivos] = useState<AgendamentoArquivo[]>(
     initialData?.arquivos || []
   );
@@ -2080,13 +2843,14 @@ function FormularioAgendamento({
     return ['SEG', 'QUA', 'SEX'];
   });
 
-  // Campos de Horário
+  // 4. Campos de Horário: Horário de disparo sempre inicializado 5min a frente
   const [modoHora, setModoHora] = useState<'FIXA' | 'ALEATORIA' | 'VARIAR_MINUTOS'>(
     initialData?.modo_hora || 'FIXA'
   );
-  const [horaFixa, setHoraFixa] = useState<string>(
-    initialData?.hora_fixa || '18:30'
-  );
+  const [horaFixa, setHoraFixa] = useState<string>(() => {
+    if (initialData?.hora_fixa) return initialData.hora_fixa;
+    return getHora5MinAFrente();
+  });
   const [horaJanelaInicio, setHoraJanelaInicio] = useState<string>(
     initialData?.hora_janela_inicio || '18:00'
   );
@@ -2107,8 +2871,32 @@ function FormularioAgendamento({
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // 3. Tema ativo baseado no tipo de postagem selecionado
+  const activeTheme = TIPO_POSTAGEM_THEMES[tipoPostagem] || TIPO_POSTAGEM_THEMES.FEED;
+
+  const handleSelectTipoPostagem = (novoTipo: 'FEED' | 'REELS' | 'STORIES') => {
+    if (novoTipo === 'REELS') {
+      const temFoto = arquivos.some(a => isImageFile(a));
+      if (temFoto) {
+        alert('⚠️ O Reels aceita apenas vídeos.\n\nPara postar fotos, use a opção "Post (Feed)". Para usar Reels, remova as imagens selecionadas antes.');
+        return;
+      }
+    }
+    setAvisoFoto(null);
+    setTipoPostagem(novoTipo);
+  };
+
   const handleFileUpload = async (filesList: FileList | null) => {
     if (!filesList || filesList.length === 0) return;
+
+    // 2. Como o Reels não aceita foto, se enviar foto muda automaticamente para POST (Feed)
+    const temFoto = Array.from(filesList).some(f => isImageFile(f));
+    if (temFoto && tipoPostagem === 'REELS') {
+      setTipoPostagem('FEED');
+      setAvisoFoto('📸 Foto detectada: tipo alterado automaticamente para Post (Feed), pois Reels aceita exclusivamente vídeos.');
+    } else {
+      setAvisoFoto(null);
+    }
 
     try {
       setUploading(true);
@@ -2207,19 +2995,21 @@ function FormularioAgendamento({
       onSubmit={handleSubmit}
       style={{
         background: '#161B22',
-        border: '1px solid #388BFD',
+        border: `1px solid ${activeTheme.formBorder}`,
+        boxShadow: activeTheme.glow,
         borderRadius: 10,
         padding: 14,
         display: 'flex',
         flexDirection: 'column',
         gap: 12,
-        animation: 'fadeIn 0.2s ease-out'
+        animation: 'fadeIn 0.2s ease-out',
+        transition: 'all 0.25s ease'
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #30363D', paddingBottom: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: `1px solid ${activeTheme.bgPillBorder}`, paddingBottom: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Calendar size={14} color="#388BFD" />
-          <span style={{ fontSize: 12, fontWeight: 800, color: 'white' }}>
+          <Calendar size={14} color={activeTheme.color} />
+          <span style={{ fontSize: 12, fontWeight: 800, color: 'white', whiteSpace: 'nowrap' }}>
             {initialData ? '✏️ Editar Agendamento' : '➕ Novo Agendamento de Postagem'}
           </span>
         </div>
@@ -2232,33 +3022,34 @@ function FormularioAgendamento({
         </button>
       </div>
 
-      {/* 1. TIPO DE POSTAGEM */}
+      {/* 1. TIPO DE POSTAGEM: 1- REELS (VERMELHO), 2- POST/FEED (AZUL), 3- STORIES (AMARELO) */}
       <div>
         <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', marginBottom: 6 }}>
           1. Tipo de Postagem
         </label>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
           {[
-            { key: 'FEED', label: '🖼️ Feed (Post / Carrossel)' },
-            { key: 'REELS', label: '🎬 Reels' },
-            { key: 'STORIES', label: '📱 Stories' }
+            TIPO_POSTAGEM_THEMES.REELS,
+            TIPO_POSTAGEM_THEMES.FEED,
+            TIPO_POSTAGEM_THEMES.STORIES
           ].map(t => {
             const isSelected = tipoPostagem === t.key;
             return (
               <button
                 key={t.key}
                 type="button"
-                onClick={() => setTipoPostagem(t.key as any)}
+                onClick={() => handleSelectTipoPostagem(t.key)}
                 style={{
                   padding: '7px 4px',
                   borderRadius: 6,
-                  border: `1px solid ${isSelected ? '#388BFD' : '#30363D'}`,
-                  background: isSelected ? 'rgba(56, 139, 253, 0.15)' : '#0D1117',
-                  color: isSelected ? '#60A5FA' : '#C9D1D9',
+                  border: `1px solid ${isSelected ? t.borderSelected : '#30363D'}`,
+                  background: isSelected ? t.bgSelected : '#0D1117',
+                  color: isSelected ? t.colorLight : '#C9D1D9',
                   fontSize: 10,
                   fontWeight: isSelected ? 800 : 600,
                   cursor: 'pointer',
                   textAlign: 'center',
+                  boxShadow: isSelected ? `0 0 10px ${t.bgSelected}` : 'none',
                   transition: 'all 0.15s'
                 }}
               >
@@ -2269,13 +3060,33 @@ function FormularioAgendamento({
         </div>
       </div>
 
+      {/* Aviso se foto for convertida automaticamente para Feed */}
+      {avisoFoto && (
+        <div style={{
+          background: 'rgba(56, 139, 253, 0.12)',
+          border: '1px solid rgba(56, 139, 253, 0.3)',
+          borderRadius: 6,
+          padding: '6px 10px',
+          color: '#60A5FA',
+          fontSize: 10,
+          fontWeight: 600,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          animation: 'fadeIn 0.2s ease-out'
+        }}>
+          <Info size={13} style={{ flexShrink: 0 }} />
+          <span>{avisoFoto}</span>
+        </div>
+      )}
+
       {/* 2. SELEÇÃO DE ARQUIVOS COM DRAG AND DROP */}
       <div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
           <label style={{ fontSize: 10, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase' }}>
             2. Selecione os Arquivos
           </label>
-          <span style={{ fontSize: 9, color: '#388BFD', fontWeight: 600 }}>
+          <span style={{ fontSize: 9, color: activeTheme.color, fontWeight: 600 }}>
             {arquivos.length} {arquivos.length === 1 ? 'arquivo selecionado' : 'arquivos selecionados'}
           </span>
         </div>
@@ -2285,7 +3096,7 @@ function FormularioAgendamento({
           type="file"
           ref={fileInputRef}
           multiple
-          accept="image/*,video/*"
+          accept={tipoPostagem === 'REELS' ? "video/*,video/mp4,video/quicktime,video/mov" : "image/*,video/*"}
           style={{ display: 'none' }}
           onChange={e => handleFileUpload(e.target.files)}
         />
@@ -2303,21 +3114,21 @@ function FormularioAgendamento({
             handleFileUpload(e.dataTransfer.files);
           }}
           style={{
-            border: `1.5px dashed ${isDragOver ? '#388BFD' : '#30363D'}`,
+            border: `1.5px dashed ${isDragOver ? activeTheme.color : '#30363D'}`,
             borderRadius: 8,
             padding: '14px 10px',
             textAlign: 'center',
-            background: isDragOver ? 'rgba(56, 139, 253, 0.1)' : '#0D1117',
+            background: isDragOver ? activeTheme.bgSelected : '#0D1117',
             cursor: 'pointer',
             transition: 'all 0.2s'
           }}
         >
-          <UploadCloud size={20} color={isDragOver ? '#388BFD' : '#8B949E'} style={{ margin: '0 auto 4px auto' }} />
+          <UploadCloud size={20} color={isDragOver ? activeTheme.color : '#8B949E'} style={{ margin: '0 auto 4px auto' }} />
           <div style={{ fontSize: 11, fontWeight: 600, color: '#F0F6FC' }}>
-            {uploading ? 'Enviando arquivos...' : 'Arraste fotos ou vídeos aqui, ou clique para selecionar'}
+            {uploading ? 'Enviando arquivos...' : (tipoPostagem === 'REELS' ? 'Arraste vídeos para o Reels aqui, ou clique para selecionar' : 'Arraste fotos ou vídeos aqui, ou clique para selecionar')}
           </div>
           <div style={{ fontSize: 9, color: '#6E7681', marginTop: 2 }}>
-            Armazenamento: <code style={{ color: '#8B949E' }}>C:\Projetos\SocialTracker\automacao\{metaAccountId}</code>
+            {tipoPostagem === 'REELS' ? '⚠️ Reels aceita exclusivamente arquivos de vídeo (.mp4, .mov)' : 'Aceita fotos (.jpg, .png) e vídeos (.mp4, .mov)'}
           </div>
         </div>
 
@@ -2366,14 +3177,14 @@ function FormularioAgendamento({
           <div style={{
             marginTop: 10,
             background: '#0D1117',
-            border: '1px solid #388BFD',
+            border: `1px solid ${activeTheme.borderSelected}`,
             borderRadius: 8,
             padding: '10px 12px',
             animation: 'fadeIn 0.2s ease-out'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-              <Shuffle size={12} color="#60A5FA" />
-              <label style={{ fontSize: 10, fontWeight: 700, color: '#60A5FA', textTransform: 'uppercase' }}>
+              <Shuffle size={12} color={activeTheme.colorLight} />
+              <label style={{ fontSize: 10, fontWeight: 700, color: activeTheme.colorLight, textTransform: 'uppercase' }}>
                 Ordem de Postagem ({arquivos.length} arquivos selecionados)
               </label>
             </div>
@@ -2390,9 +3201,9 @@ function FormularioAgendamento({
                   style={{
                     padding: '7px 4px',
                     borderRadius: 5,
-                    border: `1px solid ${ordemArquivos === o.key ? '#388BFD' : '#30363D'}`,
-                    background: ordemArquivos === o.key ? 'rgba(56, 139, 253, 0.25)' : '#161B22',
-                    color: ordemArquivos === o.key ? '#60A5FA' : '#8B949E',
+                    border: `1px solid ${ordemArquivos === o.key ? activeTheme.borderSelected : '#30363D'}`,
+                    background: ordemArquivos === o.key ? activeTheme.bgSelected : '#161B22',
+                    color: ordemArquivos === o.key ? activeTheme.colorLight : '#8B949E',
                     fontSize: 9,
                     fontWeight: 800,
                     cursor: 'pointer',
@@ -2414,7 +3225,7 @@ function FormularioAgendamento({
           <label style={{ fontSize: 10, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase' }}>
             3. Programação e Horário
           </label>
-          <span style={{ fontSize: 9, color: '#60A5FA', fontWeight: 600 }}>
+          <span style={{ fontSize: 9, color: activeTheme.colorLight, fontWeight: 600 }}>
             {tipoAgendamento === 'DATA_ESPECIFICA' ? '📅 Data Pontual' : '🔄 Publicação Recorrente'}
           </span>
         </div>
@@ -2435,9 +3246,9 @@ function FormularioAgendamento({
             style={{
               padding: '8px 10px',
               borderRadius: 6,
-              border: tipoAgendamento === 'DATA_ESPECIFICA' ? '1px solid #388BFD' : '1px solid transparent',
-              background: tipoAgendamento === 'DATA_ESPECIFICA' ? 'rgba(56, 139, 253, 0.2)' : 'transparent',
-              color: tipoAgendamento === 'DATA_ESPECIFICA' ? '#58A6FF' : '#8B949E',
+              border: tipoAgendamento === 'DATA_ESPECIFICA' ? `1px solid ${activeTheme.borderSelected}` : '1px solid transparent',
+              background: tipoAgendamento === 'DATA_ESPECIFICA' ? activeTheme.bgSelected : 'transparent',
+              color: tipoAgendamento === 'DATA_ESPECIFICA' ? activeTheme.colorLight : '#8B949E',
               fontSize: 11,
               fontWeight: 700,
               cursor: 'pointer',
@@ -2448,7 +3259,7 @@ function FormularioAgendamento({
               transition: 'all 0.15s'
             }}
           >
-            <Calendar size={13} />
+            <Calendar size={13} color={tipoAgendamento === 'DATA_ESPECIFICA' ? activeTheme.colorLight : '#8B949E'} />
             <span>Selecionar Data</span>
           </button>
 
@@ -2458,9 +3269,9 @@ function FormularioAgendamento({
             style={{
               padding: '8px 10px',
               borderRadius: 6,
-              border: tipoAgendamento === 'RECORRENTE' ? '1px solid #388BFD' : '1px solid transparent',
-              background: tipoAgendamento === 'RECORRENTE' ? 'rgba(56, 139, 253, 0.2)' : 'transparent',
-              color: tipoAgendamento === 'RECORRENTE' ? '#58A6FF' : '#8B949E',
+              border: tipoAgendamento === 'RECORRENTE' ? `1px solid ${activeTheme.borderSelected}` : '1px solid transparent',
+              background: tipoAgendamento === 'RECORRENTE' ? activeTheme.bgSelected : 'transparent',
+              color: tipoAgendamento === 'RECORRENTE' ? activeTheme.colorLight : '#8B949E',
               fontSize: 11,
               fontWeight: 700,
               cursor: 'pointer',
@@ -2471,7 +3282,7 @@ function FormularioAgendamento({
               transition: 'all 0.15s'
             }}
           >
-            <Repeat size={13} />
+            <Repeat size={13} color={tipoAgendamento === 'RECORRENTE' ? activeTheme.colorLight : '#8B949E'} />
             <span>Recorrente (Rotina)</span>
           </button>
         </div>
@@ -2530,9 +3341,9 @@ function FormularioAgendamento({
                     style={{
                       padding: '6px 2px',
                       borderRadius: 5,
-                      border: `1px solid ${modoHora === m.key ? '#388BFD' : '#30363D'}`,
-                      background: modoHora === m.key ? 'rgba(56, 139, 253, 0.25)' : '#161B22',
-                      color: modoHora === m.key ? '#60A5FA' : '#8B949E',
+                      border: `1px solid ${modoHora === m.key ? activeTheme.borderSelected : '#30363D'}`,
+                      background: modoHora === m.key ? activeTheme.bgSelected : '#161B22',
+                      color: modoHora === m.key ? activeTheme.colorLight : '#8B949E',
                       fontSize: 9,
                       fontWeight: 700,
                       cursor: 'pointer'
@@ -2673,9 +3484,9 @@ function FormularioAgendamento({
                   style={{
                     padding: '7px 8px',
                     borderRadius: 6,
-                    border: `1px solid ${duracaoRecorrencia === 'SEMPRE' ? '#388BFD' : '#30363D'}`,
-                    background: duracaoRecorrencia === 'SEMPRE' ? 'rgba(56, 139, 253, 0.2)' : '#161B22',
-                    color: duracaoRecorrencia === 'SEMPRE' ? '#58A6FF' : '#8B949E',
+                    border: `1px solid ${duracaoRecorrencia === 'SEMPRE' ? activeTheme.borderSelected : '#30363D'}`,
+                    background: duracaoRecorrencia === 'SEMPRE' ? activeTheme.bgSelected : '#161B22',
+                    color: duracaoRecorrencia === 'SEMPRE' ? activeTheme.colorLight : '#8B949E',
                     fontSize: 10,
                     fontWeight: 700,
                     cursor: 'pointer'
@@ -2690,9 +3501,9 @@ function FormularioAgendamento({
                   style={{
                     padding: '7px 8px',
                     borderRadius: 6,
-                    border: `1px solid ${duracaoRecorrencia === 'PERIODO' ? '#388BFD' : '#30363D'}`,
-                    background: duracaoRecorrencia === 'PERIODO' ? 'rgba(56, 139, 253, 0.2)' : '#161B22',
-                    color: duracaoRecorrencia === 'PERIODO' ? '#58A6FF' : '#8B949E',
+                    border: `1px solid ${duracaoRecorrencia === 'PERIODO' ? activeTheme.borderSelected : '#30363D'}`,
+                    background: duracaoRecorrencia === 'PERIODO' ? activeTheme.bgSelected : '#161B22',
+                    color: duracaoRecorrencia === 'PERIODO' ? activeTheme.colorLight : '#8B949E',
                     fontSize: 10,
                     fontWeight: 700,
                     cursor: 'pointer'
@@ -2763,7 +3574,7 @@ function FormularioAgendamento({
                   <button
                     type="button"
                     onClick={() => setDiasSelecionados(['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB', 'DOM'])}
-                    style={{ background: 'none', border: 'none', color: '#58A6FF', fontSize: 9, cursor: 'pointer', padding: 0 }}
+                    style={{ background: 'none', border: 'none', color: activeTheme.colorLight, fontSize: 9, cursor: 'pointer', padding: 0 }}
                   >
                     Todos
                   </button>
@@ -2771,7 +3582,7 @@ function FormularioAgendamento({
                   <button
                     type="button"
                     onClick={() => setDiasSelecionados(['SEG', 'TER', 'QUA', 'QUI', 'SEX'])}
-                    style={{ background: 'none', border: 'none', color: '#58A6FF', fontSize: 9, cursor: 'pointer', padding: 0 }}
+                    style={{ background: 'none', border: 'none', color: activeTheme.colorLight, fontSize: 9, cursor: 'pointer', padding: 0 }}
                   >
                     Dias Úteis
                   </button>
@@ -2779,7 +3590,7 @@ function FormularioAgendamento({
                   <button
                     type="button"
                     onClick={() => setDiasSelecionados(['SAB', 'DOM'])}
-                    style={{ background: 'none', border: 'none', color: '#58A6FF', fontSize: 9, cursor: 'pointer', padding: 0 }}
+                    style={{ background: 'none', border: 'none', color: activeTheme.colorLight, fontSize: 9, cursor: 'pointer', padding: 0 }}
                   >
                     Fim de Semana
                   </button>
@@ -2797,13 +3608,14 @@ function FormularioAgendamento({
                       style={{
                         padding: '6px 0',
                         borderRadius: 6,
-                        border: `1px solid ${isSelected ? '#388BFD' : '#30363D'}`,
-                        background: isSelected ? '#2563EB' : '#161B22',
+                        border: `1px solid ${isSelected ? activeTheme.borderSelected : '#30363D'}`,
+                        background: isSelected ? activeTheme.btnGradient : '#161B22',
                         color: isSelected ? 'white' : '#8B949E',
                         fontSize: 10,
                         fontWeight: 800,
                         cursor: 'pointer',
-                        textAlign: 'center'
+                        textAlign: 'center',
+                        boxShadow: isSelected ? `0 2px 8px ${activeTheme.bgSelected}` : 'none'
                       }}
                     >
                       {d.label}
@@ -2831,9 +3643,9 @@ function FormularioAgendamento({
                     style={{
                       padding: '6px 2px',
                       borderRadius: 5,
-                      border: `1px solid ${modoHora === m.key ? '#388BFD' : '#30363D'}`,
-                      background: modoHora === m.key ? 'rgba(56, 139, 253, 0.25)' : '#161B22',
-                      color: modoHora === m.key ? '#60A5FA' : '#8B949E',
+                      border: `1px solid ${modoHora === m.key ? activeTheme.borderSelected : '#30363D'}`,
+                      background: modoHora === m.key ? activeTheme.bgSelected : '#161B22',
+                      color: modoHora === m.key ? activeTheme.colorLight : '#8B949E',
                       fontSize: 9,
                       fontWeight: 700,
                       cursor: 'pointer'
@@ -2999,7 +3811,7 @@ function FormularioAgendamento({
           disabled={saving || uploading}
           style={{
             flex: 2,
-            background: 'linear-gradient(135deg, #2563EB, #388BFD)',
+            background: activeTheme.btnGradient,
             border: 'none',
             color: 'white',
             padding: '8px',
@@ -3010,7 +3822,8 @@ function FormularioAgendamento({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: 6
+            gap: 6,
+            boxShadow: `0 2px 10px ${activeTheme.bgSelected}`
           }}
         >
           {saving ? 'Salvando...' : (initialData ? '💾 Atualizar Agendamento' : '💾 Salvar Agendamento')}

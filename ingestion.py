@@ -22,7 +22,10 @@ else:
     load_dotenv()
 
 APIFY_TOKEN = os.getenv("APIFY_API_TOKEN") or os.getenv("APIFY_TOKEN")
-DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "instagram_tracker.db"))
+# DB_PATH relativo é resolvido a partir da pasta do projeto, e não do cwd do processo
+# que chamou o script (o Next.js roda com cwd = dashboard/).
+_raw_db = os.environ.get("DB_PATH", "instagram_tracker.db")
+DB_PATH = _raw_db if os.path.isabs(_raw_db) else os.path.join(BASE_DIR, _raw_db)
 
 if not APIFY_TOKEN:
     print("⚠️ AVISO: APIFY_TOKEN / APIFY_API_TOKEN não encontrado no ambiente ou arquivo .env!")
@@ -38,8 +41,10 @@ def get_perfis_ativos():
         perfis = [row[0] for row in cursor.fetchall()]
         return perfis
     except Exception as e:
-        print(f"Erro ao buscar perfis ativos: {e}")
-        return []
+        # Falha aqui significa banco errado/corrompido — precisa quebrar com código de saída
+        # != 0, senão a API do dashboard reporta "ingestão concluída" sem ter coletado nada.
+        print(f"ERRO: falha ao ler perfis ativos em '{DB_PATH}': {e}")
+        sys.exit(1)
     finally:
         conn.close()
 
@@ -166,8 +171,8 @@ def atualizar_status_perfil(username, novo_status):
 
 def rodar_ingestao_diaria():
     if not client:
-        print("❌ ERRO: Cliente Apify não inicializado. Verifique o token no arquivo .env.")
-        return
+        print("ERRO: Cliente Apify não inicializado. Verifique o token no arquivo .env.")
+        sys.exit(1)
 
     perfis = get_perfis_ativos()
     if not perfis:

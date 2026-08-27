@@ -22,7 +22,9 @@ else:
     load_dotenv()
 
 APIFY_TOKEN = os.getenv("APIFY_API_TOKEN") or os.getenv("APIFY_TOKEN")
-DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "instagram_tracker.db"))
+# DB_PATH relativo é resolvido a partir da pasta do projeto, e não do cwd do processo chamador.
+_raw_db = os.environ.get("DB_PATH", "instagram_tracker.db")
+DB_PATH = _raw_db if os.path.isabs(_raw_db) else os.path.join(BASE_DIR, _raw_db)
 
 
 def parse_datetime(val):

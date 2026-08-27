@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 function resolveDbPath() {
-  if (process.env.DB_PATH) return process.env.DB_PATH;
+  if (process.env.DB_PATH && fs.existsSync(process.env.DB_PATH)) return process.env.DB_PATH;
   const parentDb = path.resolve(process.cwd(), '..', 'instagram_tracker.db');
   if (fs.existsSync(parentDb)) return parentDb;
   const cwdDb = path.resolve(process.cwd(), 'instagram_tracker.db');
@@ -69,7 +69,10 @@ export async function GET(req: NextRequest) {
       daemonStatus = await db.get(`SELECT * FROM automacao_daemon_status WHERE id = 1`);
     } catch (e) {}
 
-    // Auto-start do daemon Python se a última verificação tiver mais de 25 segundos
+    // Auto-start do daemon Python quando o heartbeat está velho.
+    // O daemon mantém o heartbeat a cada ~20s; o limiar generoso evita criar processos
+    // concorrentes (a origem das publicações duplicadas). O próprio publicador ainda
+    // recusa instâncias extras via lock em automacao/.daemon.lock.
     try {
       let lastCheckMs = 0;
       if (daemonStatus?.ultima_verificacao) {
@@ -84,7 +87,7 @@ export async function GET(req: NextRequest) {
       }
 
       const diffSec = Math.floor((Date.now() - lastCheckMs) / 1000);
-      if (diffSec > 25) {
+      if (diffSec > 120) {
         const { spawn } = await import('child_process');
         const parentDir = path.resolve(process.cwd(), '..');
         let scriptPath = path.join(parentDir, 'publicador_instagram.py');
@@ -94,10 +97,19 @@ export async function GET(req: NextRequest) {
 
         if (fs.existsSync(scriptPath)) {
           const pyExe = process.platform === 'win32' ? 'python' : 'python3';
-          const child = spawn(pyExe, [scriptPath], {
-            cwd: path.dirname(scriptPath),
+          const rootDir = path.dirname(scriptPath);
+          console.log(`[Automacao] Heartbeat com ${diffSec}s — iniciando daemon do publicador.`);
+          // --daemon é obrigatório: sem ele cada chamada criava um publicador "one-shot"
+          // que podia publicar a mesma linha em paralelo com o anterior.
+          const child = spawn(pyExe, [scriptPath, '--daemon'], {
+            cwd: rootDir,
             detached: true,
-            stdio: 'ignore'
+            stdio: 'ignore',
+            env: {
+              ...process.env,
+              DB_PATH: resolveDbPath(),
+              PYTHONIOENCODING: 'utf-8'
+            }
           });
           child.unref();
         }
