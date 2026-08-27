@@ -169,19 +169,40 @@ def atualizar_status_perfil(username, novo_status):
     finally:
         conn.close()
 
-def rodar_ingestao_diaria():
+def rodar_ingestao_diaria(meta_only=False):
+    # 1. Executa extração oficial via Meta Graph API para contas configuradas
+    contas_meta_processadas = set()
+    try:
+        from meta_ingestion import rodar_ingestao_meta
+        resultado_meta = rodar_ingestao_meta()
+        if resultado_meta.get("sucesso"):
+            for d in resultado_meta.get("detalhes", []):
+                contas_meta_processadas.add(d["username"].lower())
+            print(f"✅ Ingestão Meta API concluída com sucesso para {len(contas_meta_processadas)} perfis.")
+    except Exception as e:
+        print(f"⚠️ Erro ao executar extração Meta API: {e}")
+
+    if meta_only:
+        return
+
     if not client:
-        print("ERRO: Cliente Apify não inicializado. Verifique o token no arquivo .env.")
-        sys.exit(1)
+        print("⚠️ AVISO: Cliente Apify não inicializado. Finalizando rotina (apenas perfis Meta coletados).")
+        return
 
     perfis = get_perfis_ativos()
     if not perfis:
         print("Nenhum perfil ativo encontrado para processar no banco de dados.")
         return
 
-    print(f"Iniciando coleta para {len(perfis)} perfis ativos.")
+    # Filtra perfis já atualizados pela Meta API
+    perfis_restantes = [u for u in perfis if u.lower().strip().lstrip("@") not in contas_meta_processadas]
+    if not perfis_restantes:
+        print("Todos os perfis ativos já foram atualizados via Meta API oficial!")
+        return
 
-    for user in perfis:
+    print(f"Iniciando coleta Apify para {len(perfis_restantes)} perfis restantes sem Meta API.")
+
+    for user in perfis_restantes:
         status_res, dados = consultar_apify(user)
         if status_res == "OK" and dados:
             salvar_no_banco(user, dados, inativo=0)
@@ -274,16 +295,34 @@ def consultar_apify(username):
 if __name__ == "__main__":
     import sys
     if len(sys.argv) > 1:
-        target_user = sys.argv[1]
-        print(f"Iniciando coleta para perfil específico: @{target_user}")
-        status_res, dados = consultar_apify(target_user)
-        if status_res == "OK" and dados:
-            salvar_no_banco(target_user, dados, inativo=0)
-            atualizar_status_perfil(target_user, 'ATIVO')
-            print(f"Coleta concluída com sucesso para @{target_user} (status redefinido para ATIVO).")
-        elif status_res == "NOT_FOUND":
-            print(f"AVISO: @{target_user} não encontrado ou dados indisponíveis. Nenhuma alteração gravada no banco.")
+        arg = sys.argv[1]
+        if arg in ("--meta-only", "--meta", "-m"):
+            rodar_ingestao_diaria(meta_only=True)
         else:
-            print(f"⚠️ Falha na API ao consultar @{target_user}. Status mantido sem alterações.")
+            target_user = arg.strip().lstrip("@")
+            print(f"Iniciando coleta para perfil específico: @{target_user}")
+            
+            # Tenta via Meta API primeiro
+            coletado_meta = False
+            try:
+                from meta_ingestion import rodar_ingestao_meta
+                res = rodar_ingestao_meta(username_filtro=target_user)
+                if res.get("sucesso") and res.get("processados", 0) > 0:
+                    print(f"✅ Coleta oficial Meta API concluída com sucesso para @{target_user}.")
+                    coletado_meta = True
+            except Exception as e:
+                print(f"Aviso Meta API para @{target_user}: {e}")
+
+            if not coletado_meta:
+                print(f"Recorrendo ao Apify para @{target_user}...")
+                status_res, dados = consultar_apify(target_user)
+                if status_res == "OK" and dados:
+                    salvar_no_banco(target_user, dados, inativo=0)
+                    atualizar_status_perfil(target_user, 'ATIVO')
+                    print(f"Coleta concluída com sucesso para @{target_user} via Apify.")
+                elif status_res == "NOT_FOUND":
+                    print(f"AVISO: @{target_user} não encontrado ou dados indisponíveis. Nenhuma alteração gravada no banco.")
+                else:
+                    print(f"⚠️ Falha na API ao consultar @{target_user}. Status mantido sem alterações.")
     else:
         rodar_ingestao_diaria()

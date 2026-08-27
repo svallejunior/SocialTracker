@@ -68,7 +68,7 @@ export async function GET() {
     `);
     
     const history = await db.all(
-      "SELECT * FROM perfis_historico ORDER BY data_coleta ASC"
+      "SELECT * FROM perfis_historico ORDER BY data_coleta ASC, id ASC"
     );
 
     const posts = await db.all(
@@ -95,21 +95,26 @@ export async function GET() {
     const coletasMap: Record<string, { inicio_monitoramento: string; data_coleta: string; ultimosSeguidores: number; ultimosPosts: number; ultimosSeguindo: number }> = {};
 
     for (const [u, list] of Object.entries(historyByUser)) {
-      // Ordena cronologicamente
-      list.sort((a, b) => (a.data_coleta || '').localeCompare(b.data_coleta || ''));
-
-      // Deduplica: para cada dia, mantém apenas o registro com o maior datetime
+      // Deduplica: para cada dia, mantém o registro mais recente pelo timestamp/id
       const porDia: Record<string, any> = {};
       for (const h of list) {
         const dia = (h.data_coleta || '').substring(0, 10); // 'YYYY-MM-DD'
         if (!dia) continue;
-        if (!porDia[dia] || h.data_coleta > porDia[dia].data_coleta) {
+        const cur = porDia[dia];
+        if (!cur) {
           porDia[dia] = h;
+        } else {
+          const curTs = cur.data_carga || cur.data_coleta || '';
+          const newTs = h.data_carga || h.data_coleta || '';
+          if (newTs > curTs || (newTs === curTs && (h.id || 0) >= (cur.id || 0))) {
+            porDia[dia] = h;
+          }
         }
       }
-      const listaDiaria = Object.values(porDia).sort((a, b) =>
-        (a.data_coleta || '').localeCompare(b.data_coleta || '')
-      );
+      const listaDiaria = Object.values(porDia).sort((a, b) => {
+        const dComp = (a.data_coleta || '').localeCompare(b.data_coleta || '');
+        return dComp !== 0 ? dComp : (a.id || 0) - (b.id || 0);
+      });
 
       const isDead = statusPerfilMap[u] || false;
       let lastValidSeguidores = 0;
@@ -161,8 +166,16 @@ export async function GET() {
     const profilesEnriquecidos = profiles.map((p: any) => {
       const u = (p.username || '').toLowerCase();
       const c = coletasMap[u];
+      const fotoEfetiva = (p.foto_perfil_meta && String(p.foto_perfil_meta).trim().length > 0)
+        ? p.foto_perfil_meta
+        : (p.foto_url || '');
+
       return {
         ...p,
+        foto_url: fotoEfetiva,
+        foto_perfil: fotoEfetiva,
+        foto_perfil_meta: p.foto_perfil_meta || null,
+        foto_local: p.foto_url || null,
         inicio_monitoramento: c ? c.inicio_monitoramento : null,
         data_coleta: c ? c.data_coleta : null,
         seguidores: c ? c.ultimosSeguidores : 0,

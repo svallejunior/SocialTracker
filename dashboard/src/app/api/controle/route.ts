@@ -71,6 +71,7 @@ export async function GET() {
     const linhasBanco = await db.all(`
       SELECT 
         pm.username,
+        pm.foto_perfil_meta,
         ph.seguidores,
         ph.data_coleta,
         cp.nome,
@@ -87,14 +88,14 @@ export async function GET() {
       FROM perfis_monitorados pm
       LEFT JOIN controle_perfis cp ON pm.username = cp.username
       LEFT JOIN (
-        SELECT username, seguidores, data_coleta
+        SELECT id, username, seguidores, data_coleta
         FROM perfis_historico
-        WHERE (username, data_coleta) IN (
-          SELECT username, MAX(data_coleta)
+        WHERE id IN (
+          SELECT MAX(id)
           FROM perfis_historico
           GROUP BY username
         )
-      ) ph ON pm.username = ph.username
+      ) ph ON LOWER(pm.username) = LOWER(ph.username)
       WHERE pm.meu_perfil = 1 
       ORDER BY pm.username COLLATE NOCASE
     `);
@@ -136,6 +137,10 @@ export async function GET() {
       // para evitar que funções como calcDias(p.inicio) quebrem o componente
       const dataHoje = new Date().toISOString().split('T')[0];
 
+      const fotoEfetiva = (p.foto_perfil_meta && String(p.foto_perfil_meta).trim().length > 0)
+        ? p.foto_perfil_meta
+        : (p.foto_url || '');
+
       return {
         username: p.username,
         seguidores: p.seguidores || 0,
@@ -150,7 +155,9 @@ export async function GET() {
         fotos_estoque: p.fotos_estoque || 0,
         status: p.status_controle || '⏳ Aguardando',
         obs_historico: obsDoPerfil, // Histórico de observações
-        foto_url: p.foto_url || '',
+        foto_url: fotoEfetiva,
+        foto_perfil_meta: p.foto_perfil_meta || null,
+        foto_local: p.foto_url || null,
         lancamentos: lancamentosDoPerfil // Injeta obrigatoriamente um array []
       };
     });

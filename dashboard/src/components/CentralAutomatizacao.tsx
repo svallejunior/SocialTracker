@@ -33,9 +33,10 @@ interface AutomacaoConfig {
 }
 
 export interface AgendamentoArquivo {
-  name: string;
+  name?: string;
   savedName?: string;
   path?: string;
+  url?: string;
   size?: number;
   type?: string;
   previewUrl?: string | null;
@@ -222,6 +223,113 @@ function formatDaemonTime(dateStr?: string) {
   } catch (e) {
     return dateStr;
   }
+}
+
+export interface ProximoEnvioDetalhe {
+  tipo: 'POST' | 'REELS' | 'STORIES';
+  username: string;
+  dataHora: Date;
+  textoTempo: string;
+}
+
+export function getProximoEnvioInfo(agendamentos: Agendamento[], publicacoes: Publicacao[]): ProximoEnvioDetalhe | null {
+  const agora = new Date();
+  const hojeIso = dataIsoLocal(agora);
+  const candidatos: { tipo: 'POST' | 'REELS' | 'STORIES'; username: string; dataHora: Date; agendamento: Agendamento }[] = [];
+
+  const pubsConcluidas = new Set<string>();
+  for (const p of publicacoes) {
+    if (p.status === 'PUBLICADO' && p.agendamento_id) {
+      pubsConcluidas.add(`${p.agendamento_id}_${p.data_local}`);
+    }
+  }
+
+  for (const ag of agendamentos) {
+    if (ag.status === 'PAUSADO' || ag.status === 'ENCERRADO') continue;
+
+    const tipoRotulo: 'POST' | 'REELS' | 'STORIES' = ag.tipo_postagem === 'FEED' ? 'POST' : ag.tipo_postagem === 'REELS' ? 'REELS' : 'STORIES';
+
+    if (ag.tipo_agendamento === 'DATA_ESPECIFICA' || ag.recorrencia === 'UNICA') {
+      const dataStr = ag.data_especifica || (ag.dias_selecionados && ag.dias_selecionados[0]);
+      if (!dataStr || !/^\d{4}-\d{2}-\d{2}$/.test(dataStr)) continue;
+
+      if (ag.status === 'PUBLICADO' || pubsConcluidas.has(`${ag.id}_${dataStr}`)) continue;
+
+      const horaStr = ag.modo_hora === 'FIXA' ? (ag.hora_fixa || '12:00') : (ag.hora_janela_inicio || '12:00');
+      const [ano, mes, dia] = dataStr.split('-').map(Number);
+      const [h, m] = horaStr.split(':').map(Number);
+      const dtAg = new Date(ano, mes - 1, dia, h || 0, m || 0, 0);
+
+      if (dtAg.getTime() > agora.getTime()) {
+        candidatos.push({
+          tipo: tipoRotulo,
+          username: ag.username,
+          dataHora: dtAg,
+          agendamento: ag
+        });
+      }
+    } else {
+      // Recorrente: avalia os próximos 30 dias
+      for (let offset = 0; offset <= 30; offset++) {
+        const dObj = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate() + offset);
+        const isoD = dataIsoLocal(dObj);
+
+        if (!isAgendamentoNoDia(ag, dObj)) continue;
+        if (pubsConcluidas.has(`${ag.id}_${isoD}`)) continue;
+
+        const horaStr = ag.modo_hora === 'FIXA' ? (ag.hora_fixa || '12:00') : (ag.hora_janela_inicio || '12:00');
+        const [h, m] = horaStr.split(':').map(Number);
+        const dtOcorrencia = new Date(dObj.getFullYear(), dObj.getMonth(), dObj.getDate(), h || 0, m || 0, 0);
+
+        if (dtOcorrencia.getTime() > agora.getTime()) {
+          candidatos.push({
+            tipo: tipoRotulo,
+            username: ag.username,
+            dataHora: dtOcorrencia,
+            agendamento: ag
+          });
+          break;
+        }
+      }
+    }
+  }
+
+  if (candidatos.length === 0) return null;
+
+  candidatos.sort((a, b) => a.dataHora.getTime() - b.dataHora.getTime());
+  const prox = candidatos[0];
+
+  const diffMs = prox.dataHora.getTime() - agora.getTime();
+  const diffMinTotal = Math.max(1, Math.round(diffMs / (1000 * 60)));
+  const isHoje = dataIsoLocal(prox.dataHora) === hojeIso;
+
+  const hh = String(prox.dataHora.getHours()).padStart(2, '0');
+  const mm = String(prox.dataHora.getMinutes()).padStart(2, '0');
+  const diaFmt = String(prox.dataHora.getDate()).padStart(2, '0');
+  const mesFmt = String(prox.dataHora.getMonth() + 1).padStart(2, '0');
+  const anoFmt = String(prox.dataHora.getFullYear());
+
+  let textoTempo = '';
+  if (isHoje) {
+    if (diffMinTotal < 60) {
+      textoTempo = `em ${diffMinTotal} ${diffMinTotal === 1 ? 'minuto' : 'minutos'}`;
+    } else {
+      const horasRest = Math.floor(diffMinTotal / 60);
+      const minRest = diffMinTotal % 60;
+      const hhRestStr = String(horasRest).padStart(2, '0');
+      const mmRestStr = String(minRest).padStart(2, '0');
+      textoTempo = `às ${hh}:${mm} (em ${hhRestStr}:${mmRestStr})`;
+    }
+  } else {
+    textoTempo = `dia ${diaFmt}/${mesFmt}/${anoFmt} ${hh}:${mm}`;
+  }
+
+  return {
+    tipo: prox.tipo,
+    username: prox.username,
+    dataHora: prox.dataHora,
+    textoTempo
+  };
 }
 
 /** Retorna a hora atual + 5 minutos no formato 'HH:MM' (fuso local) */
@@ -721,7 +829,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
     setSortMode(mode);
     try {
       localStorage.setItem('socialtracker_automacao_sort_mode', mode);
-    } catch (e) {}
+    } catch (e) { }
     showToast(`Ordenação: ${mode === 'agendamentos_dia' ? 'Mais agendamentos no dia' : mode === 'personalizada' ? 'Ordem Personalizada' : 'Alfabética'}`);
   };
 
@@ -751,11 +859,11 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
       setSortMode('personalizada');
       try {
         localStorage.setItem('socialtracker_automacao_sort_mode', 'personalizada');
-      } catch (e) {}
+      } catch (e) { }
     }
     try {
       localStorage.setItem('socialtracker_automacao_profile_order', JSON.stringify(newMap));
-    } catch (e) {}
+    } catch (e) { }
     showToast(`@${username} posicionado como #${targetIdx + 1}`);
   };
 
@@ -831,9 +939,12 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
   const concluidosHojePost = concluidosHoje.filter(p => p.tipo_postagem === 'FEED').length;
   const concluidosHojeStories = concluidosHoje.filter(p => p.tipo_postagem === 'STORIES').length;
 
+  // Próximo envio pendente em toda a automação
+  const proximoEnvio = getProximoEnvioInfo(agsMeus, pubsMinhas);
+
   return (
     <div style={{ padding: '4px 0 40px 0', minHeight: '80vh', color: '#E6EDF3' }}>
-      
+
       {/* Toast Notification */}
       {toastMessage && (
         <div style={{
@@ -864,9 +975,9 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 20,
+        marginBottom: 16,
         borderBottom: '1px solid #21262D',
-        paddingBottom: 20
+        paddingBottom: 16
       }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -886,9 +997,6 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
               API Meta Graph
             </span>
           </div>
-          <p style={{ color: '#8B949E', fontSize: 13, margin: '4px 0 0 0' }}>
-            Agendamento inteligente e publicação automática de <strong>Reels</strong>, <strong>Feed (Posts/Carrosséis)</strong> e <strong>Stories</strong> via Meta API oficial.
-          </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -939,6 +1047,136 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
         </div>
       </div>
 
+      {/* --- JANELA MOTOR DE PUBLICAÇÃO AUTOMÁTICA (DAEMON) --- */}
+      <div style={{
+        width: '100%',
+        marginBottom: 20,
+        background: 'linear-gradient(90deg, #354e36ff 0%, #161B22 100%)',
+        border: '1px solid #119238ff',
+        borderRadius: 12,
+        padding: '12px 18px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: 14,
+        boxShadow: '0 4px 14px rgba(0, 0, 0, 0.25)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          {/* Ponto Pulsante de Status do Daemon */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 38,
+            height: 38,
+            borderRadius: '50%',
+            background: (daemonStatus?.status_daemon === 'ATIVO' || !daemonStatus?.status_daemon) ? 'rgba(34, 197, 94, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+            border: `1px solid ${(daemonStatus?.status_daemon === 'ATIVO' || !daemonStatus?.status_daemon) ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+            flexShrink: 0
+          }}>
+            <span style={{
+              width: 10,
+              height: 10,
+              borderRadius: '50%',
+              background: (daemonStatus?.status_daemon === 'ATIVO' || !daemonStatus?.status_daemon) ? '#22C55E' : '#EF4444',
+              boxShadow: (daemonStatus?.status_daemon === 'ATIVO' || !daemonStatus?.status_daemon) ? '0 0 10px #22C55E' : '0 0 10px #EF4444'
+            }} />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {/* Linha 1: Título + Badge de Status */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#F0F6FC' }}>
+                Motor de Publicação Automática (Daemon)
+              </span>
+              <span style={{
+                fontSize: 10,
+                fontWeight: 700,
+                color: (daemonStatus?.status_daemon === 'ATIVO' || !daemonStatus?.status_daemon) ? '#4ADE80' : '#F87171',
+                background: (daemonStatus?.status_daemon === 'ATIVO' || !daemonStatus?.status_daemon) ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                border: `1px solid ${(daemonStatus?.status_daemon === 'ATIVO' || !daemonStatus?.status_daemon) ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                padding: '2px 8px',
+                borderRadius: 12
+              }}>
+                ● {(daemonStatus?.status_daemon === 'ATIVO' || !daemonStatus?.status_daemon) ? 'ATIVO (Varredura a cada 30s)' : daemonStatus.status_daemon}
+              </span>
+            </div>
+
+            {/* Linha 2: Última verificação */}
+            <div style={{ fontSize: 12, color: '#8B949E' }}>
+              Última verificação de agendamentos:{' '}
+              <strong style={{ color: '#58A6FF', fontFamily: 'monospace', fontSize: 12 }}>
+                {formatDaemonTime(daemonStatus?.ultima_verificacao)}
+              </strong>
+            </div>
+
+            {/* Linha 3: Próximo envio */}
+            <div style={{ fontSize: 12, color: '#8B949E', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <span>Próximo envio:</span>
+              {proximoEnvio ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{
+                    fontSize: 10,
+                    fontWeight: 800,
+                    padding: '1px 6px',
+                    borderRadius: 4,
+                    background: proximoEnvio.tipo === 'REELS' ? 'rgba(239, 68, 68, 0.2)' : proximoEnvio.tipo === 'POST' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+                    color: proximoEnvio.tipo === 'REELS' ? '#F87171' : proximoEnvio.tipo === 'POST' ? '#60A5FA' : '#FBBF24'
+                  }}>
+                    {proximoEnvio.tipo === 'REELS' ? '🎬 REELS' : proximoEnvio.tipo === 'POST' ? '🖼️ POST' : '📱 STORIES'}
+                  </span>
+                  <span style={{ color: '#E6EDF3', fontWeight: 600 }}>@{proximoEnvio.username}</span>
+                  <strong style={{ color: '#7EE787', fontWeight: 700 }}>
+                    {proximoEnvio.textoTempo}
+                  </strong>
+                </span>
+              ) : (
+                <span style={{ color: '#6E7681', fontStyle: 'italic' }}>
+                  Nenhum agendamento pendente
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button
+            type="button"
+            onClick={() => {
+              fetchMetaConfig();
+              fetchAgendamentos();
+              showToast("Status e agendamentos atualizados!");
+            }}
+            style={{
+              background: '#21262D',
+              border: '1px solid #30363D',
+              borderRadius: 8,
+              color: '#C9D1D9',
+              fontSize: 12,
+              fontWeight: 600,
+              padding: '7px 14px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              transition: 'all 0.15s'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = '#30363D';
+              e.currentTarget.style.borderColor = '#58A6FF';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = '#21262D';
+              e.currentTarget.style.borderColor = '#30363D';
+            }}
+          >
+            <RefreshCw size={13} />
+            Atualizar Status
+          </button>
+        </div>
+      </div>
+
       {/* =========================================================================
           SCORE / TOTALIZADORES GERAIS DA AUTOMAÇÃO (5 CARDS COM REELS/POST/STORIES)
       ========================================================================= */}
@@ -976,7 +1214,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
               <Layers size={19} />
             </div>
             <div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 Agendamentos Totais
               </div>
               <div style={{ fontSize: 22, fontWeight: 800, color: '#F0F6FC', marginTop: 2, lineHeight: 1.1 }}>
@@ -988,15 +1226,15 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, marginTop: 10, borderTop: '1px solid #21262D', paddingTop: 8 }}>
             <div title="Reels Totais" style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 9, fontWeight: 700, color: '#F87171' }}>🎬</span>
-              <span style={{ fontSize: 11, fontWeight: 800, color: '#EF4444' }}>{totalGeralReels}</span>
+              <span style={{ fontSize: 16, fontWeight: 800, color: '#EF4444' }}>{totalGeralReels}</span>
             </div>
             <div title="Posts Totais" style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 9, fontWeight: 700, color: '#60A5FA' }}>🖼️</span>
-              <span style={{ fontSize: 11, fontWeight: 800, color: '#60A5FA' }}>{totalGeralPost}</span>
+              <span style={{ fontSize: 16, fontWeight: 800, color: '#60A5FA' }}>{totalGeralPost}</span>
             </div>
             <div title="Stories Totais" style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 9, fontWeight: 700, color: '#FBBF24' }}>📱</span>
-              <span style={{ fontSize: 11, fontWeight: 800, color: '#FBBF24' }}>{totalGeralStories}</span>
+              <span style={{ fontSize: 16, fontWeight: 800, color: '#FBBF24' }}>{totalGeralStories}</span>
             </div>
           </div>
         </div>
@@ -1029,7 +1267,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
               <Clock size={19} />
             </div>
             <div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 Agendamentos Previstos
               </div>
               <div style={{ fontSize: 22, fontWeight: 800, color: '#58A6FF', marginTop: 2, lineHeight: 1.1 }}>
@@ -1041,15 +1279,15 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, marginTop: 10, borderTop: '1px solid #21262D', paddingTop: 8 }}>
             <div title="Reels Previstos" style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 9, fontWeight: 700, color: '#F87171' }}>🎬</span>
-              <span style={{ fontSize: 11, fontWeight: 800, color: '#EF4444' }}>{previstosReels}</span>
+              <span style={{ fontSize: 16, fontWeight: 800, color: '#EF4444' }}>{previstosReels}</span>
             </div>
             <div title="Posts Previstos" style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 9, fontWeight: 700, color: '#60A5FA' }}>🖼️</span>
-              <span style={{ fontSize: 11, fontWeight: 800, color: '#60A5FA' }}>{previstosPost}</span>
+              <span style={{ fontSize: 16, fontWeight: 800, color: '#60A5FA' }}>{previstosPost}</span>
             </div>
             <div title="Stories Previstos" style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 9, fontWeight: 700, color: '#FBBF24' }}>📱</span>
-              <span style={{ fontSize: 11, fontWeight: 800, color: '#FBBF24' }}>{previstosStories}</span>
+              <span style={{ fontSize: 16, fontWeight: 800, color: '#FBBF24' }}>{previstosStories}</span>
             </div>
           </div>
         </div>
@@ -1082,7 +1320,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
               <CheckCircle2 size={19} />
             </div>
             <div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 Agendamentos Postados
               </div>
               <div style={{ fontSize: 22, fontWeight: 800, color: '#4ADE80', marginTop: 2, lineHeight: 1.1 }}>
@@ -1094,15 +1332,15 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, marginTop: 10, borderTop: '1px solid #21262D', paddingTop: 8 }}>
             <div title="Reels Postados" style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 9, fontWeight: 700, color: '#F87171' }}>🎬</span>
-              <span style={{ fontSize: 11, fontWeight: 800, color: '#EF4444' }}>{postadosReels}</span>
+              <span style={{ fontSize: 16, fontWeight: 800, color: '#EF4444' }}>{postadosReels}</span>
             </div>
             <div title="Posts Postados" style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 9, fontWeight: 700, color: '#60A5FA' }}>🖼️</span>
-              <span style={{ fontSize: 11, fontWeight: 800, color: '#60A5FA' }}>{postadosPost}</span>
+              <span style={{ fontSize: 16, fontWeight: 800, color: '#60A5FA' }}>{postadosPost}</span>
             </div>
             <div title="Stories Postados" style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 9, fontWeight: 700, color: '#FBBF24' }}>📱</span>
-              <span style={{ fontSize: 11, fontWeight: 800, color: '#FBBF24' }}>{postadosStories}</span>
+              <span style={{ fontSize: 16, fontWeight: 800, color: '#FBBF24' }}>{postadosStories}</span>
             </div>
           </div>
         </div>
@@ -1135,7 +1373,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
               <AlertCircle size={19} />
             </div>
             <div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 Faltam pra Hoje
               </div>
               <div style={{ fontSize: 22, fontWeight: 800, color: '#FBBF24', marginTop: 2, lineHeight: 1.1 }}>
@@ -1147,15 +1385,15 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, marginTop: 10, borderTop: '1px solid #21262D', paddingTop: 8 }}>
             <div title="Reels Restantes Hoje" style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 9, fontWeight: 700, color: '#F87171' }}>🎬</span>
-              <span style={{ fontSize: 11, fontWeight: 800, color: '#EF4444' }}>{faltamHojeReels}</span>
+              <span style={{ fontSize: 16, fontWeight: 800, color: '#EF4444' }}>{faltamHojeReels}</span>
             </div>
             <div title="Posts Restantes Hoje" style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 9, fontWeight: 700, color: '#60A5FA' }}>🖼️</span>
-              <span style={{ fontSize: 11, fontWeight: 800, color: '#60A5FA' }}>{faltamHojePost}</span>
+              <span style={{ fontSize: 16, fontWeight: 800, color: '#60A5FA' }}>{faltamHojePost}</span>
             </div>
             <div title="Stories Restantes Hoje" style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 9, fontWeight: 700, color: '#FBBF24' }}>📱</span>
-              <span style={{ fontSize: 11, fontWeight: 800, color: '#FBBF24' }}>{faltamHojeStories}</span>
+              <span style={{ fontSize: 16, fontWeight: 800, color: '#FBBF24' }}>{faltamHojeStories}</span>
             </div>
           </div>
         </div>
@@ -1188,7 +1426,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
               <Sparkles size={19} />
             </div>
             <div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 Concluídos Hoje
               </div>
               <div style={{ fontSize: 22, fontWeight: 800, color: '#34D399', marginTop: 2, lineHeight: 1.1 }}>
@@ -1200,15 +1438,15 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, marginTop: 10, borderTop: '1px solid #21262D', paddingTop: 8 }}>
             <div title="Reels Concluídos Hoje" style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 9, fontWeight: 700, color: '#F87171' }}>🎬</span>
-              <span style={{ fontSize: 11, fontWeight: 800, color: '#EF4444' }}>{concluidosHojeReels}</span>
+              <span style={{ fontSize: 16, fontWeight: 800, color: '#EF4444' }}>{concluidosHojeReels}</span>
             </div>
             <div title="Posts Concluídos Hoje" style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 9, fontWeight: 700, color: '#60A5FA' }}>🖼️</span>
-              <span style={{ fontSize: 11, fontWeight: 800, color: '#60A5FA' }}>{concluidosHojePost}</span>
+              <span style={{ fontSize: 16, fontWeight: 800, color: '#60A5FA' }}>{concluidosHojePost}</span>
             </div>
             <div title="Stories Concluídos Hoje" style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 9, fontWeight: 700, color: '#FBBF24' }}>📱</span>
-              <span style={{ fontSize: 11, fontWeight: 800, color: '#FBBF24' }}>{concluidosHojeStories}</span>
+              <span style={{ fontSize: 16, fontWeight: 800, color: '#FBBF24' }}>{concluidosHojeStories}</span>
             </div>
           </div>
         </div>
@@ -1293,114 +1531,6 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
               ))}
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* --- CARD DAEMON DA AUTOMAÇÃO (LARGURA TOTAL DA LINHA) --- */}
-      <div style={{
-        width: '100%',
-        marginBottom: 24,
-        background: 'linear-gradient(90deg, #0D1117 0%, #161B22 100%)',
-        border: '1px solid #30363D',
-        borderRadius: 12,
-        padding: '14px 20px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: 14,
-        boxShadow: '0 4px 14px rgba(0, 0, 0, 0.25)'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          {/* Ponto Pulsante de Status do Daemon */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: 38,
-            height: 38,
-            borderRadius: '50%',
-            background: 'rgba(34, 197, 94, 0.12)',
-            border: '1px solid rgba(34, 197, 94, 0.3)',
-            flexShrink: 0
-          }}>
-            <span style={{
-              width: 10,
-              height: 10,
-              borderRadius: '50%',
-              background: '#22C55E',
-              boxShadow: '0 0 10px #22C55E'
-            }} />
-          </div>
-
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: '#F0F6FC' }}>
-                Motor de Publicação Automática (Daemon)
-              </span>
-              <span style={{
-                fontSize: 10,
-                fontWeight: 700,
-                color: '#4ADE80',
-                background: 'rgba(34, 197, 94, 0.15)',
-                border: '1px solid rgba(34, 197, 94, 0.3)',
-                padding: '2px 8px',
-                borderRadius: 12
-              }}>
-                ● ATIVO (Varredura a cada 30s)
-              </span>
-            </div>
-            <div style={{ fontSize: 12, color: '#8B949E', marginTop: 4 }}>
-              Última verificação de agendamentos:{' '}
-              <strong style={{ color: '#58A6FF', fontFamily: 'monospace', fontSize: 12 }}>
-                {formatDaemonTime(daemonStatus?.ultima_verificacao)}
-              </strong>
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          {metaApiSettings.publicBaseUrl && (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              background: '#0D1117',
-              padding: '6px 12px',
-              borderRadius: 8,
-              border: '1px solid #21262D'
-            }}>
-              <span style={{ fontSize: 11, color: '#6E7681', fontWeight: 600 }}>URL Pública:</span>
-              <span style={{ fontFamily: 'monospace', color: '#A5D6FF', fontSize: 11 }}>
-                {metaApiSettings.publicBaseUrl.replace('https://', '')}
-              </span>
-            </div>
-          )}
-
-          <button
-            type="button"
-            onClick={() => {
-              fetchMetaConfig();
-              fetchAgendamentos();
-              showToast("Status e agendamentos atualizados!");
-            }}
-            style={{
-              background: '#21262D',
-              border: '1px solid #30363D',
-              borderRadius: 8,
-              color: '#C9D1D9',
-              fontSize: 12,
-              fontWeight: 600,
-              padding: '6px 12px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6
-            }}
-          >
-            <RefreshCw size={13} />
-            Atualizar Status
-          </button>
         </div>
       </div>
 
@@ -1536,11 +1666,21 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
             const selectedDate = selectedDateMap[perfil.username] || new Date();
             const hojeObj = new Date();
             const isDiaHoje = selectedDate.getDate() === hojeObj.getDate() &&
-                              selectedDate.getMonth() === hojeObj.getMonth() &&
-                              selectedDate.getFullYear() === hojeObj.getFullYear();
+              selectedDate.getMonth() === hojeObj.getMonth() &&
+              selectedDate.getFullYear() === hojeObj.getFullYear();
 
             const agendamentosDoPerfil = agendamentos.filter(
               a => a.username.toLowerCase() === perfil.username.toLowerCase()
+            );
+
+            const publicacoesDoPerfil = publicacoes.filter(
+              p => p.username.toLowerCase() === perfil.username.toLowerCase()
+            );
+
+            const isDiaPassado = selectedDate < hojeObj && !isDiaHoje;
+            const isoDataSelecionada = dataIsoLocal(selectedDate);
+            const pubsDoDiaSelecionado = publicacoesDoPerfil.filter(
+              p => p.data_local === isoDataSelecionada && p.status === 'PUBLICADO'
             );
 
             // Filtra agendamentos apenas para a data selecionada/hoje
@@ -1548,9 +1688,19 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
               ag => isAgendamentoNoDia(ag, selectedDate)
             );
 
-            const totalReels = agendamentosDoDia.filter(a => a.tipo_postagem === 'REELS').length;
-            const totalPost = agendamentosDoDia.filter(a => a.tipo_postagem === 'FEED').length;
-            const totalStories = agendamentosDoDia.filter(a => a.tipo_postagem === 'STORIES').length;
+            const totalReels = isDiaPassado
+              ? pubsDoDiaSelecionado.filter(p => p.tipo_postagem === 'REELS').length
+              : agendamentosDoDia.filter(a => a.tipo_postagem === 'REELS').length;
+
+            const totalPost = isDiaPassado
+              ? pubsDoDiaSelecionado.filter(p => p.tipo_postagem === 'FEED').length
+              : agendamentosDoDia.filter(a => a.tipo_postagem === 'FEED').length;
+
+            const totalStories = isDiaPassado
+              ? pubsDoDiaSelecionado.filter(p => p.tipo_postagem === 'STORIES').length
+              : agendamentosDoDia.filter(a => a.tipo_postagem === 'STORIES').length;
+
+            const totalNoDia = isDiaPassado ? pubsDoDiaSelecionado.length : agendamentosDoDia.length;
 
             const isFormOpen = !!formOpenMap[perfil.username];
             const currentEditing = editingAgendamentoMap[perfil.username] || null;
@@ -1665,13 +1815,13 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                             access_token: metaApiSettings.accessToken,
                             public_base_url: metaApiSettings.publicBaseUrl
                           })
-                        }).catch(() => {});
+                        }).catch(() => { });
                         // Atualiza todos os agendamentos desse perfil no banco
                         fetch('/api/automacao/agendamentos/update-meta-id', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ username: perfil.username, meta_account_id: newId })
-                        }).catch(() => {});
+                        }).catch(() => { });
                         showToast(`Meta ID de @${perfil.username} salvo!`);
                       }}
                     />
@@ -1683,6 +1833,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                 ========================================================================= */}
                 <CalendarioAgendamentos
                   agendamentos={agendamentosDoPerfil}
+                  publicacoes={publicacoesDoPerfil}
                   selectedDate={selectedDate}
                   onSelectDate={(d) => {
                     setSelectedDateMap(prev => {
@@ -1718,14 +1869,14 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                         textTransform: 'uppercase',
                         letterSpacing: '0.5px'
                       }}>
-                        📅 Totalizador do Dia
+                        📅 {isDiaPassado ? 'Histórico do Dia' : 'Totalizador do Dia'}
                       </span>
                       <span style={{
                         fontSize: 9,
                         fontWeight: 700,
-                        color: isDiaHoje ? '#58A6FF' : '#FBBF24',
-                        background: isDiaHoje ? 'rgba(56, 139, 253, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                        border: isDiaHoje ? '1px solid rgba(56, 139, 253, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)',
+                        color: isDiaHoje ? '#58A6FF' : isDiaPassado ? '#34D399' : '#FBBF24',
+                        background: isDiaHoje ? 'rgba(56, 139, 253, 0.15)' : isDiaPassado ? 'rgba(52, 211, 153, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                        border: isDiaHoje ? '1px solid rgba(56, 139, 253, 0.3)' : isDiaPassado ? '1px solid rgba(52, 211, 153, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)',
                         padding: '1px 6px',
                         borderRadius: 10
                       }}>
@@ -1735,12 +1886,12 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                     <span style={{
                       fontSize: 10,
                       fontWeight: 700,
-                      color: agendamentosDoDia.length > 0 ? '#34D399' : '#6E7681',
-                      background: agendamentosDoDia.length > 0 ? 'rgba(52, 211, 153, 0.12)' : 'rgba(110, 118, 129, 0.12)',
+                      color: totalNoDia > 0 ? (isDiaPassado ? '#34D399' : '#34D399') : '#6E7681',
+                      background: totalNoDia > 0 ? 'rgba(52, 211, 153, 0.12)' : 'rgba(110, 118, 129, 0.12)',
                       padding: '2px 8px',
                       borderRadius: 12
                     }}>
-                      {agendamentosDoDia.length} {agendamentosDoDia.length === 1 ? 'post no dia' : 'posts no dia'}
+                      {isDiaPassado ? `${totalNoDia} ${totalNoDia === 1 ? 'post publicado' : 'posts publicados'}` : `${totalNoDia} ${totalNoDia === 1 ? 'post no dia' : 'posts no dia'}`}
                     </span>
                   </div>
 
@@ -1869,9 +2020,112 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                   </div>
 
                   {/* =========================================================================
-                      4. BOTÃO DE AGENDAR POSTAGEM / LISTA DE AGENDAMENTOS DO DIA
+                      4. BOTÃO DE AGENDAR POSTAGEM / LISTA DE AGENDAMENTOS OU POSTS PASSADOS
                   ========================================================================= */}
-                  {agendamentosDoDia.length === 0 && !isFormOpen && (
+                  {/* Se for uma data passada: exibe o histórico de posts que foram ao ar */}
+                  {isDiaPassado && !isFormOpen && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 4 }}>
+                      {pubsDoDiaSelecionado.length === 0 ? (
+                        <div style={{
+                          padding: '10px 12px',
+                          borderRadius: 8,
+                          background: '#161B22',
+                          border: '1px dashed #30363D',
+                          color: '#8B949E',
+                          fontSize: 11,
+                          textAlign: 'center'
+                        }}>
+                          Nenhuma postagem registrada nesta data.
+                        </div>
+                      ) : (
+                        pubsDoDiaSelecionado.map((pub, pIdx) => {
+                          const arquivosPub = Array.isArray(pub.arquivos) ? pub.arquivos : [];
+                          const permalink = arquivosPub[0]?.url || '';
+                          return (
+                            <div
+                              key={pub.id || pIdx}
+                              style={{
+                                background: '#161B22',
+                                border: '1px solid rgba(46, 160, 67, 0.35)',
+                                borderRadius: 8,
+                                padding: '9px 12px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: 8,
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
+                                <span style={{
+                                  fontSize: 10,
+                                  fontWeight: 800,
+                                  padding: '3px 7px',
+                                  borderRadius: 5,
+                                  flexShrink: 0,
+                                  background: pub.tipo_postagem === 'REELS' ? 'rgba(239,68,68,0.2)' : 'rgba(59,130,246,0.2)',
+                                  color: pub.tipo_postagem === 'REELS' ? '#F87171' : '#60A5FA'
+                                }}>
+                                  {pub.tipo_postagem === 'REELS' ? '🎬 Reels' : '🖼️ Feed'}
+                                </span>
+
+                                <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11, color: '#C9D1D9' }}>
+                                  <span style={{ fontWeight: 600, color: '#7EE787', marginRight: 6 }}>{pub.hora_local || 'Publicado'}</span>
+                                  {pub.legenda && (
+                                    <span style={{ color: '#8B949E' }}>{pub.legenda.slice(0, 45)}{pub.legenda.length > 45 ? '...' : ''}</span>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                                <span
+                                  title="Post publicado no Instagram oficial via Meta Graph API"
+                                  style={{
+                                    fontSize: 9,
+                                    fontWeight: 700,
+                                    background: 'rgba(52, 211, 153, 0.15)',
+                                    color: '#34D399',
+                                    padding: '2px 6px',
+                                    borderRadius: 4,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 3
+                                  }}
+                                >
+                                  <Check size={10} strokeWidth={3} /> Meta
+                                </span>
+                                {permalink && (
+                                  <a
+                                    href={permalink}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    title="Ver postagem no Instagram"
+                                    style={{
+                                      background: 'rgba(56, 139, 253, 0.15)',
+                                      color: '#58A6FF',
+                                      padding: '2px 6px',
+                                      borderRadius: 4,
+                                      fontSize: 9,
+                                      fontWeight: 700,
+                                      textDecoration: 'none',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 3
+                                    }}
+                                  >
+                                    Ver <ExternalLink size={9} />
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+
+                  {/* Se for hoje ou futuro: exibe o botão de agendamento e a lista de agendamentos */}
+                  {!isDiaPassado && agendamentosDoDia.length === 0 && !isFormOpen && (
                     <button
                       type="button"
                       onClick={() => {
@@ -1909,7 +2163,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                     </button>
                   )}
 
-                  {agendamentosDoDia.length > 0 && !isFormOpen && (
+                  {!isDiaPassado && agendamentosDoDia.length > 0 && !isFormOpen && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 6 }}>
                       {agendamentosDoDia.map(ag => (
                         <div
@@ -2058,7 +2312,6 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                                 ) : (
                                   <Play size={11} />
                                 )}
-                                Publicar Agora
                               </button>
                             )}
 
@@ -2309,7 +2562,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                           setMetaApiSettings(prev => ({ ...prev, accessToken: text.trim() }));
                           showToast('📋 Novo token colado da memória!');
                         }
-                      } catch (err) {}
+                      } catch (err) { }
                     }
                   }}
                   style={{
@@ -2402,15 +2655,17 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
 }
 
 // =========================================================================
+// =========================================================================
 // SUB-COMPONENTE: CALENDÁRIO DE AGENDAMENTOS
 // =========================================================================
 interface CalendarioAgendamentosProps {
   agendamentos: Agendamento[];
+  publicacoes?: Publicacao[];
   selectedDate?: Date;
   onSelectDate?: (date: Date) => void;
 }
 
-function CalendarioAgendamentos({ agendamentos, selectedDate, onSelectDate }: CalendarioAgendamentosProps) {
+function CalendarioAgendamentos({ agendamentos, publicacoes = [], selectedDate, onSelectDate }: CalendarioAgendamentosProps) {
   const [dataVisualizacao, setDataVisualizacao] = useState(() => {
     const hoje = new Date();
     return new Date(hoje.getFullYear(), hoje.getMonth(), 1);
@@ -2418,6 +2673,7 @@ function CalendarioAgendamentos({ agendamentos, selectedDate, onSelectDate }: Ca
   const [selectedDayInfo, setSelectedDayInfo] = useState<{
     dateStr: string;
     posts: Agendamento[];
+    publicados: Publicacao[];
   } | null>(null);
 
   const mesAtual = dataVisualizacao.getMonth();
@@ -2448,6 +2704,12 @@ function CalendarioAgendamentos({ agendamentos, selectedDate, onSelectDate }: Ca
   const getAgendamentosDoDia = (dia: number, mes: number, ano: number): Agendamento[] => {
     const dataObj = new Date(ano, mes, dia);
     return agendamentos.filter(ag => isAgendamentoNoDia(ag, dataObj));
+  };
+
+  const getPublicacoesDoDia = (dia: number, mes: number, ano: number): Publicacao[] => {
+    const dObj = new Date(ano, mes, dia);
+    const isoD = dataIsoLocal(dObj);
+    return publicacoes.filter(p => p.data_local === isoD && p.status === 'PUBLICADO');
   };
 
   // Gerar células do calendário
@@ -2491,14 +2753,19 @@ function CalendarioAgendamentos({ agendamentos, selectedDate, onSelectDate }: Ca
   const hojeDia = hoje.getDate();
   const hojeMes = hoje.getMonth();
   const hojeAno = hoje.getFullYear();
+  const hojeDataObj = new Date(hojeAno, hojeMes, hojeDia);
 
   const isMesAtualHoje = mesAtual === hojeMes && anoAtual === hojeAno;
 
-  // Contagem de dias com agendamentos no mês atual
-  let diasComAgendamentoMes = 0;
+  // Contagem de dias com atividade (agendamento ou post publicado) no mês atual
+  let diasComAtividadeMes = 0;
   for (let d = 1; d <= totalDiasMes; d++) {
-    if (getAgendamentosDoDia(d, mesAtual, anoAtual).length > 0) {
-      diasComAgendamentoMes++;
+    const dObj = new Date(anoAtual, mesAtual, d);
+    const isPass = dObj < hojeDataObj;
+    const hasPub = getPublicacoesDoDia(d, mesAtual, anoAtual).length > 0;
+    const hasAg = getAgendamentosDoDia(d, mesAtual, anoAtual).length > 0;
+    if (isPass ? hasPub : (hasAg || hasPub)) {
+      diasComAtividadeMes++;
     }
   }
 
@@ -2526,7 +2793,7 @@ function CalendarioAgendamentos({ agendamentos, selectedDate, onSelectDate }: Ca
           }}>
             Calendário ({nomesMeses[mesAtual]} {anoAtual})
           </span>
-          {diasComAgendamentoMes > 0 && (
+          {diasComAtividadeMes > 0 && (
             <span style={{
               fontSize: 9,
               fontWeight: 700,
@@ -2535,7 +2802,7 @@ function CalendarioAgendamentos({ agendamentos, selectedDate, onSelectDate }: Ca
               padding: '1px 5px',
               borderRadius: 10
             }}>
-              {diasComAgendamentoMes}d ativos
+              {diasComAtividadeMes}d ativos
             </span>
           )}
         </div>
@@ -2639,18 +2906,34 @@ function CalendarioAgendamentos({ agendamentos, selectedDate, onSelectDate }: Ca
           {celulas.map((c, i) => {
             const dataCel = new Date(c.ano, c.mes, c.dia);
             const ags = getAgendamentosDoDia(c.dia, c.mes, c.ano);
-            const temAgendamento = ags.length > 0;
+            const pubs = getPublicacoesDoDia(c.dia, c.mes, c.ano);
             const isHoje = c.dia === hojeDia && c.mes === hojeMes && c.ano === hojeAno;
-            const hojeDataObj = new Date(hojeAno, hojeMes, hojeDia);
             const isPassado = dataCel < hojeDataObj;
+
+            const temPublicacaoReal = pubs.length > 0;
+            const temAgendamento = ags.length > 0;
+            const temAtividade = isPassado ? temPublicacaoReal : (temAgendamento || temPublicacaoReal);
 
             const isSelected = selectedDate
               ? (c.dia === selectedDate.getDate() && c.mes === selectedDate.getMonth() && c.ano === selectedDate.getFullYear())
               : false;
 
-            const temReels = ags.some(a => a.tipo_postagem === 'REELS');
-            const temFeed = ags.some(a => a.tipo_postagem === 'FEED');
-            const temStories = ags.some(a => a.tipo_postagem === 'STORIES');
+            const temReels = isPassado
+              ? pubs.some(p => p.tipo_postagem === 'REELS')
+              : (ags.some(a => a.tipo_postagem === 'REELS') || pubs.some(p => p.tipo_postagem === 'REELS'));
+            const temFeed = isPassado
+              ? pubs.some(p => p.tipo_postagem === 'FEED')
+              : (ags.some(a => a.tipo_postagem === 'FEED') || pubs.some(p => p.tipo_postagem === 'FEED'));
+            const temStories = isPassado
+              ? pubs.some(p => p.tipo_postagem === 'STORIES')
+              : (ags.some(a => a.tipo_postagem === 'STORIES') || pubs.some(p => p.tipo_postagem === 'STORIES'));
+
+            let titleStr = `${c.dia}/${c.mes + 1}`;
+            if (isPassado && temPublicacaoReal) {
+              titleStr += `: ${pubs.length} post(s) publicado(s) no Instagram`;
+            } else if (temAgendamento) {
+              titleStr += `: ${ags.length} post(s) programado(s)`;
+            }
 
             return (
               <div
@@ -2659,12 +2942,17 @@ function CalendarioAgendamentos({ agendamentos, selectedDate, onSelectDate }: Ca
                   if (onSelectDate) {
                     onSelectDate(dataCel);
                   }
+                  if (temAtividade) {
+                    setSelectedDayInfo({
+                      dateStr: `${String(c.dia).padStart(2, '0')}/${String(c.mes + 1).padStart(2, '0')}/${c.ano}`,
+                      posts: ags,
+                      publicados: pubs
+                    });
+                  } else {
+                    setSelectedDayInfo(null);
+                  }
                 }}
-                title={
-                  temAgendamento
-                    ? `${c.dia}/${c.mes + 1}: ${ags.length} post(s) agendado(s)${isPassado ? ' (passado)' : ''}`
-                    : `${c.dia}/${c.mes + 1}`
-                }
+                title={titleStr}
                 style={{
                   height: 26,
                   display: 'flex',
@@ -2673,36 +2961,42 @@ function CalendarioAgendamentos({ agendamentos, selectedDate, onSelectDate }: Ca
                   justifyContent: 'center',
                   borderRadius: 4,
                   fontSize: 10,
-                  fontWeight: temAgendamento || isHoje || isSelected ? 700 : 400,
+                  fontWeight: temAtividade || isHoje || isSelected ? 700 : 400,
                   cursor: 'pointer',
                   opacity: c.isOutroMes ? 0.25 : 1,
                   background: isSelected
                     ? 'rgba(56, 139, 253, 0.45)'
-                    : isPassado && temAgendamento
-                      ? '#828385'
-                      : temAgendamento
-                        ? 'rgba(56, 139, 253, 0.14)'
-                        : 'transparent',
+                    : isPassado && temPublicacaoReal
+                      ? 'rgba(46, 160, 67, 0.18)'
+                      : isPassado && temAgendamento
+                        ? '#828385'
+                        : temAgendamento
+                          ? 'rgba(56, 139, 253, 0.14)'
+                          : 'transparent',
                   border: isHoje
                     ? '1px solid #388BFD'
                     : isSelected
                       ? '1px solid #58A6FF'
-                      : isPassado && temAgendamento
-                        ? '1px solid #828385'
-                        : temAgendamento
-                          ? '1px solid rgba(56, 139, 253, 0.3)'
-                          : '1px solid transparent',
+                      : isPassado && temPublicacaoReal
+                        ? '1px solid rgba(46, 160, 67, 0.45)'
+                        : isPassado && temAgendamento
+                          ? '1px solid #828385'
+                          : temAgendamento
+                            ? '1px solid rgba(56, 139, 253, 0.3)'
+                            : '1px solid transparent',
                   color: isHoje
                     ? '#58A6FF'
                     : isSelected
                       ? '#FFFFFF'
-                      : isPassado && temAgendamento
-                        ? '#FFFFFF'
-                        : temAgendamento
-                          ? '#E6EDF3'
-                          : c.isOutroMes
-                            ? '#484F58'
-                            : '#8B949E',
+                      : isPassado && temPublicacaoReal
+                        ? '#7EE787'
+                        : isPassado && temAgendamento
+                          ? '#FFFFFF'
+                          : temAgendamento
+                            ? '#E6EDF3'
+                            : c.isOutroMes
+                              ? '#484F58'
+                              : '#8B949E',
                   transition: 'all 0.15s ease',
                   position: 'relative'
                 }}
@@ -2710,7 +3004,7 @@ function CalendarioAgendamentos({ agendamentos, selectedDate, onSelectDate }: Ca
                 <span>{c.dia}</span>
 
                 {/* Marcadores coloridos dos tipos de postagem */}
-                {temAgendamento && (
+                {temAtividade && (
                   <div style={{ display: 'flex', gap: 1.5, marginTop: -2 }}>
                     {temReels && (
                       <span style={{ width: 3.5, height: 3.5, borderRadius: '50%', background: '#EF4444' }} />
@@ -2742,7 +3036,7 @@ function CalendarioAgendamentos({ agendamentos, selectedDate, onSelectDate }: Ca
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
             <span style={{ fontWeight: 700, color: '#58A6FF' }}>
-              📅 Programação para {selectedDayInfo.dateStr}:
+              📅 Ocorrências em {selectedDayInfo.dateStr}:
             </span>
             <button
               type="button"
@@ -2753,8 +3047,19 @@ function CalendarioAgendamentos({ agendamentos, selectedDate, onSelectDate }: Ca
             </button>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {selectedDayInfo.publicados.map((pub, idx) => (
+              <div key={`pub-${idx}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#7EE787', fontSize: 11 }}>
+                <span>
+                  {pub.tipo_postagem === 'REELS' ? '🎬 Reels' : '🖼️ Feed'}
+                  <span style={{ color: '#8B949E', marginLeft: 4 }}>({pub.hora_local || 'Publicado'})</span>
+                </span>
+                <span style={{ color: '#34D399', fontSize: 9, fontWeight: 700, background: 'rgba(52, 211, 153, 0.12)', padding: '1px 5px', borderRadius: 4 }}>
+                  ✅ No Instagram
+                </span>
+              </div>
+            ))}
             {selectedDayInfo.posts.map((post, idx) => (
-              <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#C9D1D9' }}>
+              <div key={`post-${idx}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#C9D1D9' }}>
                 <span>
                   {post.tipo_postagem === 'REELS' && '🎬 Reels'}
                   {post.tipo_postagem === 'FEED' && '🖼️ Feed'}
