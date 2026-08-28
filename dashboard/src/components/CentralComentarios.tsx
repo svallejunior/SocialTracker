@@ -56,6 +56,7 @@ export default function CentralComentarios({ selectedUsername, onRefreshStats }:
   const [likingMap, setLikingMap] = useState<Record<string, boolean>>({});
   const [dismissingMap, setDismissingMap] = useState<Record<string, boolean>>({});
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [authLink, setAuthLink] = useState<string | null>(null);
   const [successToast, setSuccessToast] = useState<string | null>(null);
 
   // Carrega posts e comentários da Meta API
@@ -63,6 +64,7 @@ export default function CentralComentarios({ selectedUsername, onRefreshStats }:
     if (!username) return;
     setLoading(true);
     setErrorMsg(null);
+    setAuthLink(null);
     try {
       const res = await fetch(`/api/comentarios?username=${encodeURIComponent(username)}`);
       const data = await res.json();
@@ -79,6 +81,9 @@ export default function CentralComentarios({ selectedUsername, onRefreshStats }:
         }
       } else {
         setErrorMsg(data.error || 'Falha ao buscar posts e comentários');
+        if (data.auth_required && data.auth_link) {
+          setAuthLink(data.auth_link);
+        }
       }
     } catch (err: any) {
       setErrorMsg(`Erro de conexão: ${err.message}`);
@@ -372,32 +377,78 @@ export default function CentralComentarios({ selectedUsername, onRefreshStats }:
           background: 'rgba(255, 0, 122, 0.08)',
           border: '1px solid rgba(255, 0, 122, 0.3)',
           color: '#FF6B9D',
-          padding: '12px 16px',
+          padding: '14px 16px',
           borderRadius: 10,
           fontSize: 13,
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between'
+          flexDirection: 'column',
+          gap: 10
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <AlertCircle size={16} />
-            <span>{errorMsg}</span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <AlertCircle size={16} />
+              <span>{errorMsg}</span>
+            </div>
+            <button
+              onClick={() => carregarPostsComentarios(selectedUsername)}
+              style={{
+                background: 'rgba(255, 0, 122, 0.2)',
+                border: 'none',
+                color: 'white',
+                borderRadius: 6,
+                padding: '4px 10px',
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: 'pointer',
+                flexShrink: 0
+              }}
+            >
+              Tentar Novamente
+            </button>
           </div>
-          <button
-            onClick={() => carregarPostsComentarios(selectedUsername)}
-            style={{
-              background: 'rgba(255, 0, 122, 0.2)',
-              border: 'none',
-              color: 'white',
-              borderRadius: 6,
-              padding: '4px 10px',
-              fontSize: 11,
-              fontWeight: 700,
-              cursor: 'pointer'
-            }}
-          >
-            Tentar Novamente
-          </button>
+          {authLink && (
+            <div style={{
+              background: 'rgba(255, 165, 0, 0.08)',
+              border: '1px solid rgba(255, 165, 0, 0.3)',
+              borderRadius: 8,
+              padding: '10px 12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8
+            }}>
+              <div style={{ color: '#FFB347', fontWeight: 700, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <ExternalLink size={13} />
+                Autorização necessária — envie este link para @{selectedUsername}:
+              </div>
+              <div style={{
+                background: 'rgba(0,0,0,0.3)',
+                borderRadius: 6,
+                padding: '6px 10px',
+                fontSize: 10,
+                color: '#aaa',
+                wordBreak: 'break-all',
+                fontFamily: 'monospace'
+              }}>
+                {authLink}
+              </div>
+              <button
+                onClick={() => { navigator.clipboard.writeText(authLink); setSuccessToast('Link copiado!'); setTimeout(() => setSuccessToast(null), 2500); }}
+                style={{
+                  background: 'rgba(255, 165, 0, 0.25)',
+                  border: '1px solid rgba(255, 165, 0, 0.4)',
+                  color: '#FFB347',
+                  borderRadius: 6,
+                  padding: '5px 14px',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  alignSelf: 'flex-start'
+                }}
+              >
+                📋 Copiar Link de Autorização
+              </button>
+            </div>
+          )}
         </div>
       )}
 

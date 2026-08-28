@@ -61,6 +61,18 @@ async function getDb() {
   return db;
 }
 
+/** Gera o link OAuth do Instagram Platform (sem necessidade de Facebook) */
+function gerarLinkAutorizacao(username: string): string {
+  // Instagram App ID é diferente do Facebook App ID.
+  // Após adicionar o produto "Instagram Platform" no painel do Meta,
+  // copie o Instagram App ID e salve em INSTAGRAM_APP_ID no .env
+  const igAppId = process.env.INSTAGRAM_APP_ID || process.env.META_APP_ID || '1052113504109684';
+  const redirectUri = encodeURIComponent('https://webhook.site/08f4107d-f794-4dd6-8dd0-c1b46836d323');
+  // Escopos do Instagram Platform (não requerem vínculo com Página do Facebook)
+  const scopes = encodeURIComponent('instagram_business_basic,instagram_business_manage_comments,instagram_business_manage_insights');
+  return `https://api.instagram.com/oauth/authorize?client_id=${igAppId}&redirect_uri=${redirectUri}&scope=${scopes}&response_type=code&state=${encodeURIComponent(username)}`;
+}
+
 async function getMetaCredentials(db: any, username: string) {
   const cleanU = username.trim().toLowerCase().replace('@', '');
 
@@ -74,15 +86,20 @@ async function getMetaCredentials(db: any, username: string) {
   );
 
   const envKey = `META_TOKEN_${cleanU.toUpperCase().replace(/\./g, '_')}`;
-  const envToken = process.env[envKey] || process.env.META_ACCESS_TOKEN || '';
+  const envToken = process.env[envKey] || '';
+  // Só usa o token global como último recurso (token do dono do app, sem permissão p/ outras contas)
+  const globalToken = process.env.META_ACCESS_TOKEN || '';
 
   const meta_account_id = row?.meta_account_id || row?.id || '';
-  const access_token = row?.access_token || envToken || defaultRow?.access_token || '';
+  const access_token = row?.access_token || envToken || defaultRow?.access_token || globalToken;
+  // Indica se o token é próprio da conta ou genérico (do dono do app)
+  const tokenIsOwn = !!(row?.access_token || envToken);
 
   return {
     meta_account_id: (meta_account_id || '').trim(),
     access_token: (access_token || '').trim(),
-    username: cleanU
+    username: cleanU,
+    tokenIsOwn
   };
 }
 
@@ -103,10 +120,19 @@ export async function GET(request: NextRequest) {
 
     if (!creds.meta_account_id || !creds.access_token) {
       await db.close();
+      const linkAuth = gerarLinkAutorizacao(username);
       return NextResponse.json({
         success: false,
-        error: `Conta @${username} não possui META ID ou Access Token configurado.`
+        error: `Conta @${username} não possui META ID ou Access Token configurado.`,
+        auth_required: true,
+        auth_link: linkAuth,
+        auth_message: `Peça para @${username} clicar neste link para autorizar o app: ${linkAuth}`
       }, { status: 400 });
+    }
+
+    // Aviso antecipado: token genérico provavelmente não tem permissão para esta conta
+    if (!creds.tokenIsOwn) {
+      console.warn(`[comentarios] @${username}: usando token global — pode não ter permissão para esta conta.`);
     }
 
     // Consulta a Meta Graph API para buscar as postagens e comentários recentes
@@ -118,9 +144,18 @@ export async function GET(request: NextRequest) {
 
     if (!res.ok || data.error) {
       await db.close();
+      const errCode = data.error?.code;
+      // Erros 100 e 200 indicam falta de permissão — conta não autorizou o app
+      const isPermissionError = errCode === 100 || errCode === 200 || errCode === 190;
+      const linkAuth = gerarLinkAutorizacao(username);
       return NextResponse.json({
         success: false,
-        error: `Erro Meta API (${data.error?.code || res.status}): ${data.error?.message || 'Falha ao buscar mídias'}`
+        error: `Erro Meta API (${errCode || res.status}): ${data.error?.message || 'Falha ao buscar mídias'}`,
+        ...(isPermissionError && {
+          auth_required: true,
+          auth_link: linkAuth,
+          auth_message: `@${username} ainda não autorizou o app. Envie este link para ela autorizar:\n${linkAuth}`
+        })
       }, { status: 500 });
     }
 

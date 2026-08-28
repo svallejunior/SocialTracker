@@ -4146,11 +4146,19 @@ export default function Dashboard() {
                 onChange={(e) => { setSelectedProfileFilter(e.target.value); setPostsPage(1); }}
               >
                 <option value="Todos">Todos Perfis</option>
-                {profiles.filter(p => p.exibir !== 0).map(p => (
-                  <option key={p.username} value={p.username}>
-                    @{p.username}{p.status === 'INATIVO' ? ' (inativo)' : ''}
-                  </option>
-                ))}
+                {[...profiles]
+                  .filter(p => p.exibir !== 0)
+                  .sort((a, b) => {
+                    const starA = a.meu_perfil ? 1 : 0;
+                    const starB = b.meu_perfil ? 1 : 0;
+                    if (starB !== starA) return starB - starA;
+                    return a.username.localeCompare(b.username);
+                  })
+                  .map(p => (
+                    <option key={p.username} value={p.username}>
+                      {p.meu_perfil ? '⭐ ' : ''}@{p.username}{p.status === 'INATIVO' ? ' (inativo)' : ''}
+                    </option>
+                  ))}
               </select>
 
               <select
