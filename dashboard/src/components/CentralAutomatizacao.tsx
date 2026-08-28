@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
+import AvatarModelo from './AvatarModelo';
 import {
   Bot, Play, CheckCircle2, RefreshCw, Trash2,
   Settings, HelpCircle, Bell, CreditCard, LayoutGrid, Shield,
@@ -1724,37 +1725,17 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
               >
                 {/* 1. Header do Card: Foto de Perfil + Username + Posição + ID Numérico */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #FF007A, #7100E2)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontWeight: 800,
-                    fontSize: 16,
-                    color: 'white',
-                    overflow: 'hidden',
-                    flexShrink: 0,
-                    border: '2px solid #30363D',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
-                    position: 'relative'
-                  }}>
-                    {(perfil.foto_url || perfil.foto_perfil) ? (
-                      <img
-                        src={perfil.foto_url || perfil.foto_perfil}
-                        alt={perfil.username}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                        onError={e => {
-                          (e.currentTarget.parentElement as HTMLElement).innerHTML =
-                            `<span style="font-size:16px;font-weight:800;color:white">${perfil.username.slice(0, 2).toUpperCase()}</span>`;
-                        }}
-                      />
-                    ) : (
-                      perfil.username.slice(0, 2).toUpperCase()
-                    )}
-                  </div>
+                  <AvatarModelo
+                    src={perfil.foto_url || perfil.foto_perfil || null}
+                    username={perfil.username}
+                    size={48}
+                    comentariosPendentes={perfil.comentarios_pendentes || 0}
+                    mensagensPendentes={perfil.mensagens_pendentes || 0}
+                    temPendencias={perfil.tem_pendencias || false}
+                    showCountInBadge={true}
+                    borderColor="#30363D"
+                    imageStyle={{ border: '2px solid #30363D', boxShadow: '0 2px 8px rgba(0,0,0,0.4)' }}
+                  />
 
                   <div style={{ overflow: 'hidden', flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>

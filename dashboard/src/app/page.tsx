@@ -20,6 +20,8 @@ import ModalLancamento from "../components/ModalLancamento";
 import GraficoProjecao from "../components/GraficoProjecao";
 import CentralAnomalias from "../components/CentralAnomalias";
 import CentralAutomatizacao from "../components/CentralAutomatizacao";
+import CentralRespostas from "../components/CentralRespostas";
+import AvatarModelo from "../components/AvatarModelo";
 
 const ModalLancamentoInline = ({ isOpen, onClose, username, onSave, perfisDisponiveis }: any) => {
   useEffect(() => {
@@ -1231,7 +1233,7 @@ export default function Dashboard() {
   const [followersHistory, setFollowersHistory] = useState<any>({});
 
   // Estados de Navegação e Filtros
-  const [activeTab, setActiveTab] = useState<'acompanhados' | 'cards' | 'followers' | 'posts' | 'controle' | 'anomalias' | 'automatizacao'>('controle');
+  const [activeTab, setActiveTab] = useState<'acompanhados' | 'cards' | 'followers' | 'posts' | 'controle' | 'anomalias' | 'automatizacao' | 'respostas'>('controle');
   const [anomaliasCount, setAnomaliasCount] = useState<number>(0);
   const [selectedProfile, setSelectedProfile] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -2149,7 +2151,9 @@ export default function Dashboard() {
       {/* --- CABEÇALHO DO DASHBOARD --- */}
       <header className="app-header">
         <div className="brand-section">
-          <div className="logo-icon">📈</div>
+          <div className="logo-icon">
+            <img src="/img/logo.jpeg" alt="SocialTracker Logo" />
+          </div>
           <div className="brand-name">SocialTracker</div>
         </div>
 
@@ -2206,6 +2210,24 @@ export default function Dashboard() {
             >
               <span style={{ fontSize: 16 }}>🤖</span>
               Automatização
+            </button>
+            <button
+              className={`tab-btn ${activeTab === 'respostas' ? 'active' : ''}`}
+              onClick={() => setActiveTab('respostas')}
+              style={{ position: 'relative' }}
+            >
+              <MessageSquare size={16} />
+              Respostas
+              {(() => {
+                const totalMsg = profiles.reduce((acc, p) => acc + (p.mensagens_pendentes || 0), 0);
+                const totalCom = profiles.reduce((acc, p) => acc + (p.comentarios_pendentes || 0), 0);
+                const total = totalMsg + totalCom;
+                return total > 0 ? (
+                  <span className="tab-badge" style={{ background: 'linear-gradient(135deg, #FF007A, #FF4500)', color: 'white' }}>
+                    {total}
+                  </span>
+                ) : null;
+              })()}
             </button>
           </div>
 
@@ -2687,24 +2709,23 @@ export default function Dashboard() {
                       onMouseLeave={e => { e.currentTarget.style.opacity = "1.0"; }}
                     >
                       {perfil.foto_url ? (
-                        <img
+                        <AvatarModelo
                           src={perfil.foto_url}
-                          alt={perfil.username}
-                          style={{
-                            width: 36, height: 36, borderRadius: "50%",
-                            objectFit: "cover", flexShrink: 0,
-                            border: "1px solid #30363D"
-                          }}
+                          username={perfil.username}
+                          size={36}
+                          comentariosPendentes={perfil.comentarios_pendentes || 0}
+                          mensagensPendentes={perfil.mensagens_pendentes || 0}
+                          temPendencias={perfil.tem_pendencias || false}
                         />
                       ) : (
-                        <div style={{
-                          width: 36, height: 36, borderRadius: "50%",
-                          background: "linear-gradient(135deg, #7100E2, #00F0FF)",
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          fontWeight: 800, fontSize: 15, color: "white", flexShrink: 0
-                        }}>
-                          {perfil.username[0].toUpperCase()}
-                        </div>
+                        <AvatarModelo
+                          src={null}
+                          username={perfil.username}
+                          size={36}
+                          comentariosPendentes={perfil.comentarios_pendentes || 0}
+                          mensagensPendentes={perfil.mensagens_pendentes || 0}
+                          temPendencias={perfil.tem_pendencias || false}
+                        />
                       )}
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -3348,17 +3369,14 @@ export default function Dashboard() {
                   {/* Cabeçalho do Card */}
                   <div className="card-header-row">
                     <div className="user-info-group">
-                      <div className="avatar-circle" style={{ padding: 0, overflow: 'hidden' }}>
-                        {perfil.foto_url ? (
-                          <img
-                            src={perfil.foto_url}
-                            alt={`Foto de ${perfil.username}`}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
-                          />
-                        ) : (
-                          perfil.username.substring(0, 1).toUpperCase()
-                        )}
-                      </div>
+                      <AvatarModelo
+                        src={perfil.foto_url || null}
+                        username={perfil.username}
+                        size={42}
+                        comentariosPendentes={perfil.comentarios_pendentes || 0}
+                        mensagensPendentes={perfil.mensagens_pendentes || 0}
+                        temPendencias={perfil.tem_pendencias || false}
+                      />
                       <div className="user-handle-box">
                         <span className="user-handle">@{perfil.username}</span>
                         <span className="platform-tag">instagram</span>
@@ -4376,7 +4394,7 @@ export default function Dashboard() {
       {activeTab === 'controle' && (
         <div>
           <div style={{ marginBottom: 24 }}>
-            <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 6 }}>🎛️ Minhas Operações</h1>
+            <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 6 }}>Minhas Operações</h1>
             <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
               Gestão das minhas operações.
             </p>
@@ -4482,19 +4500,14 @@ export default function Dashboard() {
                                     cursor: 'pointer'
                                   }}
                                 >
-                                  <div style={{
-                                    width: 32, height: 32, borderRadius: '50%',
-                                    overflow: 'hidden',
-                                    background: 'linear-gradient(135deg, #7100E2, #00F0FF)',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    fontWeight: 800, fontSize: 13, color: 'white', flexShrink: 0
-                                  }}>
-                                    {p.foto_url ? (
-                                      <img src={p.foto_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                    ) : (
-                                      (p.nome || p.username || '?')[0].toUpperCase()
-                                    )}
-                                  </div>
+                                  <AvatarModelo
+                                    src={p.foto_url || null}
+                                    username={p.username}
+                                    size={32}
+                                    comentariosPendentes={p.comentarios_pendentes || 0}
+                                    mensagensPendentes={p.mensagens_pendentes || 0}
+                                    temPendencias={p.tem_pendencias || false}
+                                  />
                                   <div>
                                     <div style={{ fontWeight: 700, color: 'white' }}>{p.nome || p.username}</div>
                                     <div style={{ color: '#8B949E', fontSize: 11 }}>@{p.username}</div>
@@ -4629,23 +4642,23 @@ export default function Dashboard() {
                                   {lucro >= 0 ? '💰' : '💸'} {fmtBRL(lucro)}
                                 </button>
                               </td>
-                            <td style={{ padding: '12px 12px', whiteSpace: 'nowrap' }}>
-                              <span style={{ background: '#161B22', border: '1px solid #30363D', borderRadius: 20, padding: '3px 10px', fontSize: 11, color: 'white' }}>
-                                {p.status || '—'}
-                              </span>
-                            </td>
-                            <td style={{ padding: '12px 12px', textAlign: 'center' }}>
-                              {(p.obs_historico || []).length > 0 ? (
-                                <span title={`${(p.obs_historico || []).length} observações no diário`} style={{ fontSize: 14 }}>
-                                  📝
+                              <td style={{ padding: '12px 12px', whiteSpace: 'nowrap' }}>
+                                <span style={{ background: '#161B22', border: '1px solid #30363D', borderRadius: 20, padding: '3px 10px', fontSize: 11, color: 'white' }}>
+                                  {p.status || '—'}
                                 </span>
-                              ) : (
-                                <span style={{ opacity: 0.25 }}>—</span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      });
+                              </td>
+                              <td style={{ padding: '12px 12px', textAlign: 'center' }}>
+                                {(p.obs_historico || []).length > 0 ? (
+                                  <span title={`${(p.obs_historico || []).length} observações no diário`} style={{ fontSize: 14 }}>
+                                    📝
+                                  </span>
+                                ) : (
+                                  <span style={{ opacity: 0.25 }}>—</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        });
                     })()}
                   </tbody>
                 </table>
@@ -5000,6 +5013,13 @@ export default function Dashboard() {
       ==================================================== */}
       {activeTab === 'automatizacao' && (
         <CentralAutomatizacao profiles={profiles} onRefresh={fetchData} />
+      )}
+
+      {/* ====================================================
+        ABA: RESPOSTAS (CHAT DE DIRECTS & ENGAJAMENTO)
+      ==================================================== */}
+      {activeTab === 'respostas' && (
+        <CentralRespostas profiles={profiles} onRefresh={fetchData} />
       )}
 
       {/* Modal Global de Resolução de Perfil Sem Dados / Indisponível */}

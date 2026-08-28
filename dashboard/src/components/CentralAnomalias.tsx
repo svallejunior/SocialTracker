@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import AvatarModelo from './AvatarModelo';
 import {
   AlertTriangle, CheckCircle2, Rocket, Trash2, RefreshCw, TrendingUp, Users,
   FileText, Search, Zap, Filter, Edit3, Calendar, ChevronLeft, ChevronRight,
@@ -37,6 +38,9 @@ interface PerfilSumario {
   foto_url: string;
   meu_perfil: number;
   ultima_coleta: string | null;
+  comentarios_pendentes?: number;
+  mensagens_pendentes?: number;
+  tem_pendencias?: boolean;
 }
 
 interface GlobalStats {
@@ -667,13 +671,14 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                     onClick={() => setSelectedUsername(p.username)}
                     className={`anomalias-profile-chip ${isSelected ? 'selected' : ''} ${hasPendentes ? 'has-pendentes' : ''}`}
                   >
-                    <div className="anomalias-chip-avatar">
-                      {p.foto_url ? (
-                        <img src={p.foto_url} alt={p.username} />
-                      ) : (
-                        <span>{p.username[0].toUpperCase()}</span>
-                      )}
-                    </div>
+                    <AvatarModelo
+                      src={p.foto_url || null}
+                      username={p.username}
+                      size={32}
+                      comentariosPendentes={p.comentarios_pendentes || 0}
+                      mensagensPendentes={p.mensagens_pendentes || 0}
+                      temPendencias={p.tem_pendencias || false}
+                    />
 
                     <div className="anomalias-chip-info">
                       <div className="anomalias-chip-header">
@@ -703,11 +708,15 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
             <div className="anomalias-selected-header">
               <div className="anomalias-selected-left">
                 <div className="anomalias-selected-avatar">
-                  {activeProfile.foto_url ? (
-                    <img src={activeProfile.foto_url} alt={activeProfile.username} />
-                  ) : (
-                    <span>{activeProfile.username[0].toUpperCase()}</span>
-                  )}
+                  <AvatarModelo
+                    src={activeProfile.foto_url || null}
+                    username={activeProfile.username}
+                    size={44}
+                    comentariosPendentes={activeProfile.comentarios_pendentes || 0}
+                    mensagensPendentes={activeProfile.mensagens_pendentes || 0}
+                    temPendencias={activeProfile.tem_pendencias || false}
+                    showCountInBadge={true}
+                  />
                 </div>
 
                 <div>

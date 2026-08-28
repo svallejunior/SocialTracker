@@ -45,8 +45,34 @@ async function getDb() {
     if (!cols.has("tipo_trafego")) {
       await db.exec(`ALTER TABLE perfis_monitorados ADD COLUMN tipo_trafego TEXT DEFAULT 'ORGANICO'`);
     }
+
+    // Garante tabelas de engajamento (comentários e mensagens)
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS instagram_comentarios (
+        id TEXT PRIMARY KEY,
+        media_id TEXT,
+        modelo_username TEXT NOT NULL,
+        autor_username TEXT,
+        texto TEXT,
+        timestamp DATETIME,
+        respondido INTEGER DEFAULT 0,
+        curtido INTEGER DEFAULT 0,
+        criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS instagram_mensagens (
+        id TEXT PRIMARY KEY,
+        conversation_id TEXT,
+        modelo_username TEXT NOT NULL,
+        remetente_username TEXT,
+        texto TEXT,
+        timestamp DATETIME,
+        lida INTEGER DEFAULT 0,
+        respondida INTEGER DEFAULT 0,
+        criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
   } catch (err) {
-    console.error("Migration error in perfis_monitorados:", err);
+    console.error("Migration error in perfis_monitorados / engajamento:", err);
   }
 
   return db;
@@ -61,9 +87,11 @@ export async function GET() {
         p.*,
         cp.status as status_controle,
         cp.foto_url,
-        cp.nome as nome_controle
+        cp.nome as nome_controle,
+        ac.meta_account_id
       FROM perfis_monitorados p
       LEFT JOIN controle_perfis cp ON LOWER(p.username) = LOWER(cp.username)
+      LEFT JOIN automacao_config ac ON (LOWER(p.username) = LOWER(ac.username) AND ac.id != 'default_config')
       ORDER BY p.username ASC
     `);
     
@@ -162,13 +190,38 @@ export async function GET() {
     }
 
 
-    // Enriquece cada perfil com as colunas de primeira coleta, última coleta e seguidores mais recentes válidos
+    // Consulta comentários e mensagens pendentes por modelo
+    const comentariosPendentes = await db.all(`
+      SELECT LOWER(modelo_username) as uname, COUNT(*) as total
+      FROM instagram_comentarios
+      WHERE COALESCE(respondido, 0) = 0
+      GROUP BY LOWER(modelo_username)
+    `).catch(() => []);
+
+    const mensagensPendentes = await db.all(`
+      SELECT LOWER(modelo_username) as uname, COUNT(*) as total
+      FROM instagram_mensagens
+      WHERE COALESCE(respondida, 0) = 0
+      GROUP BY LOWER(modelo_username)
+    `).catch(() => []);
+
+    const comMap: Record<string, number> = {};
+    for (const c of comentariosPendentes) comMap[c.uname] = Number(c.total || 0);
+
+    const msgMap: Record<string, number> = {};
+    for (const m of mensagensPendentes) msgMap[m.uname] = Number(m.total || 0);
+
+    // Enriquece cada perfil com as colunas de primeira coleta, última coleta, seguidores mais recentes válidos e notificações
     const profilesEnriquecidos = profiles.map((p: any) => {
       const u = (p.username || '').toLowerCase();
       const c = coletasMap[u];
       const fotoEfetiva = (p.foto_perfil_meta && String(p.foto_perfil_meta).trim().length > 0)
         ? p.foto_perfil_meta
         : (p.foto_url || '');
+
+      const nCom = comMap[u] || 0;
+      const nMsg = msgMap[u] || 0;
+      const totalPend = nCom + nMsg;
 
       return {
         ...p,
@@ -180,7 +233,13 @@ export async function GET() {
         data_coleta: c ? c.data_coleta : null,
         seguidores: c ? c.ultimosSeguidores : 0,
         total_posts: c ? c.ultimosPosts : 0,
-        seguindo: c ? c.ultimosSeguindo : 0
+        seguindo: c ? c.ultimosSeguindo : 0,
+        comentarios_pendentes: nCom,
+        mensagens_pendentes: nMsg,
+        total_pendencias: totalPend,
+        tem_pendencias: totalPend > 0,
+        meta_account_id: p.meta_account_id || null,
+        tem_meta_id: Boolean(p.meta_account_id && String(p.meta_account_id).trim().length > 0)
       };
     });
 

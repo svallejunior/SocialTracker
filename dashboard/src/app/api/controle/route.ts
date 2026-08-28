@@ -122,16 +122,45 @@ export async function GET() {
       // Caso a tabela ainda não exista no banco
     }
 
+    // 4.1 Busca quantidade de comentários e mensagens pendentes
+    const contagemComentarios: { [username: string]: number } = {};
+    const contagemMensagens: { [username: string]: number } = {};
+    try {
+      const coms = await db.all(`
+        SELECT LOWER(modelo_username) as uname, COUNT(*) as total
+        FROM instagram_comentarios
+        WHERE COALESCE(respondido, 0) = 0
+        GROUP BY LOWER(modelo_username)
+      `);
+      coms.forEach((c: any) => { contagemComentarios[c.uname] = Number(c.total || 0); });
+
+      const msgs = await db.all(`
+        SELECT LOWER(modelo_username) as uname, COUNT(*) as total
+        FROM instagram_mensagens
+        WHERE COALESCE(respondida, 0) = 0
+        GROUP BY LOWER(modelo_username)
+      `);
+      msgs.forEach((m: any) => { contagemMensagens[m.uname] = Number(m.total || 0); });
+    } catch (err) {
+      // Tabelas podem não ter registros ainda
+    }
+
     await db.close();
 
     // 5. Tratamento de Dados: Transforma 'null' em valores seguros que o React aceita
+
     const perfisTratados = linhasBanco.map((p: any) => {
+      const u = (p.username || '').toLowerCase();
       // Filtra os lançamentos deste perfil específico
       const lancamentosDoPerfil = todosLancamentos.filter((l: any) => l.username === p.username);
       const obsDoPerfil = todasObs.filter((o: any) => o.username === p.username);
 
       // Quantidade de agendamentos futuros (reserva de posts)
-      const totalReserva = contagemReserva[(p.username || '').toLowerCase()] || 0;
+      const totalReserva = contagemReserva[u] || 0;
+
+      const nCom = contagemComentarios[u] || 0;
+      const nMsg = contagemMensagens[u] || 0;
+      const totalPend = nCom + nMsg;
 
       // Define uma data padrão segura de hoje caso o início seja nulo
       // para evitar que funções como calcDias(p.inicio) quebrem o componente
@@ -158,6 +187,10 @@ export async function GET() {
         foto_url: fotoEfetiva,
         foto_perfil_meta: p.foto_perfil_meta || null,
         foto_local: p.foto_url || null,
+        comentarios_pendentes: nCom,
+        mensagens_pendentes: nMsg,
+        total_pendencias: totalPend,
+        tem_pendencias: totalPend > 0,
         lancamentos: lancamentosDoPerfil // Injeta obrigatoriamente um array []
       };
     });

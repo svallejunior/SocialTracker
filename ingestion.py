@@ -208,8 +208,9 @@ def rodar_ingestao_diaria(meta_only=False):
             salvar_no_banco(user, dados, inativo=0)
             atualizar_status_perfil(user, 'ATIVO')
         elif status_res == "NOT_FOUND":
-            print(f"Perfil @{user} não encontrado no Instagram. Marcando como INDISPONIVEL.")
-            salvar_no_banco(user, None, inativo=1)
+            print(f"Perfil @{user} não encontrado no Instagram. Marcando como INDISPONIVEL (sem gravar data de coleta).")
+            # Não inserimos registro em perfis_historico quando não há dados —
+            # a data_coleta só deve ser registrada quando houver dados reais.
             atualizar_status_perfil(user, 'INDISPONIVEL')
         else:
             # Erro de API/token/rede/etc — NÃO marcar o perfil como INDISPONIVEL
@@ -322,6 +323,8 @@ if __name__ == "__main__":
                     print(f"Coleta concluída com sucesso para @{target_user} via Apify.")
                 elif status_res == "NOT_FOUND":
                     print(f"AVISO: @{target_user} não encontrado ou dados indisponíveis. Nenhuma alteração gravada no banco.")
+                    # Status INDISPONIVEL atualizado sem gravar data de coleta
+                    atualizar_status_perfil(target_user, 'INDISPONIVEL')
                 else:
                     print(f"⚠️ Falha na API ao consultar @{target_user}. Status mantido sem alterações.")
     else:
