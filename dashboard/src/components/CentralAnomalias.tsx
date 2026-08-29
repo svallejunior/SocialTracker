@@ -200,15 +200,13 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
         setPerfis(listaPerfis);
         onCountUpdate?.(json.stats?.pendentes_validacao || 0);
 
-        // Define perfil selecionado inicial se não tiver
-        if (listaPerfis.length > 0) {
+        // Se deve preservar a seleção e o perfil ainda existe na lista
+        if (preserveSelected) {
           setSelectedUsername(prev => {
-            if (preserveSelected && prev && listaPerfis.some(p => p.username === prev)) {
+            if (prev && listaPerfis.some(p => p.username === prev)) {
               return prev;
             }
-            // Prioriza o primeiro com pendências, senão o primeiro da lista
-            const perfilComPendencia = listaPerfis.find(p => p.pendentes > 0);
-            return perfilComPendencia ? perfilComPendencia.username : listaPerfis[0].username;
+            return '';
           });
         }
       } else {
@@ -406,6 +404,26 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
   const formatDelta = (num: number) => {
     const sign = num > 0 ? '+' : '';
     return `${sign}${num.toLocaleString('pt-BR')}`;
+  };
+
+  const getTipoJanelaIcon = (tipo: string) => {
+    switch (tipo) {
+      case 'ORGANICO': return '🌱';
+      case 'VIRAL_ORGANICO': return '🔥';
+      case 'ADS': return '🚀';
+      case 'IGNORAR': return '🗑️';
+      default: return '📊';
+    }
+  };
+
+  const getTipoJanelaColor = (tipo: string) => {
+    switch (tipo) {
+      case 'ORGANICO': return '#00FFC8';
+      case 'VIRAL_ORGANICO': return '#39FF14';
+      case 'ADS': return '#FF6B35';
+      case 'IGNORAR': return '#8B949E';
+      default: return '#FFFFFF';
+    }
   };
 
   const getBadgeStyleClass = (tipo: string) => {
@@ -702,7 +720,19 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
         </div>
 
         {/* ─── 3. TABELA DO PERFIL ATUALMENTE EM TRATAMENTO ─── */}
-        {activeProfile && (
+        {!activeProfile ? (
+          <div className="anomalias-table-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 340, padding: '50px 20px', textAlign: 'center', border: '1px dashed #30363D', borderRadius: '12px', background: 'rgba(22, 27, 34, 0.4)' }}>
+            <div style={{ width: 60, height: 60, borderRadius: '50%', background: 'rgba(113, 0, 226, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#00F0FF', marginBottom: 16 }}>
+              <History size={30} />
+            </div>
+            <h3 style={{ fontSize: 18, fontWeight: 800, color: '#E6EDF3', marginBottom: 6 }}>
+              Selecione um Perfil para Carregar o Histórico
+            </h3>
+            <p style={{ fontSize: 13, color: '#8B949E', maxWidth: 480, lineHeight: 1.5 }}>
+              Clique em qualquer perfil na lista acima para visualizar, validar e classificar o histórico completo de coletas e anomalias.
+            </p>
+          </div>
+        ) : (
           <div className="anomalias-table-card">
             {/* Header do Perfil Selecionado */}
             <div className="anomalias-selected-header">
@@ -818,35 +848,19 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
               <div className="anomalias-empty-state">
                 <CheckCircle2 size={36} style={{ color: '#00FFC8', marginBottom: 8 }} />
                 <p style={{ fontWeight: 700, color: 'white' }}>Nenhum registro encontrado com os filtros atuais.</p>
-                {apenasPendentesTable && (
-                  <button
-                    onClick={() => setApenasPendentesTable(false)}
-                    style={{
-                      marginTop: 8,
-                      background: '#21262D',
-                      border: '1px solid #30363D',
-                      color: '#00F0FF',
-                      borderRadius: 6,
-                      padding: '6px 12px',
-                      cursor: 'pointer',
-                      fontSize: 12
-                    }}
-                  >
-                    Ver todas as coletas deste perfil
-                  </button>
-                )}
+                <p style={{ fontSize: 12, color: '#8B949E' }}>Altere os filtros acima para visualizar outras coletas.</p>
               </div>
             ) : (
               <div className="anomalias-table-wrapper">
                 <table className="anomalias-table">
                   <thead>
                     <tr>
-                      {/* NOVA COLUNA: DIA DA OPERAÇÃO (ANTES DA DATA DA COLETA) */}
+                      {/* DIA DA OPERAÇÃO */}
                       <th
                         onClick={() => handleSort('dia_operacao')}
                         className="anomalias-th-sortable"
                         title="Dia da operação relativo à data da primeira postagem"
-                        style={{ color: sortCol === 'dia_operacao' ? '#00F0FF' : undefined }}
+                        style={{ color: sortCol === 'dia_operacao' ? '#00F0FF' : undefined, textAlign: 'center' }}
                       >
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                           Dia Op.
@@ -870,9 +884,9 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                       <th
                         onClick={() => handleSort('seguidores')}
                         className="anomalias-th-sortable"
-                        style={{ color: sortCol === 'seguidores' ? '#00F0FF' : undefined }}
+                        style={{ color: sortCol === 'seguidores' ? '#00F0FF' : undefined, textAlign: 'right' }}
                       >
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
                           Seguidores
                           <span className="anomalias-sort-arrow">{sortCol === 'seguidores' ? (sortDir === 'asc' ? '▲' : '▼') : '⬍'}</span>
                         </span>
@@ -882,10 +896,10 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                       <th
                         onClick={() => handleSort('delta_s')}
                         className="anomalias-th-sortable"
-                        style={{ color: sortCol === 'delta_s' ? '#00F0FF' : undefined }}
+                        style={{ color: sortCol === 'delta_s' ? '#00F0FF' : undefined, textAlign: 'right' }}
                       >
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                          ΔS (24h)
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+                          ΔS (Ganho)
                           <span className="anomalias-sort-arrow">{sortCol === 'delta_s' ? (sortDir === 'asc' ? '▲' : '▼') : '⬍'}</span>
                         </span>
                       </th>
@@ -894,9 +908,9 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                       <th
                         onClick={() => handleSort('pct_delta_s')}
                         className="anomalias-th-sortable"
-                        style={{ color: sortCol === 'pct_delta_s' ? '#00F0FF' : undefined }}
+                        style={{ color: sortCol === 'pct_delta_s' ? '#00F0FF' : undefined, textAlign: 'right' }}
                       >
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
                           %ΔS
                           <span className="anomalias-sort-arrow">{sortCol === 'pct_delta_s' ? (sortDir === 'asc' ? '▲' : '▼') : '⬍'}</span>
                         </span>
@@ -906,7 +920,10 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                       <th style={{ textAlign: 'center' }}>ΔPosts</th>
 
                       {/* ALERTA / GATILHO */}
-                      <th>Alerta / Gatilho</th>
+                      <th>Gatilhos Detectados</th>
+
+                      {/* POST VIRAL */}
+                      <th style={{ textAlign: 'center' }}>Publicação na Janela</th>
 
                       {/* CLASSIFICAÇÃO ATUAL */}
                       <th
@@ -915,13 +932,10 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                         style={{ color: sortCol === 'tipo_janela' ? '#00F0FF' : undefined }}
                       >
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                          Classificação (`tipo_janela`)
+                          Classificação
                           <span className="anomalias-sort-arrow">{sortCol === 'tipo_janela' ? (sortDir === 'asc' ? '▲' : '▼') : '⬍'}</span>
                         </span>
                       </th>
-
-                      {/* BUSCA DE POST VIRAL */}
-                      <th style={{ textAlign: 'center' }}>Post Viral (48h)</th>
 
                       {/* STATUS DE VALIDAÇÃO */}
                       <th
@@ -930,7 +944,7 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                         style={{ textAlign: 'center', color: sortCol === 'revisado_manualmente' ? '#00F0FF' : undefined }}
                       >
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, justifyContent: 'center' }}>
-                          Validação
+                          Status
                           <span className="anomalias-sort-arrow">{sortCol === 'revisado_manualmente' ? (sortDir === 'asc' ? '▲' : '▼') : '⬍'}</span>
                         </span>
                       </th>
@@ -939,20 +953,21 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                       <th style={{ textAlign: 'center' }}>Ações Rápidas</th>
                     </tr>
                   </thead>
+
                   <tbody>
                     {filteredAndSortedItems.map(item => {
-                      const badge = getBadgeStyleClass(item.tipo_janela);
+                      const isPending = item.revisado_manualmente === 0;
                       const isActioning = actionLoading === item.id;
                       const diaOp = calcDiaOperacao(item.data_coleta, item.primeira_postagem || activeProfile.primeira_postagem);
-                      const isPendingValidation = Number(item.revisado_manualmente || 0) === 0;
+                      const badge = getBadgeStyleClass(item.tipo_janela);
 
                       return (
                         <tr
                           key={item.id}
-                          className={`anomalias-row ${isPendingValidation ? 'row-pending-alert' : ''}`}
+                          className={`anomalias-row ${isPending ? 'row-pending-alert' : ''}`}
                         >
-                          {/* 1. COLUNA: DIA DA OPERAÇÃO */}
-                          <td style={{ whiteSpace: 'nowrap' }}>
+                          {/* 1. Dia da Operação */}
+                          <td style={{ whiteSpace: 'nowrap', textAlign: 'center' }}>
                             {diaOp !== null ? (
                               <span
                                 className="anomalias-dia-op-badge"
@@ -966,27 +981,23 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                                 D{diaOp}
                               </span>
                             ) : (
-                              <span
-                                style={{ color: '#586069', fontSize: 12 }}
-                                title="Sem data de 1ª postagem cadastrada para calcular o dia da operação"
-                              >
-                                —
-                              </span>
+                              <span style={{ color: '#484F58', fontSize: 11 }}>—</span>
                             )}
                           </td>
 
-                          {/* 2. DATA DA COLETA */}
-                          <td style={{ whiteSpace: 'nowrap', color: '#8B949E', fontSize: 12 }}>
+                          {/* 2. Data Coleta */}
+                          <td style={{ fontSize: 12, color: '#8B949E', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
                             {formatDateTimeBR(item.data_coleta)}
                           </td>
 
-                          {/* 3. SEGUIDORES */}
-                          <td style={{ fontWeight: 700, color: 'white', fontFamily: 'monospace' }}>
+                          {/* 3. Seguidores */}
+                          <td style={{ textAlign: 'right', fontWeight: 700, color: 'white', fontFamily: 'monospace' }}>
                             {item.seguidores ? item.seguidores.toLocaleString('pt-BR') : '—'}
                           </td>
 
-                          {/* 4. ΔS (24h / Média Diária em Dias em Branco) */}
+                          {/* 4. ΔS (Ganho) */}
                           <td style={{
+                            textAlign: 'right',
                             fontWeight: 800,
                             fontFamily: 'monospace',
                             color: item.delta_s > 0 ? '#00FFC8' : item.delta_s < 0 ? '#FF007A' : '#8B949E'
@@ -996,16 +1007,11 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                               <div
                                 style={{
                                   fontSize: 10,
-                                  fontWeight: 700,
-                                  color: item.media_diaria_delta_s && item.media_diaria_delta_s > 0 ? '#00F0FF' : '#8B949E',
-                                  marginTop: 2,
-                                  background: 'rgba(0, 240, 255, 0.12)',
-                                  border: '1px solid rgba(0, 240, 255, 0.3)',
-                                  borderRadius: 4,
-                                  padding: '1px 5px',
-                                  display: 'inline-block'
+                                  fontWeight: 600,
+                                  color: '#8B949E',
+                                  marginTop: 2
                                 }}
-                                title={`Variação acumulada em ${item.dias_intervalo} dias sem coleta. Média diária: ${formatDelta(item.media_diaria_delta_s || 0)}/dia.`}
+                                title={`Média diária dividida em ${item.dias_intervalo} dias de intervalo`}
                               >
                                 ~{formatDelta(item.media_diaria_delta_s || 0)}/dia ({item.dias_intervalo}d)
                               </div>
@@ -1014,24 +1020,12 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
 
                           {/* 5. %ΔS */}
                           <td style={{
+                            textAlign: 'right',
                             fontWeight: 800,
                             fontFamily: 'monospace',
                             color: item.pct_delta_s >= 25 ? '#FF4444' : (item.pct_delta_s > 2.0 && item.delta_s > 10) ? '#FFB800' : '#8B949E'
                           }}>
                             <div>{item.pct_delta_s > 0 ? '+' : ''}{item.pct_delta_s}%</div>
-                            {item.dias_intervalo && item.dias_intervalo > 1 ? (
-                              <div
-                                style={{
-                                  fontSize: 10,
-                                  fontWeight: 600,
-                                  color: '#8B949E',
-                                  marginTop: 2
-                                }}
-                                title={`Média diária percentual dividida em ${item.dias_intervalo} dias`}
-                              >
-                                ~{item.pct_media_diaria_delta_s && item.pct_media_diaria_delta_s > 0 ? '+' : ''}{item.pct_media_diaria_delta_s}%/dia
-                              </div>
-                            ) : null}
                           </td>
 
                           {/* 6. ΔPosts */}
@@ -1050,11 +1044,33 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                                 ))}
                               </div>
                             ) : (
-                              <span style={{ color: '#586069', fontSize: 11 }}>Normal</span>
+                              <span style={{ color: '#484F58', fontSize: 11 }}>Normal</span>
                             )}
                           </td>
 
-                          {/* 8. SELETOR DE TIPO_JANELA */}
+                          {/* 8. POST NA JANELA (AUDITORIA SOB DEMANDA) */}
+                          <td style={{ textAlign: 'center' }}>
+                            <button
+                              onClick={() => handleBuscarViral(item, false)}
+                              disabled={viralSearchingId === item.id || isActioning}
+                              className="anomalias-viral-btn"
+                              title="Buscar publicação viral lançada em até 72h desta coleta"
+                            >
+                              {viralSearchingId === item.id ? (
+                                <>
+                                  <RefreshCw size={12} className="anomalias-spin" />
+                                  <span>Buscando...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Sparkles size={12} />
+                                  <span>Auditar Post</span>
+                                </>
+                              )}
+                            </button>
+                          </td>
+
+                          {/* 9. CLASSIFICAÇÃO (TIPO DE JANELA) */}
                           <td>
                             <select
                               value={item.tipo_janela}
@@ -1074,30 +1090,7 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                             </select>
                           </td>
 
-                          {/* 9. BOTÃO DE BUSCA DE POST VIRAL (APENAS PARA CLASSIFICAÇÃO VIRAL) */}
-                          <td style={{ textAlign: 'center' }}>
-                            {item.tipo_janela === 'VIRAL_ORGANICO' ? (
-                              <button
-                                onClick={() => handleBuscarViral(item)}
-                                disabled={viralSearchingId === item.id || isActioning}
-                                className="anomalias-viral-btn"
-                                title="Buscar publicação viral lançada em até 48h anteriores a esta coleta"
-                              >
-                                {viralSearchingId === item.id ? (
-                                  <RefreshCw size={12} className="anomalias-spin" />
-                                ) : (
-                                  <Sparkles size={12} />
-                                )}
-                                <span>{viralSearchingId === item.id ? 'Buscando...' : '🔍 Buscar Viral'}</span>
-                              </button>
-                            ) : (
-                              <span style={{ color: '#484F58', fontSize: 12 }} title="Classifique como VIRAL_ORGANICO para habilitar a busca do post">
-                                —
-                              </span>
-                            )}
-                          </td>
-
-                          {/* 10. STATUS DE VALIDAÇÃO (CLICÁVEL) */}
+                          {/* 10. STATUS DE REVISÃO */}
                           <td style={{ textAlign: 'center' }}>
                             <button
                               onClick={() => handleToggleRevisado(item.id, item.revisado_manualmente)}
@@ -1111,9 +1104,7 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                                   <span>Validado</span>
                                 </>
                               ) : (
-                                <>
-                                  <span>⚠️ Pendente</span>
-                                </>
+                                <span>⚠️ Pendente</span>
                               )}
                             </button>
                           </td>

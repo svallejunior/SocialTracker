@@ -1578,6 +1578,16 @@ export default function Dashboard() {
           const firstActive = enrichedProfiles.find((p: any) => p.exibir !== 0);
           setSelectedProfile(firstActive ? firstActive.username : enrichedProfiles[0].username);
         }
+
+        // Atualiza contagem global de anomalias/pendências de validação do Histórico da Conta
+        fetch('/api/anomalias')
+          .then(r => r.json())
+          .then(anomJson => {
+            if (anomJson?.success && anomJson.stats?.pendentes_validacao !== undefined) {
+              setAnomaliasCount(anomJson.stats.pendentes_validacao);
+            }
+          })
+          .catch(() => {});
       } else {
         setError(json.error || "Falha ao ler dados do SQLite");
       }
