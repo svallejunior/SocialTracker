@@ -1484,24 +1484,95 @@ export default function Dashboard() {
           };
         });
 
+        const fHistory = json.followersHistory || {};
+
         const enrichedProfiles = rawProfiles.map((prof: any) => {
           const u = (prof.username || '').toLowerCase();
           const profPosts = enrichedPosts.filter((p: any) => (p.username || '').toLowerCase() === u);
+          const uFHist = fHistory[u] || [];
+
+          // Cálculo de novos seguidores nas últimas 24h / coleta anterior
+          let novosSeguidores24h = 0;
+          if (uFHist.length >= 2) {
+            const lastSeg = Number(uFHist[uFHist.length - 1]?.total_seguidores) || 0;
+            const prevSeg = Number(uFHist[uFHist.length - 2]?.total_seguidores) || 0;
+            novosSeguidores24h = lastSeg - prevSeg;
+          }
+
+          // Cálculo real de dias de base
+          const dataInicioStr = prof.primeira_postagem || prof.inicio_monitoramento || prof.criado_em;
+          const dataFimStr = prof.data_coleta || (uFHist.length > 0 ? uFHist[uFHist.length - 1].data : null) || new Date().toISOString();
+          let diaMonitoramento = 1;
+          if (dataInicioStr) {
+            try {
+              const inicio = new Date(dataInicioStr.split(' ')[0].split('T')[0] + 'T00:00:00');
+              const fim = new Date(dataFimStr.split(' ')[0].split('T')[0] + 'T00:00:00');
+              if (!isNaN(inicio.getTime()) && !isNaN(fim.getTime())) {
+                const diff = Math.floor((fim.getTime() - inicio.getTime()) / 86400000);
+                diaMonitoramento = Math.max(1, diff + 1);
+              }
+            } catch {
+              diaMonitoramento = 1;
+            }
+          }
+
+          // Posts virais e médias
           let postMaisViral: any = null;
+          const viralPosts = profPosts.filter((p: any) => p.performanceMultiplier >= 1.8 || p.viralStatus === 'Viralizando');
           if (profPosts.length > 0) {
             const sortedByPerf = [...profPosts].sort((a, b) => b.performanceMultiplier - a.performanceMultiplier);
             postMaisViral = { ...sortedByPerf[0] };
             postMaisViral.viralStatus = postMaisViral.performanceMultiplier >= 1.8 ? 'Viralizando' : 'Normal';
           }
+
+          // Timestamp da postagem viral mais recente
+          let latestViralTimestamp = 0;
+          if (viralPosts.length > 0) {
+            latestViralTimestamp = Math.max(...viralPosts.map((p: any) => new Date(p.data_postagem || 0).getTime()));
+          } else if (postMaisViral && postMaisViral.data_postagem) {
+            latestViralTimestamp = new Date(postMaisViral.data_postagem).getTime();
+          }
+
+          // Média de engajamento dos posts virais
+          let mediaPostsVirais = 0;
+          if (viralPosts.length > 0) {
+            const somaViral = viralPosts.reduce((acc: number, p: any) => acc + (Number(p.likes) || 0) + (Number(p.comentarios) || 0), 0);
+            mediaPostsVirais = Math.round(somaViral / viralPosts.length);
+          } else if (postMaisViral) {
+            mediaPostsVirais = (Number(postMaisViral.likes) || 0) + (Number(postMaisViral.comentarios) || 0);
+          }
+
+          // Média histórica da conta
+          const mediaHistoricaConta = userAvgEng[u] || 0;
+
+          // Nível de confiança baseado no tempo e quantidade de dados
+          let confiancaTexto = 'em maturação';
+          let confiancaCor = '#8B949E';
+          if (diaMonitoramento >= 14 && profPosts.length >= 5) {
+            confiancaTexto = 'confiança alta';
+            confiancaCor = '#10B981';
+          } else if (diaMonitoramento >= 7 && profPosts.length >= 2) {
+            confiancaTexto = 'confiança média';
+            confiancaCor = '#F59E0B';
+          }
+
           return {
             ...prof,
-            postMaisViral
+            postMaisViral,
+            viralPosts,
+            mediaPostsVirais,
+            mediaHistoricaConta,
+            latestViralTimestamp,
+            diaMonitoramento,
+            novosSeguidores24h,
+            confiancaTexto,
+            confiancaCor
           };
         });
 
         setProfiles(enrichedProfiles);
         setPosts(enrichedPosts);
-        setFollowersHistory(json.followersHistory || {});
+        setFollowersHistory(fHistory);
 
         if (enrichedProfiles.length > 0) {
           const firstActive = enrichedProfiles.find((p: any) => p.exibir !== 0);
@@ -1532,6 +1603,7 @@ export default function Dashboard() {
 
   const [ingestingProfile, setIngestingProfile] = useState<string | null>(null);
   const [ingestingAll, setIngestingAll] = useState(false);
+  const [ingestingMeta, setIngestingMeta] = useState(false);
 
   async function handleRunIngestion(username?: string) {
     if (username) {
@@ -1571,6 +1643,32 @@ export default function Dashboard() {
       }
     }
   }
+
+  async function handleRunMetaIngestion() {
+    setIngestingMeta(true);
+    try {
+      const res = await fetch('/api/meta-ingestion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      const json = await res.json();
+      if (json.success) {
+        fetchControle();
+        fetchData();
+        alert('✅ Atualização via Meta API concluída com sucesso!');
+      } else if (json.warning) {
+        alert(`⚠️ ${json.message || 'Nenhuma conta Meta configurada encontrada.'}`);
+      } else {
+        alert(`❌ Erro na atualização Meta: ${json.error || 'Erro desconhecido'}`);
+      }
+    } catch (e: any) {
+      alert(`Erro na requisição: ${e.message}`);
+    } finally {
+      setIngestingMeta(false);
+    }
+  }
+
   const USD_BRL = 5.10; // Atualize conforme necessário
   async function fetchControle() {
     setControleLoading(true);
@@ -3340,7 +3438,23 @@ export default function Dashboard() {
           </div>
 
           <div className="cards-grid">
-            {[...profiles].filter(p => p.exibir !== 0).sort((a, b) => (b.meu_perfil || 0) - (a.meu_perfil || 0)).map(perfil => {
+            {[...profiles]
+              .filter(p => p.exibir !== 0)
+              .sort((a, b) => {
+                const isMeA = Number(a.meu_perfil) === 1 ? 1 : 0;
+                const isMeB = Number(b.meu_perfil) === 1 ? 1 : 0;
+                if (isMeA !== isMeB) {
+                  return isMeB - isMeA; // 1º Meus perfis
+                }
+                // Depois o que estiver com a última postagem viralizada e assim por diante
+                const dateA = a.latestViralTimestamp || 0;
+                const dateB = b.latestViralTimestamp || 0;
+                if (dateB !== dateA) {
+                  return dateB - dateA;
+                }
+                return (b.seguidores || 0) - (a.seguidores || 0);
+              })
+              .map(perfil => {
               // Pegar o post mais viral deste perfil
               const topPost = perfil.postMaisViral;
               const hasViral = topPost && topPost.viralStatus === 'Viralizando';
@@ -3379,23 +3493,12 @@ export default function Dashboard() {
                       />
                       <div className="user-handle-box">
                         <span className="user-handle">@{perfil.username}</span>
-                        <span className="platform-tag">instagram</span>
                       </div>
-                      <button
-                        className="star-btn"
-                        title={perfil.meuPerfil ? "Meu perfil" : "Marcar como meu perfil"}
-                        onClick={async () => {
-                          const novoValor = perfil.meuPerfil ? 0 : 1;
-                          await fetch('/api/data', {
-                            method: 'PUT',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ username: perfil.username, meuPerfil: novoValor })
-                          });
-                          fetchData(); // recarrega os dados
-                        }}
-                      >
-                        {perfil.meuPerfil ? '⭐' : '☆'}
-                      </button>
+                      {Number(perfil.meu_perfil) === 1 && (
+                        <span title="Meu perfil" style={{ fontSize: '16px', marginLeft: '4px', cursor: 'default', userSelect: 'none' }}>
+                          ⭐
+                        </span>
+                      )}
                     </div>
                     <div className="badges-group">
                       {perfil.status === 'INATIVO' && (
@@ -3440,12 +3543,12 @@ export default function Dashboard() {
                       <span className="metric-sub green">vs. coleta anterior</span>
                     </div>
                     <div className="metric-box">
-                      <span className="metric-lbl">❤️ Engajamento Post</span>
+                      <span className="metric-lbl">🔥 Média Posts Virais</span>
                       <span className="metric-val">
-                        {topPost ? formatNumber(topPost.likes + topPost.comentarios) : '0'}
+                        {perfil.mediaPostsVirais > 0 ? formatNumber(perfil.mediaPostsVirais) : (topPost ? formatNumber(topPost.likes + topPost.comentarios) : '0')}
                       </span>
                       <span className="metric-sub">
-                        1ª cap: {topPost ? formatNumber(Math.round((topPost.likes + topPost.comentarios) / (topPost.performanceMultiplier || 1))) : '0'}
+                        Média conta: {formatNumber(Math.round(perfil.mediaHistoricaConta || 0))}
                       </span>
                     </div>
                     <div className="metric-box">
@@ -3560,20 +3663,22 @@ export default function Dashboard() {
                   </div>
 
                   {/* Rodapé do Card */}
-                  <div className="card-footer">
-                    <span>confiança alta — {perfil.diaMonitoramento}d de base</span>
-                    {topPost ? (
+                  <div className="card-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: perfil.confiancaCor || 'var(--text-muted)', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', textTransform: 'capitalize' }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: perfil.confiancaCor || '#8B949E', display: 'inline-block' }} />
+                      {perfil.confiancaTexto} — {perfil.diaMonitoramento}d de base
+                    </span>
+                    {topPost && (topPost.permalink || topPost.shortcode || topPost.post_id) ? (
                       <a
                         href={getInstagramPostUrl(topPost)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="post-link"
+                        style={{ textTransform: 'uppercase', fontWeight: 800, fontSize: '11px', letterSpacing: '0.5px' }}
                       >
-                        ver post <ExternalLink size={12} />
+                        VER POST <ExternalLink size={12} />
                       </a>
-                    ) : (
-                      <span className="post-link" style={{ opacity: 0.5, cursor: 'not-allowed' }}>ver post</span>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               );
@@ -3603,9 +3708,18 @@ export default function Dashboard() {
                 onChange={(e) => setSelectedProfile(e.target.value)}
                 style={{ margin: 0 }}
               >
-                {profiles.filter(p => p.exibir !== 0).map(p => (
+                {profiles
+                  .filter(p => p.exibir !== 0)
+                  .slice()
+                  .sort((a, b) => {
+                    const starA = (a.meu_perfil === 1 || a.meu_perfil === true) ? 1 : 0;
+                    const starB = (b.meu_perfil === 1 || b.meu_perfil === true) ? 1 : 0;
+                    if (starB !== starA) return starB - starA;
+                    return a.username.localeCompare(b.username);
+                  })
+                  .map(p => (
                   <option key={p.username} value={p.username}>
-                    @{p.username}{p.status === 'INATIVO' ? ' (inativo)' : ''}
+                    {(p.meu_perfil === 1 || p.meu_perfil === true) ? '⭐ ' : ''}{p.username}{p.status === 'INATIVO' ? ' (inativo)' : ''}
                   </option>
                 ))}
               </select>
@@ -3863,12 +3977,18 @@ export default function Dashboard() {
                 } else if (!isDead && lastVal > 0) {
                   seg = lastVal;
                 }
-
-                if (seg > 0 || (primeiraDia && !isDead)) {
-                  const finalVal = seg > 0 ? seg : lastVal;
-                  // Mantém apenas o maior valor do dia (o registro mais tardio já foi deduplicado na API, mas por garantia)
-                  if (dadosPorDia[dia] === undefined || finalVal > dadosPorDia[dia]) {
-                    dadosPorDia[dia] = finalVal;
+                // Perfil morto: só registra dias com coleta real (seg > 0)
+                // Perfil ativo: usa forward-fill para dias sem coleta
+                if (isDead) {
+                  if (seg > 0) {
+                    dadosPorDia[dia] = seg;
+                  }
+                } else {
+                  if (seg > 0 || primeiraDia) {
+                    const finalVal = seg > 0 ? seg : lastVal;
+                    if (dadosPorDia[dia] === undefined || finalVal > dadosPorDia[dia]) {
+                      dadosPorDia[dia] = finalVal;
+                    }
                   }
                 }
               }
@@ -3898,12 +4018,15 @@ export default function Dashboard() {
                 // Não plota pontos antes da primeira leitura do perfil
                 if (dia < info.primeiraDia) return;
 
+                // Perfil morto: para de plotar após o último dia com dados reais
+                if (info.isDead && info.ultimaDiaComDados && dia > info.ultimaDiaComDados) return;
+
                 let valAtual = info.dadosPorDia[dia];
 
                 if (valAtual !== undefined && valAtual > 0) {
                   ultimoValorRastreado[p.username] = valAtual;
-                } else {
-                  // Forward-fill: assume o último valor válido anterior
+                } else if (!info.isDead) {
+                  // Forward-fill apenas para perfis ativos
                   valAtual = ultimoValorRastreado[p.username];
                 }
 
@@ -4401,11 +4524,68 @@ export default function Dashboard() {
       ==================================================== */}
       {activeTab === 'controle' && (
         <div>
-          <div style={{ marginBottom: 24 }}>
-            <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 6 }}>Minhas Operações</h1>
-            <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
-              Gestão das minhas operações.
-            </p>
+          <div style={{ marginBottom: 24, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+            <div>
+              <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 6 }}>Minhas Operações</h1>
+              <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
+                Gestão das minhas operações.
+              </p>
+            </div>
+            <button
+              onClick={handleRunMetaIngestion}
+              disabled={ingestingMeta}
+              title="Atualiza seguidores, posts e métricas das operações que possuem META ID configurado, usando exclusivamente a API oficial da Meta"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '10px 20px',
+                borderRadius: 8,
+                border: '1px solid rgba(0, 149, 246, 0.5)',
+                background: ingestingMeta
+                  ? 'rgba(0, 149, 246, 0.08)'
+                  : 'linear-gradient(135deg, rgba(0, 149, 246, 0.15), rgba(113, 0, 226, 0.15))',
+                color: ingestingMeta ? '#8B949E' : '#0095F6',
+                cursor: ingestingMeta ? 'not-allowed' : 'pointer',
+                fontSize: 13,
+                fontWeight: 700,
+                whiteSpace: 'nowrap',
+                transition: 'all 0.2s ease',
+                boxShadow: ingestingMeta ? 'none' : '0 0 16px rgba(0, 149, 246, 0.2)',
+              }}
+              onMouseEnter={e => {
+                if (!ingestingMeta) {
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = '#0095F6';
+                  (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 20px rgba(0, 149, 246, 0.4)';
+                }
+              }}
+              onMouseLeave={e => {
+                if (!ingestingMeta) {
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(0, 149, 246, 0.5)';
+                  (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 16px rgba(0, 149, 246, 0.2)';
+                }
+              }}
+            >
+              {ingestingMeta ? (
+                <>
+                  <div style={{
+                    width: 14, height: 14, borderRadius: '50%',
+                    border: '2px solid #8B949E',
+                    borderTopColor: '#0095F6',
+                    animation: 'spin 0.8s linear infinite',
+                    flexShrink: 0
+                  }} />
+                  Atualizando Meta API...
+                </>
+              ) : (
+                <>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+                  </svg>
+                  Atualizar via Meta API
+                </>
+              )}
+            </button>
           </div>
 
           {controleLoading ? (

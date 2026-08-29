@@ -136,6 +136,11 @@ export async function GET(req: NextRequest) {
       const uHistory = historyByUser[p.username] || [];
 
       let pDate = parseDateOnly(p.primeira_postagem);
+      // Se a data configurada for no futuro (erro de digitação de ano), usa a primeira coleta disponível
+      if (pDate && pDate.getTime() > today.getTime()) {
+        if (uHistory.length > 0) pDate = uHistory[0].date;
+        else pDate = today;
+      }
       if (!pDate) {
         if (uHistory.length > 0) pDate = uHistory[0].date;
       }

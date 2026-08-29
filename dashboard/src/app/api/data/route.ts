@@ -99,9 +99,28 @@ export async function GET() {
       "SELECT * FROM perfis_historico ORDER BY data_coleta ASC, id ASC"
     );
 
-    const posts = await db.all(
+    const rawPosts = await db.all(
       "SELECT * FROM posts_historico ORDER BY data_postagem DESC"
     );
+
+    const posts = rawPosts.map((p: any) => {
+      let formatoPadrao = p.formato || 'Imagem';
+      const fUpper = (p.formato || '').toUpperCase();
+      const mptUpper = (p.media_product_type || '').toUpperCase();
+
+      if (fUpper === 'VIDEO' || fUpper === 'REELS' || mptUpper === 'REELS') {
+        formatoPadrao = 'Reels';
+      } else if (fUpper === 'CAROUSEL_ALBUM' || fUpper === 'CARROSSEL' || fUpper === 'ALBUM') {
+        formatoPadrao = 'Carrossel';
+      } else if (fUpper === 'IMAGE' || fUpper === 'IMAGEM') {
+        formatoPadrao = 'Imagem';
+      }
+
+      return {
+        ...p,
+        formato: formatoPadrao
+      };
+    });
 
     // Mapeia status de cada perfil para saber se morreu/inativo
     const statusPerfilMap: Record<string, boolean> = {};

@@ -1725,17 +1725,40 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
               >
                 {/* 1. Header do Card: Foto de Perfil + Username + Posição + ID Numérico */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <AvatarModelo
-                    src={perfil.foto_url || perfil.foto_perfil || null}
-                    username={perfil.username}
-                    size={48}
-                    comentariosPendentes={perfil.comentarios_pendentes || 0}
-                    mensagensPendentes={perfil.mensagens_pendentes || 0}
-                    temPendencias={perfil.tem_pendencias || false}
-                    showCountInBadge={true}
-                    borderColor="#30363D"
-                    imageStyle={{ border: '2px solid #30363D', boxShadow: '0 2px 8px rgba(0,0,0,0.4)' }}
-                  />
+                  <a
+                    href={`https://www.instagram.com/${(perfil.username || '').replace(/^@/, '')}/`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={e => e.stopPropagation()}
+                    title={`Abrir @${perfil.username} no Instagram`}
+                    style={{
+                      display: 'inline-flex',
+                      textDecoration: 'none',
+                      cursor: 'pointer',
+                      transition: 'transform 0.15s ease, opacity 0.15s ease',
+                      flexShrink: 0
+                    }}
+                    onMouseEnter={e => {
+                      (e.currentTarget as HTMLElement).style.transform = 'scale(1.05)';
+                      (e.currentTarget as HTMLElement).style.opacity = '0.9';
+                    }}
+                    onMouseLeave={e => {
+                      (e.currentTarget as HTMLElement).style.transform = 'scale(1)';
+                      (e.currentTarget as HTMLElement).style.opacity = '1';
+                    }}
+                  >
+                    <AvatarModelo
+                      src={perfil.foto_url || perfil.foto_perfil || null}
+                      username={perfil.username}
+                      size={48}
+                      comentariosPendentes={perfil.comentarios_pendentes || 0}
+                      mensagensPendentes={perfil.mensagens_pendentes || 0}
+                      temPendencias={perfil.tem_pendencias || false}
+                      showCountInBadge={true}
+                      borderColor="#30363D"
+                      imageStyle={{ border: '2px solid #30363D', boxShadow: '0 2px 8px rgba(0,0,0,0.4)' }}
+                    />
+                  </a>
 
                   <div style={{ overflow: 'hidden', flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
@@ -2367,6 +2390,9 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                       username={perfil.username}
                       initialData={currentEditing}
                       onSave={handleSalvarAgendamento}
+                      onSelectDate={(d) => {
+                        setSelectedDateMap(prev => ({ ...prev, [perfil.username]: d }));
+                      }}
                       onCancel={() => {
                         setFormOpenMap(prev => ({ ...prev, [perfil.username]: false }));
                         setEditingAgendamentoMap(prev => ({ ...prev, [perfil.username]: null }));
@@ -2648,14 +2674,25 @@ interface CalendarioAgendamentosProps {
 
 function CalendarioAgendamentos({ agendamentos, publicacoes = [], selectedDate, onSelectDate }: CalendarioAgendamentosProps) {
   const [dataVisualizacao, setDataVisualizacao] = useState(() => {
-    const hoje = new Date();
-    return new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    const base = selectedDate || new Date();
+    return new Date(base.getFullYear(), base.getMonth(), 1);
   });
   const [selectedDayInfo, setSelectedDayInfo] = useState<{
     dateStr: string;
     posts: Agendamento[];
     publicados: Publicacao[];
   } | null>(null);
+
+  // Se a data selecionada mudar para um período fora da visão do calendário, muda a visualização para o mês/ano solicitado
+  useEffect(() => {
+    if (selectedDate) {
+      const selMes = selectedDate.getMonth();
+      const selAno = selectedDate.getFullYear();
+      if (selMes !== dataVisualizacao.getMonth() || selAno !== dataVisualizacao.getFullYear()) {
+        setDataVisualizacao(new Date(selAno, selMes, 1));
+      }
+    }
+  }, [selectedDate]);
 
   const mesAtual = dataVisualizacao.getMonth();
   const anoAtual = dataVisualizacao.getFullYear();
@@ -2946,7 +2983,7 @@ function CalendarioAgendamentos({ agendamentos, publicacoes = [], selectedDate, 
                   cursor: 'pointer',
                   opacity: c.isOutroMes ? 0.25 : 1,
                   background: isSelected
-                    ? 'rgba(56, 139, 253, 0.45)'
+                    ? 'rgba(248, 81, 73, 0.22)'
                     : isPassado && temPublicacaoReal
                       ? 'rgba(46, 160, 67, 0.18)'
                       : isPassado && temAgendamento
@@ -2954,10 +2991,10 @@ function CalendarioAgendamentos({ agendamentos, publicacoes = [], selectedDate, 
                         : temAgendamento
                           ? 'rgba(56, 139, 253, 0.14)'
                           : 'transparent',
-                  border: isHoje
-                    ? '1px solid #388BFD'
-                    : isSelected
-                      ? '1px solid #58A6FF'
+                  border: isSelected
+                    ? '2px solid #F85149'
+                    : isHoje
+                      ? '1px solid #388BFD'
                       : isPassado && temPublicacaoReal
                         ? '1px solid rgba(46, 160, 67, 0.45)'
                         : isPassado && temAgendamento
@@ -2965,10 +3002,13 @@ function CalendarioAgendamentos({ agendamentos, publicacoes = [], selectedDate, 
                           : temAgendamento
                             ? '1px solid rgba(56, 139, 253, 0.3)'
                             : '1px solid transparent',
-                  color: isHoje
-                    ? '#58A6FF'
-                    : isSelected
-                      ? '#FFFFFF'
+                  boxShadow: isSelected
+                    ? '0 0 10px rgba(248, 81, 73, 0.65)'
+                    : 'none',
+                  color: isSelected
+                    ? '#FF7B72'
+                    : isHoje
+                      ? '#58A6FF'
                       : isPassado && temPublicacaoReal
                         ? '#7EE787'
                         : isPassado && temAgendamento
@@ -3068,6 +3108,7 @@ interface FormularioAgendamentoProps {
   initialData?: Agendamento | null;
   onSave: (data: Partial<Agendamento>) => Promise<void>;
   onCancel: () => void;
+  onSelectDate?: (date: Date) => void;
 }
 
 function FormularioAgendamento({
@@ -3075,7 +3116,8 @@ function FormularioAgendamento({
   metaAccountId,
   initialData,
   onSave,
-  onCancel
+  onCancel,
+  onSelectDate
 }: FormularioAgendamentoProps) {
   const [tipoPostagem, setTipoPostagem] = useState<'FEED' | 'REELS' | 'STORIES'>(
     initialData?.tipo_postagem || 'REELS'
@@ -3096,11 +3138,11 @@ function FormularioAgendamento({
     return 'DATA_ESPECIFICA';
   });
 
-  // Campos de Data Específica
+  // Campos de Data Específica (calculado sempre em GMT-3 local)
   const [dataEspecifica, setDataEspecifica] = useState<string>(() => {
     if (initialData?.data_especifica) return initialData.data_especifica;
     if (initialData?.dias_selecionados?.[0]?.includes('-')) return initialData.dias_selecionados[0];
-    return new Date().toISOString().split('T')[0];
+    return dataIsoLocal(new Date());
   });
 
   // Campos de Recorrência
@@ -3111,14 +3153,25 @@ function FormularioAgendamento({
   });
   const [dataInicio, setDataInicio] = useState<string>(() => {
     if (initialData?.data_inicio) return initialData.data_inicio;
-    return new Date().toISOString().split('T')[0];
+    return dataIsoLocal(new Date());
   });
   const [dataFim, setDataFim] = useState<string>(() => {
     if (initialData?.data_fim) return initialData.data_fim;
     const d = new Date();
     d.setDate(d.getDate() + 30);
-    return d.toISOString().split('T')[0];
+    return dataIsoLocal(d);
   });
+
+  // Notifica mudança de data para destacar e mover o calendário para a data solicitada
+  useEffect(() => {
+    if (tipoAgendamento === 'DATA_ESPECIFICA' && dataEspecifica && /^\d{4}-\d{2}-\d{2}$/.test(dataEspecifica)) {
+      const [y, m, d] = dataEspecifica.split('-').map(Number);
+      const dt = new Date(y, m - 1, d);
+      if (!isNaN(dt.getTime()) && onSelectDate) {
+        onSelectDate(dt);
+      }
+    }
+  }, [dataEspecifica, tipoAgendamento]);
   const [diasSelecionados, setDiasSelecionados] = useState<string[]>(() => {
     if (initialData?.dias_selecionados && initialData.dias_selecionados.length > 0) {
       const validWeekDays = initialData.dias_selecionados.filter(d =>
@@ -3593,12 +3646,13 @@ function FormularioAgendamento({
               <input
                 type="date"
                 value={dataEspecifica}
-                min={new Date().toISOString().split('T')[0]}
+                min={dataIsoLocal(new Date())}
                 onChange={e => setDataEspecifica(e.target.value)}
                 style={{
                   width: '100%',
                   background: '#161B22',
-                  border: '1px solid #30363D',
+                  border: '2px solid #F85149',
+                  boxShadow: '0 0 8px rgba(248, 81, 73, 0.45)',
                   borderRadius: 6,
                   color: 'white',
                   padding: '7px 10px',

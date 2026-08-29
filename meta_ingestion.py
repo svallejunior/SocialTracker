@@ -371,8 +371,16 @@ def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str):
         # Normaliza timestamp ISO 8601 (ex: 2026-08-26T22:34:01+0000 -> 2026-08-26 22:34:01)
         data_postagem = raw_ts.replace("T", " ").split("+")[0].strip() if raw_ts else data_carga_str
         
-        formato = p.get("media_type", "IMAGE")
-        product_type = p.get("media_product_type", "FEED")
+        raw_formato = (p.get("media_type") or "IMAGE").upper()
+        product_type = (p.get("media_product_type") or "FEED").upper()
+
+        # Mapeia formato para os padrões do SocialTracker
+        if raw_formato == "VIDEO" or product_type == "REELS":
+            formato = "Reels"
+        elif raw_formato == "CAROUSEL_ALBUM":
+            formato = "Carrossel"
+        else:
+            formato = "Imagem"
         legenda = p.get("caption", "")
         permalink = p.get("permalink", "")
         shortcode = p.get("shortcode") or (permalink.rstrip("/").split("/")[-1] if permalink else "")

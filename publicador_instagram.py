@@ -1746,16 +1746,35 @@ def executar_agendamentos_pendentes(agendamento_id=None, force=False, dry_run=Fa
             # Rotina recorrente não é consumida: volta para AGENDADO para as próximas
             # ocorrências. Só data específica termina em PUBLICADO.
             novo_status = "AGENDADO" if recorrente else "PUBLICADO"
-            conn.execute("""
-                UPDATE automacao_agendamentos SET
-                    status = ?,
-                    meta_media_id = ?,
-                    publicado_em = datetime('now'),
-                    ultima_execucao = datetime('now'),
-                    erro_detalhe = '',
-                    atualizado_em = datetime('now')
-                WHERE id = ?
-            """, (novo_status, str(meta_media_id), ag_id))
+            agora_local = datetime.now()
+            hoje_local_str = agora_local.strftime("%Y-%m-%d")
+            hora_local_str = agora_local.strftime("%H:%M")
+
+            if not recorrente:
+                conn.execute("""
+                    UPDATE automacao_agendamentos SET
+                        status = ?,
+                        meta_media_id = ?,
+                        data_especifica = ?,
+                        hora_fixa = ?,
+                        dias_selecionados = ?,
+                        publicado_em = datetime('now'),
+                        ultima_execucao = datetime('now'),
+                        erro_detalhe = '',
+                        atualizado_em = datetime('now')
+                    WHERE id = ?
+                """, (novo_status, str(meta_media_id), hoje_local_str, hora_local_str, json.dumps([hoje_local_str]), ag_id))
+            else:
+                conn.execute("""
+                    UPDATE automacao_agendamentos SET
+                        status = ?,
+                        meta_media_id = ?,
+                        publicado_em = datetime('now'),
+                        ultima_execucao = datetime('now'),
+                        erro_detalhe = '',
+                        atualizado_em = datetime('now')
+                    WHERE id = ?
+                """, (novo_status, str(meta_media_id), ag_id))
             conn.commit()
 
             resultados.append({

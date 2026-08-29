@@ -44,7 +44,7 @@ const PALETA_CORES_MEUS_PERFIS = [
 ];
 
 export default function GraficoProjecao({ meusPerfis, todosPerfis = [] }: GraficoProjecaoProps) {
-  const [tipoTrafego, setTipoTrafego] = useState<'GERAL' | 'ORGANICO' | 'ADS' | 'NA'>('GERAL');
+  const [tipoTrafego, setTipoTrafego] = useState<'GERAL' | 'ORGANICO' | 'ADS' | 'NA'>('ORGANICO');
   const [modoMedida, setModoMedida] = useState<'GANHO_ABSOLUTO' | 'TOTAL_ABSOLUTO' | 'PERCENTUAL'>('GANHO_ABSOLUTO');
   const [selectedUsername, setSelectedUsername] = useState<string>('TODOS');
   const [data, setData] = useState<any[]>([]);
@@ -63,7 +63,7 @@ export default function GraficoProjecao({ meusPerfis, todosPerfis = [] }: Grafic
   const [refAreaLeft, setRefAreaLeft] = useState<string | null>(null);
   const [refAreaRight, setRefAreaRight] = useState<string | null>(null);
   const [isSelectingZoom, setIsSelectingZoom] = useState<boolean>(false);
-  const [showBrush, setShowBrush] = useState<boolean>(false);
+  const [showBrush, setShowBrush] = useState<boolean>(true);
 
   // Dados fatiados pelo Zoom atual (para o gráfico e o eixo Y auto-escalarem dinamicamente)
   const visibleData = useMemo(() => {
@@ -254,9 +254,22 @@ export default function GraficoProjecao({ meusPerfis, todosPerfis = [] }: Grafic
                 modoMedida === 'PERCENTUAL' ? 'Crescimento % Real' : 'Ganho Absoluto Real'
               }):
             </div>
-            {meusPerfisRetornados
-              .filter(uname => (selectedUsername === 'TODOS' || selectedUsername === uname) && !perfisOcultos.includes(uname))
-              .map((uname, idx) => {
+            {(() => {
+              const filtered = meusPerfisRetornados
+                .filter(uname => (selectedUsername === 'TODOS' || selectedUsername === uname) && !perfisOcultos.includes(uname));
+              // Ordenar por valor decrescente
+              const sorted = [...filtered].sort((a, b) => {
+                const infoA = detalhesMeusPerfis[a];
+                const infoB = detalhesMeusPerfis[b];
+                if (!infoA && !infoB) return 0;
+                if (!infoA) return 1;
+                if (!infoB) return -1;
+                const valA = modoMedida === 'TOTAL_ABSOLUTO' ? infoA.total : (modoMedida === 'PERCENTUAL' ? infoA.pct_ganho : infoA.ganho);
+                const valB = modoMedida === 'TOTAL_ABSOLUTO' ? infoB.total : (modoMedida === 'PERCENTUAL' ? infoB.pct_ganho : infoB.ganho);
+                return (valB ?? 0) - (valA ?? 0);
+              });
+              return sorted.map((uname) => {
+                const idx = meusPerfisRetornados.indexOf(uname);
                 const info = detalhesMeusPerfis[uname];
                 if (!info) return null;
                 const cor = PALETA_CORES_MEUS_PERFIS[idx % PALETA_CORES_MEUS_PERFIS.length];
@@ -291,7 +304,8 @@ export default function GraficoProjecao({ meusPerfis, todosPerfis = [] }: Grafic
                     </span>
                   </div>
                 );
-              })}
+              });
+            })()}
           </div>
         )}
 
