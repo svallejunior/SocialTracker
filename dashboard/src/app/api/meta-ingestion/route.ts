@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
       }, { status: 404 });
     }
 
-    const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+    const pythonCmd = process.env.PYTHON_BIN || (process.platform === 'win32' ? 'python' : 'python3');
 
     const dbPath =
       process.env.DB_PATH && path.isAbsolute(process.env.DB_PATH)

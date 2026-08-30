@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
       ? path.resolve(process.cwd(), '..')
       : process.cwd();
     const scriptPath = path.resolve(rootDir, 'ingestion.py');
-    const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+    const pythonCmd = process.env.PYTHON_BIN || (process.platform === 'win32' ? 'python' : 'python3');
     // DB_PATH sempre absoluto: o processo Python herda o cwd do Next (dashboard/), então um
     // caminho relativo apontaria para um banco vazio dentro de dashboard/.
     const dbPath =

@@ -58,7 +58,10 @@ export async function POST(req: NextRequest) {
     const { id, force, dryRun } = body;
 
     const scriptPath = path.resolve(process.cwd(), '..', 'publicador_instagram.py');
-    const pythonBin = process.env.PYTHON_BIN || 'python';
+    const pythonBin = process.env.PYTHON_BIN || (process.platform === 'win32' ? 'python' : 'python3');
+    const dbPath = process.env.DB_PATH && path.isAbsolute(process.env.DB_PATH)
+      ? process.env.DB_PATH
+      : path.resolve(process.cwd(), '..', 'instagram_tracker.db');
 
     const args = [scriptPath];
     if (id) {
@@ -76,7 +79,7 @@ export async function POST(req: NextRequest) {
         cwd: path.resolve(process.cwd(), '..'),
         env: {
           ...process.env,
-          DB_PATH: path.resolve(process.cwd(), '..', 'instagram_tracker.db'),
+          DB_PATH: dbPath,
           // Sem isso os acentos e emojis do log chegam corrompidos no Windows
           PYTHONIOENCODING: 'utf-8'
         }

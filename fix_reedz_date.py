@@ -1,8 +1,14 @@
 import sqlite3
+import os
 import sys
-sys.stdout.reconfigure(encoding='utf-8')
 
-conn = sqlite3.connect(r'C:\Projetos\SocialTracker\instagram_tracker.db')
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+_raw_db = os.environ.get("DB_PATH", "instagram_tracker.db")
+db_path = _raw_db if os.path.isabs(_raw_db) else os.path.join(BASE_DIR, _raw_db)
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+
+conn = sqlite3.connect(db_path)
 cur = conn.cursor()
 
 # Verificar registro atual

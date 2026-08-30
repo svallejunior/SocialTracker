@@ -96,7 +96,7 @@ export async function GET(req: NextRequest) {
         }
 
         if (fs.existsSync(scriptPath)) {
-          const pyExe = process.platform === 'win32' ? 'python' : 'python3';
+          const pyExe = process.env.PYTHON_BIN || (process.platform === 'win32' ? 'python' : 'python3');
           const rootDir = path.dirname(scriptPath);
           console.log(`[Automacao] Heartbeat com ${diffSec}s — iniciando daemon do publicador.`);
           // --daemon é obrigatório: sem ele cada chamada criava um publicador "one-shot"

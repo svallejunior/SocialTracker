@@ -4,8 +4,10 @@ import pandas as pd
 import plotly.express as px
 
 
-st.set_page_config(page_title="SocialTracker v3.4", page_icon="📈", layout="wide")
-DB_PATH = "C:\\projetos\\socialtracker\\instagram_tracker.db"
+import os
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+_raw_db = os.environ.get("DB_PATH", "instagram_tracker.db")
+DB_PATH = _raw_db if os.path.isabs(_raw_db) else os.path.join(BASE_DIR, _raw_db)
 
 # Estilização CSS Customizada para os Cards de Métricas (Visual Premium)
 st.markdown("""

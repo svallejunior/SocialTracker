@@ -1,6 +1,9 @@
 import sqlite3
+import os
 
-DB_PATH = r"C:\Projetos\SocialTracker\instagram_tracker.db"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+_raw_db = os.environ.get("DB_PATH", "instagram_tracker.db")
+DB_PATH = _raw_db if os.path.isabs(_raw_db) else os.path.join(BASE_DIR, _raw_db)
 
 def calcular_benchmark_dinamico():
     """

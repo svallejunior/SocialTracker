@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
       ? path.resolve(process.cwd(), '..')
       : process.cwd();
     const scriptPath = path.resolve(rootDir, 'buscar_viral.py');
-    const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+    const pythonCmd = process.env.PYTHON_BIN || (process.platform === 'win32' ? 'python' : 'python3');
     const dbPath =
       process.env.DB_PATH && path.isAbsolute(process.env.DB_PATH)
         ? process.env.DB_PATH
