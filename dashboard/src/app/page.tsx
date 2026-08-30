@@ -1608,6 +1608,7 @@ export default function Dashboard() {
   // ── Estados da aba Controle ──────────────────────────────
   const [controleData, setControleData] = useState<any[]>([]);
   const [controleLoading, setControleLoading] = useState(false);
+  const [ultimaMetaExec, setUltimaMetaExec] = useState<string | null>(null);
   const [modalLancamento, setModalLancamento] = useState<{ username: string; tipo: string; } | null>(null);
   const [modalControleEdit, setModalControleEdit] = useState<any | null>(null);
 
@@ -1685,7 +1686,12 @@ export default function Dashboard() {
     try {
       const res = await fetch('/api/controle');
       const json = await res.json();
-      if (json.success) setControleData(json.perfis || []);
+      if (json.success) {
+        setControleData(json.perfis || []);
+        if (json.ultima_execucao_meta) {
+          setUltimaMetaExec(json.ultima_execucao_meta);
+        }
+      }
     } catch (e) {
       console.error("Erro ao carregar controle:", e);
     } finally {
@@ -4541,61 +4547,95 @@ export default function Dashboard() {
                 Gestão das minhas operações.
               </p>
             </div>
-            <button
-              onClick={handleRunMetaIngestion}
-              disabled={ingestingMeta}
-              title="Atualiza seguidores, posts e métricas das operações que possuem META ID configurado, usando exclusivamente a API oficial da Meta"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '10px 20px',
-                borderRadius: 8,
-                border: '1px solid rgba(0, 149, 246, 0.5)',
-                background: ingestingMeta
-                  ? 'rgba(0, 149, 246, 0.08)'
-                  : 'linear-gradient(135deg, rgba(0, 149, 246, 0.15), rgba(113, 0, 226, 0.15))',
-                color: ingestingMeta ? '#8B949E' : '#0095F6',
-                cursor: ingestingMeta ? 'not-allowed' : 'pointer',
-                fontSize: 13,
-                fontWeight: 700,
-                whiteSpace: 'nowrap',
-                transition: 'all 0.2s ease',
-                boxShadow: ingestingMeta ? 'none' : '0 0 16px rgba(0, 149, 246, 0.2)',
-              }}
-              onMouseEnter={e => {
-                if (!ingestingMeta) {
-                  (e.currentTarget as HTMLButtonElement).style.borderColor = '#0095F6';
-                  (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 20px rgba(0, 149, 246, 0.4)';
-                }
-              }}
-              onMouseLeave={e => {
-                if (!ingestingMeta) {
-                  (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(0, 149, 246, 0.5)';
-                  (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 16px rgba(0, 149, 246, 0.2)';
-                }
-              }}
-            >
-              {ingestingMeta ? (
-                <>
-                  <div style={{
-                    width: 14, height: 14, borderRadius: '50%',
-                    border: '2px solid #8B949E',
-                    borderTopColor: '#0095F6',
-                    animation: 'spin 0.8s linear infinite',
-                    flexShrink: 0
-                  }} />
-                  Atualizando Meta API...
-                </>
-              ) : (
-                <>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
-                  </svg>
-                  Atualizar via Meta API
-                </>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+              <button
+                onClick={handleRunMetaIngestion}
+                disabled={ingestingMeta}
+                title="Atualiza seguidores, posts e métricas das operações que possuem META ID configurado, usando exclusivamente a API oficial da Meta"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '10px 20px',
+                  borderRadius: 8,
+                  border: '1px solid rgba(0, 149, 246, 0.5)',
+                  background: ingestingMeta
+                    ? 'rgba(0, 149, 246, 0.08)'
+                    : 'linear-gradient(135deg, rgba(0, 149, 246, 0.15), rgba(113, 0, 226, 0.15))',
+                  color: ingestingMeta ? '#8B949E' : '#0095F6',
+                  cursor: ingestingMeta ? 'not-allowed' : 'pointer',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  whiteSpace: 'nowrap',
+                  transition: 'all 0.2s ease',
+                  boxShadow: ingestingMeta ? 'none' : '0 0 16px rgba(0, 149, 246, 0.2)',
+                }}
+                onMouseEnter={e => {
+                  if (!ingestingMeta) {
+                    (e.currentTarget as HTMLButtonElement).style.borderColor = '#0095F6';
+                    (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 20px rgba(0, 149, 246, 0.4)';
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (!ingestingMeta) {
+                    (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(0, 149, 246, 0.5)';
+                    (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 16px rgba(0, 149, 246, 0.2)';
+                  }
+                }}
+              >
+                {ingestingMeta ? (
+                  <>
+                    <div style={{
+                      width: 14, height: 14, borderRadius: '50%',
+                      border: '2px solid #8B949E',
+                      borderTopColor: '#0095F6',
+                      animation: 'spin 0.8s linear infinite',
+                      flexShrink: 0
+                    }} />
+                    Atualizando Meta API...
+                  </>
+                ) : (
+                  <>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+                    </svg>
+                    Atualizar via Meta API
+                  </>
+                )}
+              </button>
+
+              {ultimaMetaExec && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  fontSize: 11,
+                  color: '#8B949E',
+                  fontWeight: 500,
+                }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#10B981', display: 'inline-block', boxShadow: '0 0 6px #10B981' }} />
+                  <span>
+                    Última execução: <strong style={{ color: '#C9D1D9', fontFamily: 'monospace' }}>
+                      {(() => {
+                        try {
+                          const dateObj = new Date(ultimaMetaExec.includes('T') ? ultimaMetaExec : ultimaMetaExec.replace(' ', 'T'));
+                          if (isNaN(dateObj.getTime())) return ultimaMetaExec;
+                          return dateObj.toLocaleString('pt-BR', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          });
+                        } catch {
+                          return ultimaMetaExec;
+                        }
+                      })()}
+                    </strong>
+                  </span>
+                </div>
               )}
-            </button>
+            </div>
           </div>
 
           {controleLoading ? (

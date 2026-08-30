@@ -145,6 +145,30 @@ export async function GET() {
       // Tabelas podem não ter registros ainda
     }
 
+    // 4.2 Busca a data/hora da última execução da Ingestão da Meta API
+    let ultimaExecucaoMeta: string | null = null;
+    try {
+      const snapMeta = await db.get(`
+        SELECT MAX(data_carga) as max_data
+        FROM posts_metricas_snapshots
+        WHERE data_carga IS NOT NULL
+      `);
+      if (snapMeta?.max_data) {
+        ultimaExecucaoMeta = snapMeta.max_data;
+      } else {
+        const perfMeta = await db.get(`
+          SELECT MAX(data_carga) as max_data
+          FROM perfis_historico
+          WHERE data_carga IS NOT NULL
+        `);
+        if (perfMeta?.max_data) {
+          ultimaExecucaoMeta = perfMeta.max_data;
+        }
+      }
+    } catch (err) {
+      console.warn("Aviso ao buscar última execução Meta:", err);
+    }
+
     await db.close();
 
     // 5. Tratamento de Dados: Transforma 'null' em valores seguros que o React aceita
@@ -196,7 +220,11 @@ export async function GET() {
     });
 
     // Retorna a lista perfeitamente segura para o Frontend mapear sem erros
-    return NextResponse.json({ success: true, perfis: perfisTratados }, {
+    return NextResponse.json({ 
+      success: true, 
+      perfis: perfisTratados,
+      ultima_execucao_meta: ultimaExecucaoMeta
+    }, {
       headers: { 'Cache-Control': 'no-store' }
     });
 
