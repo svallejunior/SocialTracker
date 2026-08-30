@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     // Cookie válido por 1 ano para conveniência no celular e desktop
     response.cookies.set(COOKIE_NAME, 'authenticated_' + cleanPin, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: false,
       sameSite: 'lax',
       path: '/',
       maxAge: 60 * 60 * 24 * 365
