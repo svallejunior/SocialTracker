@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:pull": "python ../sync_db.py",
+    "db:sync": "python ../sync_db.py"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.4",
