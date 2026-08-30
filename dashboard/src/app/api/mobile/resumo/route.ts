@@ -34,10 +34,10 @@ export async function GET(req: NextRequest) {
       SELECT 
         p.username,
         p.status,
-        p.foto_url,
         p.foto_perfil_meta,
         ac.meta_account_id,
         cp.nome,
+        cp.foto_url,
         cp.status as status_controle,
         cp.inicio
       FROM perfis_monitorados p
