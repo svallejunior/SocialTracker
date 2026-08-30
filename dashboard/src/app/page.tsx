@@ -1,10 +1,12 @@
 "use client";
 export const dynamic = 'force-dynamic';
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import {
   TrendingUp, ExternalLink, LogOut, Calendar, Search, Users, MessageSquare, Eye, EyeOff, Heart, Filter,
   BarChart3, Play, Hash, Hash as TagIcon, Image as ImageIcon, Film as VideoIcon, Layers as LayersIcon,
-  HelpCircle, CheckCircle2, DollarSign, Wallet, FileText, X, Brain, AlertTriangle, BadgeCheck, History
+  HelpCircle, CheckCircle2, DollarSign, Wallet, FileText, X, Brain, AlertTriangle, BadgeCheck, History,
+  Smartphone
 } from "lucide-react";
 import {
   LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, AreaChart, Area, ReferenceLine, CartesianGrid,
