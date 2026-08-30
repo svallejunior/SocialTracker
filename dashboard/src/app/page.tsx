@@ -2726,12 +2726,12 @@ export default function Dashboard() {
           {/* Tabela */}
           <div style={{
             background: "#161B22", border: "1px solid #30363D",
-            borderRadius: 12, overflow: "hidden"
+            borderRadius: 12, overflowX: "auto"
           }}>
             {/* Cabeçalho */}
             <div style={{
               display: "grid",
-              gridTemplateColumns: "1.3fr 85px 90px 120px 70px 110px 110px 125px 110px 80px 80px 44px 80px 70px",
+              gridTemplateColumns: "1.3fr 85px 90px 120px 70px 110px 110px 125px 110px 80px 80px 44px 95px 85px",
               padding: "12px 16px",
               borderBottom: "1px solid #30363D",
               color: "#8B949E",
@@ -2740,7 +2740,7 @@ export default function Dashboard() {
               textTransform: "uppercase",
               letterSpacing: "0.05em",
               alignItems: "center",
-              minWidth: 1385
+              minWidth: 1420
             }}>
               {([
                 { key: 'username', label: 'Perfil', align: 'left' },
@@ -2802,10 +2802,11 @@ export default function Dashboard() {
                     key={perfil.username}
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "1.3fr 85px 90px 120px 70px 110px 110px 125px 110px 80px 80px 44px 80px 70px",
+                      gridTemplateColumns: "1.3fr 85px 90px 120px 70px 110px 110px 125px 110px 80px 80px 44px 95px 85px",
                       padding: "14px 16px",
                       borderBottom: idx < profilesFiltrados.length - 1 ? "1px solid #21262D" : "none",
                       alignItems: "center",
+                      minWidth: 1420,
                       transition: "background 0.15s",
                       background: isMorreu ? 'rgba(248,81,73,0.08)' : (isYellowRow ? 'rgba(245,158,11,0.08)' : (isGreenRow ? 'rgba(46,160,67,0.08)' : 'transparent')),
                       borderLeft: isMorreu ? '3px solid #F85149' : (isYellowRow ? '3px solid #F59E0B' : (isGreenRow ? '3px solid #2ea043' : '3px solid transparent')),
