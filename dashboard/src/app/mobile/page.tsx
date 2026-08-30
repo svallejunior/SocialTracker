@@ -50,8 +50,8 @@ export default function MobileDashboard() {
         const jsonAg = await resAg.json();
 
         if (jsonData.success && jsonData.profiles) {
-          const meusPerfis = jsonData.profiles.filter((p: any) => p.meu_perfil === 1 || p.meu_perfil === true || Boolean(p.nome_controle));
-          const list = meusPerfis.length > 0 ? meusPerfis : jsonData.profiles;
+          const perfisAtivosComMeta = jsonData.profiles.filter((p: any) => p.tem_meta_id && (p.status === 'ATIVO' || !p.status));
+          const list = perfisAtivosComMeta.length > 0 ? perfisAtivosComMeta : jsonData.profiles;
 
           const perfisM: PerfilMobile[] = list.map((p: any) => ({
             username: p.username,

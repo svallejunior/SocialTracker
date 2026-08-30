@@ -29,33 +29,32 @@ export async function GET(req: NextRequest) {
     `);
     const ultimaAtualizacao = lastUpdateRow?.ultima_coleta || null;
 
-    // 2. Perfis Monitorados da Equipe (Minhas Modelos)
+    // 2. Perfis Monitorados ATIVOS que possuem Meta ID (os que aparecem na Automatização)
     const perfis = await db.all(`
       SELECT 
         p.username,
         p.status,
         p.foto_url,
         p.foto_perfil_meta,
+        ac.meta_account_id,
         cp.nome,
         cp.status as status_controle,
         cp.inicio
       FROM perfis_monitorados p
+      JOIN automacao_config ac ON (LOWER(p.username) = LOWER(ac.username) AND ac.id != 'default_config' AND LENGTH(TRIM(COALESCE(ac.meta_account_id, ''))) > 0)
       LEFT JOIN controle_perfis cp ON LOWER(p.username) = LOWER(cp.username)
-      WHERE p.meu_perfil = 1 OR cp.username IS NOT NULL
+      WHERE UPPER(COALESCE(p.status, 'ATIVO')) = 'ATIVO'
       ORDER BY p.username ASC
     `);
 
-    // 3. Histórico dos Perfis para calcular:
-    // - Variação na última atualização (diferença entre a última coleta e a penúltima)
-    // - Variação no dia (diferença entre o valor atual e a primeira coleta do dia de hoje)
-    // - Total de posts e novos posts no dia
+    // 3. Histórico dos Perfis para calcular evoluções:
     const historico = await db.all(`
-      SELECT id, username, data_coleta, seguidores, total_posts
+      SELECT id, username, data_coleta, seguidores, total_posts, data_carga
       FROM perfis_historico
       ORDER BY data_coleta ASC, id ASC
     `);
 
-    // Agrupa histórico por username
+    // Agrupa histórico por username e deduplica por dia (preservando o registro mais recente do dia)
     const histByUser: Record<string, any[]> = {};
     for (const h of historico) {
       const u = (h.username || '').toLowerCase();
@@ -63,39 +62,56 @@ export async function GET(req: NextRequest) {
       histByUser[u].push(h);
     }
 
-    const hojeStr = new Date().toISOString().split('T')[0];
-
     const perfisProcessados = perfis.map((p: any) => {
       const u = (p.username || '').toLowerCase();
       const userHistory = histByUser[u] || [];
 
-      // Filtra coletas com seguidores válidos
-      const validHist = userHistory.filter((h: any) => h.seguidores !== null && h.seguidores !== undefined && Number(h.seguidores) > 0);
+      // Deduplica por dia (mantendo a última coleta do dia)
+      const porDia: Record<string, any> = {};
+      for (const h of userHistory) {
+        if (!h.seguidores || Number(h.seguidores) <= 0) continue;
+        const dia = (h.data_coleta || '').substring(0, 10);
+        if (!dia) continue;
+        const cur = porDia[dia];
+        if (!cur) {
+          porDia[dia] = h;
+        } else {
+          const curTs = cur.data_carga || cur.data_coleta || '';
+          const newTs = h.data_carga || h.data_coleta || '';
+          if (newTs >= curTs) porDia[dia] = h;
+        }
+      }
 
+      const listaDiaria = Object.values(porDia).sort((a: any, b: any) => {
+        return (a.data_coleta || '').localeCompare(b.data_coleta || '');
+      });
+
+      // Lista de todas as coletas válidas ordem cronológica
+      const validHist = userHistory.filter((h: any) => Number(h.seguidores) > 0);
       const totalColetas = validHist.length;
+
       const atual = totalColetas > 0 ? validHist[totalColetas - 1] : null;
       const penultimo = totalColetas > 1 ? validHist[totalColetas - 2] : null;
 
       const seguidoresAtuais = atual ? Number(atual.seguidores) : 0;
       const postsAtuais = atual ? Number(atual.total_posts) : 0;
 
-      // 1) Evolução na última atualização
+      // 1) Evolução na última atualização (diferença entre última e penúltima coleta real)
       let variacaoUltima = 0;
       if (atual && penultimo) {
         variacaoUltima = seguidoresAtuais - Number(penultimo.seguidores);
       }
 
-      // 2) Evolução no dia de hoje
-      const coletasHoje = validHist.filter((h: any) => (h.data_coleta || '').startsWith(hojeStr));
+      // 2) Evolução no dia (diferença entre o último valor de hoje e o último valor do dia anterior no histórico diário)
       let variacaoDia = 0;
       let postsDia = 0;
 
-      if (coletasHoje.length > 0) {
-        const primeiraHoje = coletasHoje[0];
-        const ultimaHoje = coletasHoje[coletasHoje.length - 1];
-        variacaoDia = Number(ultimaHoje.seguidores) - Number(primeiraHoje.seguidores);
-        postsDia = Number(ultimaHoje.total_posts) - Number(primeiraHoje.total_posts);
-      } else if (atual && penultimo && (atual.data_coleta || '').startsWith(hojeStr)) {
+      if (listaDiaria.length > 1) {
+        const ultDiario = listaDiaria[listaDiaria.length - 1];
+        const penultDiario = listaDiaria[listaDiaria.length - 2];
+        variacaoDia = Number(ultDiario.seguidores) - Number(penultDiario.seguidores);
+        postsDia = Number(ultDiario.total_posts) - Number(penultDiario.total_posts);
+      } else if (variacaoUltima !== 0) {
         variacaoDia = variacaoUltima;
       }
 
@@ -109,7 +125,7 @@ export async function GET(req: NextRequest) {
         total_posts: postsAtuais,
         variacao_ultima: variacaoUltima,
         variacao_dia: variacaoDia,
-        posts_dia: postsDia,
+        posts_dia: postsDia > 0 ? postsDia : 0,
         ultima_coleta: atual ? atual.data_coleta : null
       };
     });
