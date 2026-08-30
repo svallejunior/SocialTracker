@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
     `);
     const ultimaAtualizacao = lastUpdateRow?.ultima_coleta || null;
 
-    // 2. Perfis Monitorados Ativos com Fotos e Informações de Controle
+    // 2. Perfis Monitorados da Equipe (Minhas Modelos)
     const perfis = await db.all(`
       SELECT 
         p.username,
@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
         cp.inicio
       FROM perfis_monitorados p
       LEFT JOIN controle_perfis cp ON LOWER(p.username) = LOWER(cp.username)
-      WHERE p.status = 'ATIVO' AND (p.exibir IS NULL OR p.exibir = 1)
+      WHERE p.meu_perfil = 1 OR cp.username IS NOT NULL
       ORDER BY p.username ASC
     `);
 

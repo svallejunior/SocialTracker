@@ -2,17 +2,18 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Lock, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Lock, ArrowRight } from 'lucide-react';
 
 export default function LoginPage() {
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
   const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!pin.trim()) return;
+    if (!pin.trim() || success) return;
 
     setLoading(true);
     setError('');
@@ -26,13 +27,16 @@ export default function LoginPage() {
 
       const data = await res.json();
       if (data.success) {
-        // Redireciona para mobile se for tela pequena, ou para a home
-        if (typeof window !== 'undefined' && window.innerWidth <= 768) {
-          router.push('/mobile');
-        } else {
-          router.push('/');
-        }
-        router.refresh();
+        setSuccess(true);
+        // Aguarda 1.2 segundos mostrando a logo com o efeito de fade/zoom suave antes de redirecionar
+        setTimeout(() => {
+          if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+            router.push('/mobile');
+          } else {
+            router.push('/');
+          }
+          router.refresh();
+        }, 1200);
       } else {
         setError('Senha incorreta.');
         setPin('');
@@ -52,8 +56,92 @@ export default function LoginPage() {
       justifyContent: 'center',
       background: 'radial-gradient(circle at center, #161B22 0%, #090A0F 100%)',
       padding: '20px',
-      fontFamily: 'var(--font-plus-jakarta, sans-serif)'
+      fontFamily: 'var(--font-plus-jakarta, sans-serif)',
+      position: 'relative',
+      overflow: 'hidden'
     }}>
+      {/* 🌟 OVERLAY DE TRANSIÇÃO COM LOGO (FADE OUT DEVAGAR) 🌟 */}
+      {success && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 9999,
+          background: '#090A0F',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          animation: 'fadeInSplash 0.3s ease-out forwards'
+        }}>
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '16px',
+            animation: 'logoFadeZoom 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards'
+          }}>
+            <div style={{
+              width: '100px',
+              height: '100px',
+              borderRadius: '24px',
+              overflow: 'hidden',
+              boxShadow: '0 0 50px rgba(0, 240, 255, 0.4), 0 0 100px rgba(113, 0, 226, 0.3)',
+              border: '2px solid rgba(0, 240, 255, 0.5)',
+              background: '#161B22',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <img
+                src="/img/logo.jpeg"
+                alt="SocialTracker Logo"
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                onError={(e) => {
+                  // Fallback visual caso a imagem não exista
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
+            </div>
+            <span style={{
+              fontSize: '24px',
+              fontWeight: 800,
+              color: '#FFFFFF',
+              letterSpacing: '-0.02em',
+              background: 'linear-gradient(135deg, #FFFFFF 0%, #8B949E 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent'
+            }}>
+              SocialTracker
+            </span>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes fadeInSplash {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes logoFadeZoom {
+          0% {
+            opacity: 0;
+            transform: scale(0.85);
+          }
+          30% {
+            opacity: 1;
+            transform: scale(1);
+          }
+          70% {
+            opacity: 0.8;
+            transform: scale(1.05);
+          }
+          100% {
+            opacity: 0;
+            transform: scale(1.15);
+          }
+        }
+      `}</style>
+
       <div style={{
         width: '100%',
         maxWidth: '380px',
@@ -63,7 +151,9 @@ export default function LoginPage() {
         borderRadius: '20px',
         padding: '36px 28px',
         boxShadow: '0 20px 40px rgba(0,0,0,0.5), 0 0 30px rgba(113, 0, 226, 0.15)',
-        textAlign: 'center'
+        textAlign: 'center',
+        opacity: success ? 0 : 1,
+        transition: 'opacity 0.3s ease-out'
       }}>
         <div style={{
           width: '64px',
@@ -139,7 +229,7 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            disabled={loading || !pin.trim()}
+            disabled={loading || success || !pin.trim()}
             style={{
               width: '100%',
               background: 'linear-gradient(135deg, #7100E2 0%, #00F0FF 100%)',
@@ -149,8 +239,8 @@ export default function LoginPage() {
               padding: '15px',
               fontSize: '15px',
               fontWeight: '700',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              opacity: loading || !pin.trim() ? 0.6 : 1,
+              cursor: loading || success ? 'not-allowed' : 'pointer',
+              opacity: loading || success || !pin.trim() ? 0.6 : 1,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -159,7 +249,7 @@ export default function LoginPage() {
               transition: 'transform 0.1s'
             }}
           >
-            {loading ? 'Acessando...' : (
+            {loading || success ? 'Acessando...' : (
               <>
                 Entrar <ArrowRight size={18} />
               </>

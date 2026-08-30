@@ -39,8 +39,41 @@ export default function MobileDashboard() {
     try {
       const res = await fetch('/api/mobile/resumo');
       const json = await res.json();
-      if (json.success) {
+      if (json.success && json.perfis && json.perfis.length > 0) {
         setData(json);
+      } else {
+        // Fallback: busca via /api/data
+        const resData = await fetch('/api/data');
+        const jsonData = await resData.json();
+
+        const resAg = await fetch('/api/automacao/agendamentos');
+        const jsonAg = await resAg.json();
+
+        if (jsonData.success && jsonData.profiles) {
+          const meusPerfis = jsonData.profiles.filter((p: any) => p.meu_perfil === 1 || p.meu_perfil === true || Boolean(p.nome_controle));
+          const list = meusPerfis.length > 0 ? meusPerfis : jsonData.profiles;
+
+          const perfisM: PerfilMobile[] = list.map((p: any) => ({
+            username: p.username,
+            nome: p.nome_controle || p.username,
+            foto_url: p.foto_url || p.foto_perfil || null,
+            seguidores: Number(p.seguidores || 0),
+            total_posts: Number(p.total_posts || 0),
+            variacao_ultima: 0,
+            variacao_dia: Number(p.novosSeguidores24h || 0),
+            posts_dia: 0,
+            ultima_coleta: p.data_coleta || null
+          }));
+
+          setData({
+            ultima_atualizacao: jsonData.profiles[0]?.data_coleta || new Date().toISOString(),
+            perfis: perfisM,
+            agendamentos: {
+              a_fazer: (jsonAg?.agendamentos || []).filter((a: any) => a.status === 'AGENDADO' || a.status === 'PUBLICANDO'),
+              concluidos: jsonAg?.publicacoes || []
+            }
+          });
+        }
       }
     } catch (e) {
       console.error('Erro ao carregar dados mobile:', e);
