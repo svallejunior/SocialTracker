@@ -17,8 +17,34 @@ import json
 import sqlite3
 import argparse
 import requests
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
+
+# Fuso Horário Oficial do Brasil (UTC-3 / Horário de Brasília)
+FUSO_BRASIL = timezone(timedelta(hours=-3))
+
+def agora_brasil():
+    return datetime.now(FUSO_BRASIL)
+
+def parse_utc_para_brasil_str(val, fallback_str=None):
+    """Converte timestamp UTC (ISO 8601, etc) para Horário de Brasília (UTC-3) formato YYYY-MM-DD HH:MM:SS."""
+    if not val:
+        return fallback_str or agora_brasil().strftime('%Y-%m-%d %H:%M:%S')
+    s = str(val).strip()
+    try:
+        iso_str = s.replace('Z', '+00:00')
+        if len(iso_str) >= 5 and iso_str[-5] in ('+', '-') and iso_str[-3] != ':':
+            iso_str = iso_str[:-2] + ':' + iso_str[-2:]
+        dt = datetime.fromisoformat(iso_str)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(FUSO_BRASIL).strftime('%Y-%m-%d %H:%M:%S')
+    except Exception:
+        pass
+    s_clean = s.replace('T', ' ')
+    if '.' in s_clean:
+        s_clean = s_clean.split('.')[0]
+    return s_clean
 
 # Força UTF-8 no stdout/stderr no Windows
 if hasattr(sys.stdout, 'reconfigure'):
@@ -40,8 +66,11 @@ GRAPH_API_BASE = f"https://graph.facebook.com/{GRAPH_API_VERSION}"
 
 
 def get_db_connection():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
+    conn.execute('PRAGMA journal_mode = WAL;')
+    conn.execute('PRAGMA synchronous = NORMAL;')
+    conn.execute('PRAGMA busy_timeout = 30000;')
     return conn
 
 
@@ -368,8 +397,8 @@ def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str):
     for p in posts_data:
         post_id = str(p.get("id"))
         raw_ts = p.get("timestamp", "")
-        # Normaliza timestamp ISO 8601 (ex: 2026-08-26T22:34:01+0000 -> 2026-08-26 22:34:01)
-        data_postagem = raw_ts.replace("T", " ").split("+")[0].strip() if raw_ts else data_carga_str
+        # Converte timestamp UTC da Meta API para Horário de Brasília (UTC-3)
+        data_postagem = parse_utc_para_brasil_str(raw_ts, fallback_str=data_carga_str)
         
         raw_formato = (p.get("media_type") or "IMAGE").upper()
         product_type = (p.get("media_product_type") or "FEED").upper()
@@ -482,7 +511,7 @@ def rodar_ingestao_meta(username_filtro=None, buscar_insights_posts=True, limite
     Executa a rotina completa de extração para todas as contas configuradas.
     """
     inicializar_estrutura_banco()
-    data_carga = datetime.now()
+    data_carga = agora_brasil()
     data_carga_str = data_carga.strftime("%Y-%m-%d %H:%M:%S")
 
     print(f"\n==================================================")

@@ -26,6 +26,12 @@ try:
 except ImportError:
     HAS_PILLOW = False
 
+try:
+    from processar_imagem import processar_imagem_para_celular
+    HAS_PROCESSADOR_IMAGEM = True
+except ImportError:
+    HAS_PROCESSADOR_IMAGEM = False
+
 # Configuração de Logging
 logging.basicConfig(
     level=logging.INFO,
@@ -56,19 +62,19 @@ HEARTBEAT_STEP = 20
 
 
 def get_db_connection():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
+    conn.execute('PRAGMA journal_mode = WAL;')
+    conn.execute('PRAGMA synchronous = NORMAL;')
+    conn.execute('PRAGMA busy_timeout = 30000;')
     return conn
 
 
-def _utc_para_local(ts):
-    """Converte um timestamp gravado com datetime('now') (UTC) para hora local.
+FUSO_BRASIL = timezone(timedelta(hours=-3))
 
-    As rotas do dashboard gravam criado_em/atualizado_em/publicado_em em UTC, enquanto o
-    Python compara com datetime.now() (local). Sem a conversão, uma rotina criada às
-    06:08 local aparece como 09:08 e a ocorrência das 06:30 seria tratada como anterior
-    à criação (ou o inverso, publicando retroativo).
-    """
+
+def _utc_para_local(ts):
+    """Converte um timestamp gravado com datetime('now') (UTC) para Horário de Brasília (UTC-3)."""
     if not ts:
         return None
     txt = str(ts).strip().replace("T", " ")
@@ -79,7 +85,7 @@ def _utc_para_local(ts):
             dt = datetime.strptime(txt, fmt)
         except ValueError:
             continue
-        return dt.replace(tzinfo=timezone.utc).astimezone().replace(tzinfo=None)
+        return dt.replace(tzinfo=timezone.utc).astimezone(FUSO_BRASIL).replace(tzinfo=None)
     return None
 
 
@@ -1152,22 +1158,33 @@ def publicar_item_meta(agendamento, config, dry_run=False):
         ext = os.path.splitext(saved_name)[1].lower()
         is_video = bool(item.get("type", "").startswith("video") or ext in (".mp4", ".mov", ".m4v"))
 
-        # Instagram não aceita PNG via URL — converte para JPEG automaticamente
+        # Sanitização e Injeção de EXIF de Celular para Imagens
         served_name = saved_name
-        if not is_video and ext == ".png" and HAS_PILLOW:
-            png_path = os.path.join(automacao_dir, saved_name)
-            jpg_name = os.path.splitext(saved_name)[0] + "_converted.jpg"
-            jpg_path = os.path.join(automacao_dir, jpg_name)
-            if os.path.exists(png_path) and not os.path.exists(jpg_path):
+        if not is_video and (HAS_PROCESSADOR_IMAGEM or HAS_PILLOW):
+            # Procura o arquivo local original
+            orig_local = os.path.join(automacao_dir, saved_name)
+            if not os.path.exists(orig_local) and item.get("path") and os.path.exists(item.get("path")):
+                orig_local = item.get("path")
+
+            if orig_local and os.path.exists(orig_local):
+                # Se for PNG ou se o JPG ainda não foi processado com EXIF
+                base_stem = os.path.splitext(saved_name)[0]
+                # Padroniza para .jpg com metadados de celular
+                jpg_name = base_stem if ext in (".jpg", ".jpeg") else f"{base_stem}.jpg"
+                jpg_path = os.path.join(automacao_dir, jpg_name)
+                
                 try:
-                    with Image.open(png_path) as img:
-                        rgb = img.convert("RGB")
-                        rgb.save(jpg_path, "JPEG", quality=95)
-                    logger.info(f"PNG convertido para JPEG: {jpg_name}")
+                    if HAS_PROCESSADOR_IMAGEM:
+                        _, _, cel_escolhido = processar_imagem_para_celular(orig_local, jpg_path)
+                        logger.info(f"📸 Imagem sanitizada e EXIF injetado ({cel_escolhido}): {jpg_name}")
+                    else:
+                        with Image.open(orig_local) as img:
+                            rgb = img.convert("RGB")
+                            rgb.save(jpg_path, "JPEG", quality=95)
+                        logger.info(f"Imagem convertida para JPEG limpo: {jpg_name}")
+                    served_name = jpg_name
                 except Exception as conv_err:
-                    logger.warning(f"Falha ao converter PNG para JPEG ({saved_name}): {conv_err}")
-            if os.path.exists(jpg_path):
-                served_name = jpg_name
+                    logger.warning(f"Falha ao sanitizar imagem ({saved_name}): {conv_err}")
 
         local_path = os.path.join(automacao_dir, served_name)
         if not os.path.exists(local_path) and item.get("path") and os.path.exists(item.get("path")):

@@ -1,23 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import sqlite3 from 'sqlite3';
-import { open } from 'sqlite';
 import path from 'path';
 import fs from 'fs';
+import { getDb as getDbBase, resolveDbPath } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-function resolveDbPath() {
-  if (process.env.DB_PATH && fs.existsSync(process.env.DB_PATH)) return process.env.DB_PATH;
-  const parentDb = path.resolve(process.cwd(), '..', 'instagram_tracker.db');
-  if (fs.existsSync(parentDb)) return parentDb;
-  const cwdDb = path.resolve(process.cwd(), 'instagram_tracker.db');
-  if (fs.existsSync(cwdDb)) return cwdDb;
-  return parentDb;
-}
-
 async function getDb() {
-  const db = await open({ filename: resolveDbPath(), driver: sqlite3.Database });
+  const db = await getDbBase();
 
   await db.exec(`
     CREATE TABLE IF NOT EXISTS automacao_config (
@@ -87,7 +77,9 @@ export async function GET(req: NextRequest) {
       }
 
       const diffSec = Math.floor((Date.now() - lastCheckMs) / 1000);
-      if (diffSec > 120) {
+      const disableDaemon = process.env.DISABLE_DAEMON === 'true' || process.env.NODE_ENV !== 'production';
+
+      if (diffSec > 120 && !disableDaemon) {
         const { spawn } = await import('child_process');
         const parentDir = path.resolve(process.cwd(), '..');
         let scriptPath = path.join(parentDir, 'publicador_instagram.py');

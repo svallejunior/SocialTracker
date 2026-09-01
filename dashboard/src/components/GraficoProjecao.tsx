@@ -38,9 +38,28 @@ interface GraficoProjecaoProps {
   todosPerfis?: Profile[];
 }
 
+// Paleta de 20 cores vivamente distintas e identificáveis em fundos escuros
 const PALETA_CORES_MEUS_PERFIS = [
-  '#FF007A', '#39FF14', '#FFD700', '#FF4500', '#A855F7',
-  '#00FFC8', '#EC4899', '#F59E0B', '#3B82F6', '#14B8A6'
+  '#00F0FF', // 1 ciano elétrico
+  '#FF007A', // 2 rosa neon
+  '#39FF14', // 3 verde limão
+  '#FFD700', // 4 amarelo ouro
+  '#A855F7', // 5 roxo
+  '#FF4500', // 6 laranja-vermelho
+  '#00BFFF', // 7 azul céu
+  '#FF69B4', // 8 rosa quente
+  '#00FF7F', // 9 verde primavera
+  '#FFA500', // 10 laranja
+  '#E040FB', // 11 magenta vibrante
+  '#ADFF2F', // 12 verde amarelado
+  '#1E90FF', // 13 azul dodger
+  '#FF6347', // 14 tomate
+  '#00CED1', // 15 azul turquesa
+  '#FFC0CB', // 16 rosa claro
+  '#7FFF00', // 17 chartreuse
+  '#DC143C', // 18 carmesim
+  '#40E0D0', // 19 turquesa
+  '#FF1493', // 20 rosa profundo
 ];
 
 export default function GraficoProjecao({ meusPerfis, todosPerfis = [] }: GraficoProjecaoProps) {
@@ -923,7 +942,9 @@ export default function GraficoProjecao({ meusPerfis, todosPerfis = [] }: Grafic
 
         {meusPerfisRetornados
           .filter(uname => selectedUsername === 'TODOS' || selectedUsername === uname)
-          .map((uname, idx) => {
+          .map((uname) => {
+            // Usar indexOf no array original para que a cor nunca mude ao ocultar/mostrar outros perfis
+            const idx = meusPerfisRetornados.indexOf(uname);
             const cor = PALETA_CORES_MEUS_PERFIS[idx % PALETA_CORES_MEUS_PERFIS.length];
             const isOculto = perfisOcultos.includes(uname);
 
@@ -1106,7 +1127,9 @@ export default function GraficoProjecao({ meusPerfis, todosPerfis = [] }: Grafic
               {/* Linhas Sólidas para Perfis em Destaque */}
               {meusPerfisRetornados
                 .filter(uname => (selectedUsername === 'TODOS' || selectedUsername === uname) && !perfisOcultos.includes(uname))
-                .map((uname, idx) => {
+                .map((uname) => {
+                  // Usar indexOf no array original para cor estável ao ocultar/mostrar outros perfis
+                  const idx = meusPerfisRetornados.indexOf(uname);
                   const cor = PALETA_CORES_MEUS_PERFIS[idx % PALETA_CORES_MEUS_PERFIS.length];
                   return (
                     <Line

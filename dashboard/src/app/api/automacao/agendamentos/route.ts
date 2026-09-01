@@ -1,21 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import sqlite3 from 'sqlite3';
-import { open } from 'sqlite';
 import { randomUUID } from 'crypto';
-import path from 'path';
-import fs from 'fs';
+import { getDb as getDbBase } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-
-function resolveDbPath() {
-  if (process.env.DB_PATH && fs.existsSync(process.env.DB_PATH)) return process.env.DB_PATH;
-  const parentDb = path.resolve(process.cwd(), '..', 'instagram_tracker.db');
-  if (fs.existsSync(parentDb)) return parentDb;
-  const cwdDb = path.resolve(process.cwd(), 'instagram_tracker.db');
-  if (fs.existsSync(cwdDb)) return cwdDb;
-  return parentDb;
-}
 
 // Status aceitos para um agendamento. PUBLICANDO é escrito apenas pelo publicador
 // (reivindicação atômica) e ENCERRADO encerra as ocorrências futuras de uma rotina
@@ -23,7 +11,7 @@ function resolveDbPath() {
 const STATUS_VALIDOS = ['AGENDADO', 'PAUSADO', 'PUBLICADO', 'PUBLICANDO', 'ERRO', 'ENCERRADO'];
 
 async function getDb() {
-  const db = await open({ filename: resolveDbPath(), driver: sqlite3.Database });
+  const db = await getDbBase();
 
   await db.exec(`
     CREATE TABLE IF NOT EXISTS automacao_agendamentos (

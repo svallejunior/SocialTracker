@@ -1,24 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import sqlite3 from 'sqlite3';
-import { open } from 'sqlite';
-import path from 'path';
-import fs from 'fs';
+import { formatToBrazilDateTime } from '@/lib/timezone';
+import { getDb } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-
-function resolveDbPath() {
-  if (process.env.DB_PATH) return process.env.DB_PATH;
-  const parentDb = path.resolve(process.cwd(), '..', 'instagram_tracker.db');
-  if (fs.existsSync(parentDb)) return parentDb;
-  const cwdDb = path.resolve(process.cwd(), 'instagram_tracker.db');
-  if (fs.existsSync(cwdDb)) return cwdDb;
-  return parentDb;
-}
-
-async function getDb() {
-  return open({ filename: resolveDbPath(), driver: sqlite3.Database });
-}
 
 /** Extrai o shortcode de uma URL do Instagram. */
 function extractShortcode(url: string): string | null {
@@ -73,15 +58,15 @@ export async function POST(request: NextRequest) {
       const dt = new Date(data_coleta.replace(' ', 'T'));
       if (!isNaN(dt.getTime())) {
         dt.setHours(dt.getHours() - 24);
-        dataPostagem = dt.toISOString().replace('T', ' ').substring(0, 19);
+        dataPostagem = formatToBrazilDateTime(dt);
       } else {
-        dataPostagem = new Date(Date.now() - 24 * 3600 * 1000).toISOString().replace(' ', 'T').substring(0, 19).replace('T', ' ');
+        dataPostagem = formatToBrazilDateTime(new Date(Date.now() - 24 * 3600 * 1000));
       }
     } else {
-      dataPostagem = new Date(Date.now() - 24 * 3600 * 1000).toISOString().replace('T', ' ').substring(0, 19);
+      dataPostagem = formatToBrazilDateTime(new Date(Date.now() - 24 * 3600 * 1000));
     }
 
-    const agora = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const agora = formatToBrazilDateTime(new Date());
     const url = `https://www.instagram.com/p/${shortcode}/`;
     const usernameClean = username.trim().replace(/^@/, '').toLowerCase();
 

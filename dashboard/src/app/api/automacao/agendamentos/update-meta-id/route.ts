@@ -1,24 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import sqlite3 from 'sqlite3';
-import { open } from 'sqlite';
+import { getDb } from '@/lib/db';
 import path from 'path';
 import fs from 'fs';
 
 export const dynamic = 'force-dynamic';
 
-function resolveDbPath() {
-  if (process.env.DB_PATH) return process.env.DB_PATH;
-  const parentDb = path.resolve(process.cwd(), '..', 'instagram_tracker.db');
-  if (fs.existsSync(parentDb)) return parentDb;
-  const cwdDb = path.resolve(process.cwd(), 'instagram_tracker.db');
-  if (fs.existsSync(cwdDb)) return cwdDb;
-  return parentDb;
-}
-
 // POST: Atualiza o meta_account_id de todos os agendamentos de um perfil
 export async function POST(req: NextRequest) {
   try {
-    const db = await open({ filename: resolveDbPath(), driver: sqlite3.Database });
+    const db = await getDb();
     const body = await req.json();
 
     const username = (body.username || '').trim().toLowerCase();

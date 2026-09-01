@@ -331,7 +331,9 @@ export default function CentralComentarios({ selectedUsername, onRefreshStats }:
   const formatHoraRelativa = (timestampStr: string) => {
     if (!timestampStr) return '';
     try {
-      const data = new Date(timestampStr);
+      const s = timestampStr.includes('T') ? timestampStr : timestampStr.replace(' ', 'T');
+      const data = new Date(s);
+      if (isNaN(data.getTime())) return '';
       const agora = new Date();
       const diffMs = agora.getTime() - data.getTime();
       const diffHoras = Math.floor(diffMs / 3600000);

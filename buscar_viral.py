@@ -3,7 +3,13 @@ import sys
 import json
 import sqlite3
 import argparse
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
+
+# Fuso Horário Oficial do Brasil (UTC-3 / Horário de Brasília)
+FUSO_BRASIL = timezone(timedelta(hours=-3))
+
+def agora_brasil():
+    return datetime.now(FUSO_BRASIL).replace(tzinfo=None)
 
 # Força UTF-8 no stdout/stderr no Windows
 if hasattr(sys.stdout, 'reconfigure'):
@@ -28,25 +34,46 @@ DB_PATH = _raw_db if os.path.isabs(_raw_db) else os.path.join(BASE_DIR, _raw_db)
 
 
 def parse_datetime(val):
+    """Converte valores de data (ISO 8601 UTC, UNIX timestamp, etc) para datetime local do Brasil (UTC-3)."""
     if not val:
         return None
-    val_str = str(val).strip().replace('T', ' ')
-    if '.' in val_str:
-        val_str = val_str.split('.')[0]
     
-    # Se for timestamp numérico
+    if isinstance(val, datetime):
+        if val.tzinfo is None:
+            return val
+        return val.astimezone(FUSO_BRASIL).replace(tzinfo=None)
+    
+    val_str = str(val).strip()
+    
+    # Se for timestamp numérico (UNIX timestamp - sempre UTC)
     if val_str.replace('.', '', 1).isdigit():
         try:
             ts = float(val_str)
             if ts > 5000000000:
                 ts = ts / 1000.0
-            return datetime.fromtimestamp(ts)
+            return datetime.fromtimestamp(ts, tz=timezone.utc).astimezone(FUSO_BRASIL).replace(tzinfo=None)
         except Exception:
             pass
 
+    # Se for ISO com timezone ou Z (ex: 2026-08-30T14:22:00.000Z ou +0000)
+    try:
+        iso_str = val_str.replace('Z', '+00:00')
+        if len(iso_str) >= 5 and iso_str[-5] in ('+', '-') and iso_str[-3] != ':':
+            iso_str = iso_str[:-2] + ':' + iso_str[-2:]
+        dt = datetime.fromisoformat(iso_str)
+        if dt.tzinfo is not None:
+            return dt.astimezone(FUSO_BRASIL).replace(tzinfo=None)
+    except Exception:
+        pass
+
+    # Strings ingênuas (ex: 2026-08-30 14:22:00)
+    val_clean = val_str.replace('T', ' ')
+    if '.' in val_clean:
+        val_clean = val_clean.split('.')[0]
+
     for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%Y-%m-%d', '%d/%m/%Y %H:%M:%S', '%d/%m/%Y'):
         try:
-            return datetime.strptime(val_str, fmt)
+            return datetime.strptime(val_clean, fmt)
         except ValueError:
             continue
     return None
@@ -74,8 +101,10 @@ def id_to_shortcode(media_id):
 
 def get_local_posts(username, data_coleta_dt):
     """Busca posts salvos no banco local para o perfil."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
+    conn.execute('PRAGMA journal_mode = WAL;')
+    conn.execute('PRAGMA busy_timeout = 30000;')
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -123,7 +152,9 @@ def salvar_posts_no_banco(username, posts_data):
     if not posts_data:
         return 0
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
+    conn.execute('PRAGMA journal_mode = WAL;')
+    conn.execute('PRAGMA busy_timeout = 30000;')
     cursor = conn.cursor()
 
     # Garante estrutura
@@ -144,7 +175,7 @@ def salvar_posts_no_banco(username, posts_data):
     """)
 
     salvos = 0
-    agora = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    agora = agora_brasil().strftime('%Y-%m-%d %H:%M:%S')
 
     for p in posts_data:
         try:
@@ -278,7 +309,7 @@ def extrair_dados_post(raw, default_username):
 
     # Data
     raw_date = raw.get("timestamp") or raw.get("takenAt") or raw.get("postedAt") or raw.get("takenAtTimestamp")
-    dt_post = parse_datetime(raw_date) if raw_date else datetime.now()
+    dt_post = parse_datetime(raw_date) if raw_date else agora_brasil()
     data_postagem_str = format_datetime(dt_post)
 
     # Formato
@@ -323,7 +354,7 @@ def processar_busca(username, data_coleta_str, force_api=False):
     data_coleta_dt = parse_datetime(data_coleta_str)
     
     if not data_coleta_dt:
-        data_coleta_dt = datetime.now()
+        data_coleta_dt = agora_brasil()
 
     # Janela de até 72 horas anteriores à data da leitura clicada (ampliada para capturar virais)
     janela_inicio = data_coleta_dt - timedelta(hours=72)

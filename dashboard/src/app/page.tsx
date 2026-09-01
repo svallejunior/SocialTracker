@@ -3942,10 +3942,26 @@ export default function Dashboard() {
             );
 
             const cores = [
-              '#00F0FF', '#7100E2', '#FF007A', '#39FF14', '#FFD700', '#FF4500',
-              '#00E5FF', '#A855F7', '#EC4899', '#10B981', '#F59E0B', '#EF4444',
-              '#3B82F6', '#8B5CF6', '#F43F5E', '#06B6D4', '#84CC16', '#EAB308',
-              '#F97316', '#D946EF', '#6366F1', '#14B8A6', '#FBBF24', '#E11D48', '#22C55E'
+              '#00F0FF', // 1 ciano elétrico
+              '#FF007A', // 2 rosa neon
+              '#39FF14', // 3 verde limão
+              '#FFD700', // 4 amarelo ouro
+              '#A855F7', // 5 roxo
+              '#FF4500', // 6 laranja-vermelho
+              '#00BFFF', // 7 azul céu
+              '#FF69B4', // 8 rosa quente
+              '#00FF7F', // 9 verde primavera
+              '#FFA500', // 10 laranja
+              '#E040FB', // 11 magenta vibrante
+              '#ADFF2F', // 12 verde amarelado
+              '#1E90FF', // 13 azul dodger
+              '#FF6347', // 14 tomate
+              '#00CED1', // 15 azul turquesa
+              '#FFC0CB', // 16 rosa claro
+              '#7FFF00', // 17 chartreuse
+              '#DC143C', // 18 carmesim
+              '#40E0D0', // 19 turquesa
+              '#FF1493', // 20 rosa profundo
             ];
 
             // Gera range contínuo de datas (YYYY-MM-DD) do primeiro ao último dia com coleta

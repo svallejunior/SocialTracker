@@ -1,26 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import sqlite3 from 'sqlite3';
-import { open } from 'sqlite';
-import path from 'path';
-import fs from 'fs';
+import { getDb as getDbBase } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-function resolveDbPath() {
-  if (process.env.DB_PATH) return process.env.DB_PATH;
-  const parentDb = path.resolve(process.cwd(), '..', 'instagram_tracker.db');
-  if (fs.existsSync(parentDb)) return parentDb;
-  const cwdDb = path.resolve(process.cwd(), 'instagram_tracker.db');
-  if (fs.existsSync(cwdDb)) return cwdDb;
-  return parentDb;
-}
-
 async function getDb() {
-  const db = await open({
-    filename: resolveDbPath(),
-    driver: sqlite3.Database
-  });
+  const db = await getDbBase();
 
   // Garante que as colunas necessárias existem
   const colsHist = await db.all("PRAGMA table_info(perfis_historico)");
@@ -80,10 +65,25 @@ export async function GET(request: NextRequest) {
         COALESCE(pm.primeira_postagem, cp.inicio) as primeira_postagem,
         COALESCE(cp.foto_url, '') as foto_url,
         COALESCE(pm.meu_perfil, 0) as meu_perfil,
-        MAX(h.data_coleta) as ultima_coleta
+        MAX(h.data_coleta) as ultima_coleta,
+        COALESCE(com.total_comentarios, 0) as comentarios_pendentes,
+        COALESCE(msg.total_mensagens, 0) as mensagens_pendentes,
+        CASE WHEN (COALESCE(com.total_comentarios, 0) + COALESCE(msg.total_mensagens, 0)) > 0 THEN 1 ELSE 0 END as tem_pendencias
       FROM perfis_historico h
-      LEFT JOIN perfis_monitorados pm ON pm.username = h.username
-      LEFT JOIN controle_perfis cp ON cp.username = h.username
+      LEFT JOIN perfis_monitorados pm ON LOWER(pm.username) = LOWER(h.username)
+      LEFT JOIN controle_perfis cp ON LOWER(cp.username) = LOWER(h.username)
+      LEFT JOIN (
+        SELECT LOWER(modelo_username) as uname, COUNT(*) as total_comentarios
+        FROM instagram_comentarios
+        WHERE COALESCE(respondido, 0) = 0
+        GROUP BY LOWER(modelo_username)
+      ) com ON com.uname = LOWER(h.username)
+      LEFT JOIN (
+        SELECT LOWER(modelo_username) as uname, COUNT(*) as total_mensagens
+        FROM instagram_mensagens
+        WHERE COALESCE(respondida, 0) = 0
+        GROUP BY LOWER(modelo_username)
+      ) msg ON msg.uname = LOWER(h.username)
       WHERE h.inativo = 0
       GROUP BY h.username
       ORDER BY pendentes DESC, meu_perfil DESC, total_coletas DESC, h.username COLLATE NOCASE ASC
@@ -98,7 +98,10 @@ export async function GET(request: NextRequest) {
       primeira_postagem: p.primeira_postagem || null,
       foto_url: p.foto_url || '',
       meu_perfil: Number(p.meu_perfil || 0),
-      ultima_coleta: p.ultima_coleta || null
+      ultima_coleta: p.ultima_coleta || null,
+      comentarios_pendentes: Number(p.comentarios_pendentes || 0),
+      mensagens_pendentes: Number(p.mensagens_pendentes || 0),
+      tem_pendencias: Boolean(Number(p.tem_pendencias || 0))
     }));
 
     // 3. Registros de Coleta Detalhados (para o perfil selecionado ou modo especificado)
@@ -115,14 +118,14 @@ export async function GET(request: NextRequest) {
         COALESCE(pm.primeira_postagem, cp.inicio) as primeira_postagem,
         COALESCE(pm.meu_perfil, 0) as meu_perfil
       FROM perfis_historico h
-      LEFT JOIN perfis_monitorados pm ON pm.username = h.username
-      LEFT JOIN controle_perfis cp ON cp.username = h.username
+      LEFT JOIN perfis_monitorados pm ON LOWER(pm.username) = LOWER(h.username)
+      LEFT JOIN controle_perfis cp ON LOWER(cp.username) = LOWER(h.username)
       WHERE h.inativo = 0
     `;
     const params: any[] = [];
 
     if (filterUsername) {
-      query += ` AND h.username = ?`;
+      query += ` AND LOWER(h.username) = LOWER(?)`;
       params.push(filterUsername);
     } else if (mode === 'pendentes') {
       query += ` AND COALESCE(h.revisado_manualmente, 0) = 0`;
@@ -148,7 +151,7 @@ export async function GET(request: NextRequest) {
     for (const item of rows) {
       const anterior = await db.get(`
         SELECT seguidores, total_posts, data_coleta FROM perfis_historico
-        WHERE username = ? AND id < ? AND inativo = 0
+        WHERE LOWER(username) = LOWER(?) AND id < ? AND inativo = 0
         ORDER BY data_coleta DESC, id DESC
         LIMIT 1
       `, [item.username, item.id]);

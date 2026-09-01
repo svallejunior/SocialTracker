@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import sqlite3 from 'sqlite3';
-import { open } from 'sqlite';
-import path from 'path';
-import fs from 'fs';
 import { randomUUID } from 'crypto';
+import { formatToBrazilDateTime } from '@/lib/timezone';
+import { getDb as getDbBase } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -11,20 +9,8 @@ export const revalidate = 0;
 const GRAPH_API_VERSION = 'v20.0';
 const GRAPH_API_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
 
-function resolveDbPath() {
-  if (process.env.DB_PATH && fs.existsSync(process.env.DB_PATH)) return process.env.DB_PATH;
-  const parentDb = path.resolve(process.cwd(), '..', 'instagram_tracker.db');
-  if (fs.existsSync(parentDb)) return parentDb;
-  const cwdDb = path.resolve(process.cwd(), 'instagram_tracker.db');
-  if (fs.existsSync(cwdDb)) return cwdDb;
-  return parentDb;
-}
-
 async function getDb() {
-  const db = await open({
-    filename: resolveDbPath(),
-    driver: sqlite3.Database
-  });
+  const db = await getDbBase();
 
   // Garante tabela e colunas necessárias
   await db.exec(`
@@ -202,7 +188,7 @@ async function sincronizarMensagensMeta(db: any, username: string) {
 
           const isDaPropriaModelo = m.from?.id === creds.meta_account_id;
           const direcao = isDaPropriaModelo ? 'enviada' : 'recebida';
-          const timestamp = m.created_time || new Date().toISOString();
+          const timestamp = formatToBrazilDateTime(m.created_time);
 
           await db.run(`
             INSERT OR REPLACE INTO instagram_mensagens (
@@ -419,11 +405,12 @@ export async function POST(request: NextRequest) {
       }
 
       // 2. Insere a mensagem enviada no SQLite
+      const agoraStr = formatToBrazilDateTime(new Date());
       await db.run(`
         INSERT INTO instagram_mensagens (
           id, conversation_id, modelo_username, remetente_username, remetente_id, direcao, texto, timestamp, lida, respondida
-        ) VALUES (?, ?, ?, ?, ?, 'enviada', ?, datetime('now'), 1, 1)
-      `, [msgId, convId, cleanModelo, cleanRemetente, remetente_id || '']);
+        ) VALUES (?, ?, ?, ?, ?, 'enviada', ?, ?, 1, 1)
+      `, [msgId, convId, cleanModelo, cleanRemetente, remetente_id || '', cleanTexto, agoraStr]);
 
       // 3. Marca todas as mensagens recebidas anteriores daquele fã como respondidas e lidas
       await db.run(`
@@ -445,7 +432,7 @@ export async function POST(request: NextRequest) {
           remetente_username: cleanRemetente,
           direcao: 'enviada',
           texto: cleanTexto,
-          timestamp: new Date().toISOString(),
+          timestamp: agoraStr,
           lida: 1,
           respondida: 1
         }

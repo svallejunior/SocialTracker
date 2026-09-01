@@ -45,32 +45,61 @@ export async function POST(req: NextRequest) {
       const ext = path.extname(originalName);
       const nameWithoutExt = path.basename(originalName, ext).replace(/[^a-zA-Z0-9_-]/g, '_');
       const safeFileName = `${Date.now()}_${i}_${nameWithoutExt}${ext}`;
-      const filePath = path.join(targetDir, safeFileName);
+      let finalBuffer = buffer;
+      let finalSafeFileName = safeFileName;
+      let finalMimeType = file.type || 'application/octet-stream';
+      const isVideo = ext.toLowerCase() === '.mp4' || ext.toLowerCase() === '.mov' || (file.type && file.type.startsWith('video/'));
+
+      // Se for imagem (PNG, JPG, JPEG, WEBP, etc.), limpa metadados e injeta EXIF de celular real
+      if (!isVideo && (ext.toLowerCase() in { '.jpg': 1, '.jpeg': 1, '.png': 1, '.webp': 1 } || (file.type && file.type.startsWith('image/')))) {
+        try {
+          const { spawnSync } = await import('child_process');
+          const pyExe = process.env.PYTHON_BIN || (process.platform === 'win32' ? 'python' : 'python3');
+          const scriptProcessar = path.resolve(process.cwd(), '..', 'processar_imagem.py');
+
+          if (fs.existsSync(scriptProcessar)) {
+            const pyRes = spawnSync(pyExe, [scriptProcessar, '--stdin'], {
+              input: buffer,
+              maxBuffer: 50 * 1024 * 1024
+            });
+
+            if (pyRes.status === 0 && pyRes.stdout && pyRes.stdout.length > 0) {
+              finalBuffer = Buffer.from(pyRes.stdout);
+              finalSafeFileName = `${Date.now()}_${i}_${nameWithoutExt}.jpg`;
+              finalMimeType = 'image/jpeg';
+              console.log(`[Upload] 📸 Imagem sanitizada com EXIF de celular: ${finalSafeFileName}`);
+            }
+          }
+        } catch (procErr) {
+          console.warn('[Upload] Falha ao processar EXIF da imagem, mantendo original:', procErr);
+        }
+      }
+
+      const filePath = path.join(targetDir, finalSafeFileName);
 
       // 1. Salva arquivo localmente como backup
-      fs.writeFileSync(filePath, buffer);
+      fs.writeFileSync(filePath, finalBuffer);
 
       // 2. Upload para Supabase Storage na pasta/bucket 'postagens'
       let supabaseUrl: string | null = null;
       try {
-        const mimeType = file.type || (ext === '.mp4' ? 'video/mp4' : ext === '.png' ? 'image/png' : 'image/jpeg');
         const { error: uploadError } = await supabase
           .storage
           .from(SUPABASE_BUCKET)
-          .upload(safeFileName, buffer, {
-            contentType: mimeType,
+          .upload(finalSafeFileName, finalBuffer, {
+            contentType: finalMimeType,
             upsert: true
           });
 
         if (uploadError) {
-          console.warn(`[Supabase Upload Warning] Falha ao enviar ${safeFileName}:`, uploadError.message);
+          console.warn(`[Supabase Upload Warning] Falha ao enviar ${finalSafeFileName}:`, uploadError.message);
         } else {
           const { data: publicUrlData } = supabase
             .storage
             .from(SUPABASE_BUCKET)
-            .getPublicUrl(safeFileName);
+            .getPublicUrl(finalSafeFileName);
 
-          supabaseUrl = publicUrlData?.publicUrl || `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${safeFileName}`;
+          supabaseUrl = publicUrlData?.publicUrl || `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${finalSafeFileName}`;
           console.log(`[Supabase Storage] Upload OK! Public URL: ${supabaseUrl}`);
         }
       } catch (supErr: any) {
@@ -85,11 +114,11 @@ export async function POST(req: NextRequest) {
 
       savedFiles.push({
         name: originalName,
-        savedName: safeFileName,
+        savedName: finalSafeFileName,
         path: filePath,
         url: supabaseUrl,
-        size: file.size,
-        type: file.type || 'application/octet-stream',
+        size: finalBuffer.length,
+        type: finalMimeType,
         previewUrl: previewUrl || null
       });
     }

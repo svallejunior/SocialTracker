@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import AvatarModelo from './AvatarModelo';
+import { formatDisplayDateBR, formatDisplayDateTimeBR } from '@/lib/timezone';
 import {
   AlertTriangle, CheckCircle2, Rocket, Trash2, RefreshCw, TrendingUp, Users,
   FileText, Search, Zap, Filter, Edit3, Calendar, ChevronLeft, ChevronRight,
@@ -437,31 +438,11 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
   };
 
   const formatDateBR = (dateStr?: string | null) => {
-    if (!dateStr) return '—';
-    try {
-      const d = new Date(dateStr.replace(' ', 'T'));
-      if (isNaN(d.getTime())) return dateStr;
-      return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    } catch {
-      return dateStr;
-    }
+    return formatDisplayDateBR(dateStr);
   };
 
   const formatDateTimeBR = (dateStr?: string | null) => {
-    if (!dateStr) return '—';
-    try {
-      const d = new Date(dateStr.replace(' ', 'T'));
-      if (isNaN(d.getTime())) return dateStr;
-      return d.toLocaleDateString('pt-BR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-    } catch {
-      return dateStr;
-    }
+    return formatDisplayDateTimeBR(dateStr);
   };
 
   return (

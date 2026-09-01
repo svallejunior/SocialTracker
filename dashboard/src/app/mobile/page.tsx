@@ -8,6 +8,18 @@ import {
   AlertCircle, Sparkles, Image as ImageIcon, Film, PlayCircle
 } from 'lucide-react';
 
+interface PostHojeMobile {
+  post_id: string;
+  formato: string;
+  visualizacoes: number;
+  multiplicador: number;
+  multiplicador_str: string;
+  destaque: boolean;
+  data_postagem: string;
+  hora: string;
+  url: string;
+}
+
 interface PerfilMobile {
   username: string;
   nome: string;
@@ -17,6 +29,8 @@ interface PerfilMobile {
   variacao_ultima: number;
   variacao_dia: number;
   posts_dia: number;
+  posts_hoje?: PostHojeMobile[];
+  meu_perfil?: boolean;
   ultima_coleta: string | null;
 }
 
@@ -348,7 +362,7 @@ export default function MobileDashboard() {
               gap: '6px'
             }}>
               <Users size={15} color="#00F0FF" />
-              Perfis & Evolução ({perfis.length})
+              Minhas Modelos ({perfis.length})
             </h2>
           </div>
 
@@ -407,7 +421,7 @@ export default function MobileDashboard() {
                   </div>
                 </div>
 
-                {/* Linha Inferior: 3 Colunas de Métricas (Última Coleta, No Dia, Postagens) */}
+                {/* Linha do Meio: 3 Colunas de Métricas (Última Coleta, No Dia, Postagens) */}
                 <div style={{
                   display: 'grid',
                   gridTemplateColumns: '1fr 1fr 1fr',
@@ -451,6 +465,102 @@ export default function MobileDashboard() {
                     </div>
                   </div>
                 </div>
+
+                {/* ── Linha Inferior: Postagens do Dia da Modelo ── */}
+                {p.posts_hoje && p.posts_hoje.length > 0 ? (
+                  <div style={{
+                    marginTop: '2px',
+                    paddingTop: '8px',
+                    borderTop: '1px solid rgba(240, 246, 252, 0.08)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px'
+                  }}>
+                    <div style={{
+                      fontSize: '10px',
+                      color: '#8B949E',
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.03em',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}>
+                      <Film size={11} color="#00F0FF" />
+                      Postagens do Dia ({p.posts_hoje.length})
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                      {p.posts_hoje.map((post) => (
+                        <a
+                          key={post.post_id}
+                          href={post.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            background: 'rgba(13, 17, 23, 0.65)',
+                            border: '1px solid rgba(240, 246, 252, 0.06)',
+                            borderRadius: '8px',
+                            padding: '6px 10px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            textDecoration: 'none',
+                            transition: 'all 0.2s ease',
+                            gap: '8px'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px' }}>
+                            <span style={{
+                              fontWeight: 800,
+                              color: post.formato === 'Reels' ? '#FF007A' : (post.formato === 'Carrossel' ? '#00F0FF' : '#C084FC')
+                            }}>
+                              {post.formato}
+                            </span>
+                            <span style={{ color: 'rgba(255,255,255,0.2)' }}>-</span>
+                            <span style={{ color: '#E6EDF3', fontWeight: 600 }}>
+                              {formatNumero(post.visualizacoes)} {post.visualizacoes === 1 ? 'visualização' : 'visualizações'}
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '2px',
+                              fontWeight: 800,
+                              fontSize: '11px',
+                              color: post.destaque ? '#FF9E0B' : (post.multiplicador >= 1.0 ? '#10B981' : '#8B949E'),
+                              background: post.destaque ? 'rgba(255, 158, 11, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                              border: post.destaque ? '1px solid rgba(255, 158, 11, 0.3)' : '1px solid rgba(255, 255, 255, 0.08)',
+                              padding: '2px 6px',
+                              borderRadius: '5px'
+                            }}>
+                              {post.destaque ? `🔥 ${post.multiplicador_str}` : post.multiplicador_str}
+                            </span>
+                            <span style={{ fontSize: '10px', color: '#8B949E', fontWeight: 600 }}>
+                              Desempenho
+                            </span>
+                          </div>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{
+                    marginTop: '2px',
+                    paddingTop: '6px',
+                    borderTop: '1px solid rgba(240, 246, 252, 0.05)',
+                    fontSize: '10px',
+                    color: '#6E7681',
+                    fontStyle: 'italic',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}>
+                    <span>Sem postagens registradas hoje</span>
+                  </div>
+                )}
               </div>
             ))}
           </div>

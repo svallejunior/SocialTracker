@@ -1,7 +1,21 @@
 import os
 import sys
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+# Fuso Horário Oficial do Brasil (UTC-3 / Horário de Brasília)
+FUSO_BRASIL = timezone(timedelta(hours=-3))
+
+def agora_brasil():
+    return datetime.now(FUSO_BRASIL)
+
+def conectar_db(db_path=None):
+    """Abre conexão SQLite com timeout de 30s e modo WAL para concorrência."""
+    conn = sqlite3.connect(db_path or DB_PATH, timeout=30)
+    conn.execute('PRAGMA journal_mode = WAL;')
+    conn.execute('PRAGMA synchronous = NORMAL;')
+    conn.execute('PRAGMA busy_timeout = 30000;')
+    return conn
 from apify_client import ApifyClient
 
 # Força UTF-8 no stdout/stderr no Windows
@@ -34,7 +48,7 @@ client = ApifyClient(APIFY_TOKEN) if APIFY_TOKEN else None
 
 def get_perfis_ativos():
     """Busca no banco apenas perfis marcados como ATIVO."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = conectar_db()
     cursor = conn.cursor()
     try:
         cursor.execute("SELECT username FROM perfis_monitorados WHERE status = 'ATIVO'")
@@ -104,7 +118,7 @@ def avaliar_anomalia(cursor, registro_id, username, seguidores_atual, posts_atua
 
 
 def salvar_no_banco(username, dados, inativo=0):
-    conn = sqlite3.connect(DB_PATH)
+    conn = conectar_db()
     cursor = conn.cursor()
 
     try:
@@ -138,7 +152,7 @@ def salvar_no_banco(username, dados, inativo=0):
         VALUES (?, ?, ?, ?, ?, ?)
     """, (
         username,
-        datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        agora_brasil().strftime('%Y-%m-%d %H:%M:%S'),
         followers,
         following,
         posts,
@@ -159,7 +173,7 @@ def salvar_no_banco(username, dados, inativo=0):
 
 def atualizar_status_perfil(username, novo_status):
     """Atualiza o status do perfil na tabela perfis_monitorados."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = conectar_db()
     cursor = conn.cursor()
     try:
         cursor.execute("UPDATE perfis_monitorados SET status = ? WHERE username = ?", (novo_status, username))

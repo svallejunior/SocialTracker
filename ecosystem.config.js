@@ -13,6 +13,7 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: 3000,
+        NODE_OPTIONS: '--max-old-space-size=512',
         DB_PATH: '/var/www/socialtracker/instagram_tracker.db',
         PYTHON_BIN: '/var/www/socialtracker/.venv/bin/python3',
         PUBLIC_MEDIA_BASE_URL: 'http://localhost:3000'

@@ -57,7 +57,9 @@ def normalizar_data(valor):
 
 # Pipeline de leitura local do SQLite
 def carregar_dados_db():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
+    conn.execute('PRAGMA journal_mode = WAL;')
+    conn.execute('PRAGMA busy_timeout = 30000;')
     df_perfis = pd.read_sql_query("SELECT * FROM perfis_historico", conn)
     df_posts = pd.read_sql_query("SELECT * FROM posts_historico", conn)
     conn.close()

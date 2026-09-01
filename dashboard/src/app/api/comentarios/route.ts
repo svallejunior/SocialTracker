@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import sqlite3 from 'sqlite3';
-import { open } from 'sqlite';
-import path from 'path';
-import fs from 'fs';
+import { formatToBrazilDateTime } from '@/lib/timezone';
+import { getDb as getDbBase } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -10,20 +8,8 @@ export const revalidate = 0;
 const GRAPH_API_VERSION = 'v20.0';
 const GRAPH_API_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
 
-function resolveDbPath() {
-  if (process.env.DB_PATH && fs.existsSync(process.env.DB_PATH)) return process.env.DB_PATH;
-  const parentDb = path.resolve(process.cwd(), '..', 'instagram_tracker.db');
-  if (fs.existsSync(parentDb)) return parentDb;
-  const cwdDb = path.resolve(process.cwd(), 'instagram_tracker.db');
-  if (fs.existsSync(cwdDb)) return cwdDb;
-  return parentDb;
-}
-
 async function getDb() {
-  const db = await open({
-    filename: resolveDbPath(),
-    driver: sqlite3.Database
-  });
+  const db = await getDbBase();
 
   await db.exec(`
     CREATE TABLE IF NOT EXISTS instagram_comentarios (
@@ -183,7 +169,7 @@ export async function GET(request: NextRequest) {
         const autorUsername = com.from?.username || 'usuario_instagram';
         const autorId = com.from?.id || '';
         const texto = com.text || '';
-        const timestamp = com.timestamp || new Date().toISOString();
+        const timestamp = formatToBrazilDateTime(com.timestamp);
         const likeCount = com.like_count || 0;
         const curtidoPorMim = com.user_likes ? 1 : 0;
         const replies = com.replies?.data || [];
