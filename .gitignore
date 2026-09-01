@@ -17,3 +17,7 @@ automacao/
 
 # Vídeos de teste manuais
 dashboard/*.mp4
+
+# Bytecode Python
+__pycache__/
+*.pyc
