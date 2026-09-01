@@ -158,6 +158,8 @@ def init_db_schema():
             c.execute("ALTER TABLE automacao_agendamentos ADD COLUMN erro_detalhe TEXT DEFAULT ''")
         if "ultima_execucao" not in cols:
             c.execute("ALTER TABLE automacao_agendamentos ADD COLUMN ultima_execucao DATETIME")
+        if "midia_removida_em" not in cols:
+            c.execute("ALTER TABLE automacao_agendamentos ADD COLUMN midia_removida_em DATETIME")
 
         # Backfill idempotente: antes desta versão a publicação só existia na própria
         # linha do agendamento. publicado_em está em UTC → 'localtime' converte.
@@ -1103,6 +1105,122 @@ def upload_para_supabase(local_path, filename, is_video=False):
     return None
 
 
+def remover_do_supabase(filename: str) -> bool:
+    """Remove um objeto do Supabase Storage. Retorna True se removido (ou já ausente)."""
+    if not filename:
+        return True
+    try:
+        url = f"{SUPABASE_URL}/storage/v1/object/{SUPABASE_BUCKET}/{filename}"
+        headers = {
+            "Authorization": f"Bearer {SUPABASE_ANON_KEY}",
+            "apikey": SUPABASE_ANON_KEY,
+        }
+        res = requests.delete(url, headers=headers, timeout=15)
+        if res.status_code in (200, 204, 404):
+            return True
+        logger.warning(f"Falha ao remover '{filename}' do Supabase Storage ({res.status_code}): {res.text[:200]}")
+        return False
+    except Exception as e:
+        logger.warning(f"Erro ao remover '{filename}' do Supabase Storage: {e}")
+        return False
+
+
+def _nome_arquivo_do_item(item: dict):
+    saved_name = item.get("savedName")
+    if not saved_name and item.get("path"):
+        saved_name = os.path.basename(item["path"])
+    return saved_name
+
+
+def limpar_midia_publicada(conn=None):
+    """Remove do disco local e do Supabase Storage a mídia de agendamentos que não vão
+    reutilizá-la: DATA_ESPECIFICA já PUBLICADO ou RECORRENTE já ENCERRADO.
+
+    Idempotente via a coluna midia_removida_em. Nunca apaga um arquivo que ainda esteja
+    referenciado por um agendamento ativo (AGENDADO/PAUSADO/PUBLICANDO) — cobre o caso raro
+    de duas rotinas apontando para o mesmo upload. Cada arquivo original pode ter gerado
+    variantes locais (conversão de imagem para JPEG, partes de vídeo de Stories); todas
+    compartilham o prefixo do nome original, então são removidas junto por glob.
+    """
+    fechar = conn is None
+    if conn is None:
+        conn = get_db_connection()
+    try:
+        candidatos = conn.execute("""
+            SELECT * FROM automacao_agendamentos
+            WHERE midia_removida_em IS NULL
+              AND (
+                  (tipo_agendamento = 'DATA_ESPECIFICA' AND status = 'PUBLICADO')
+                  OR (tipo_agendamento = 'RECORRENTE' AND status = 'ENCERRADO')
+              )
+        """).fetchall()
+
+        if not candidatos:
+            return 0
+
+        em_uso = set()
+        ativos = conn.execute("""
+            SELECT arquivos FROM automacao_agendamentos
+            WHERE status IN ('AGENDADO', 'PAUSADO', 'PUBLICANDO')
+        """).fetchall()
+        for row in ativos:
+            try:
+                for item in json.loads(row["arquivos"] or "[]"):
+                    nome = _nome_arquivo_do_item(item)
+                    if nome:
+                        em_uso.add(nome)
+            except Exception:
+                continue
+
+        limpos = 0
+        for row in candidatos:
+            ag = dict(row)
+            try:
+                arquivos = json.loads(ag.get("arquivos") or "[]")
+            except Exception:
+                arquivos = []
+
+            automacao_dir = os.path.join(BASE_DIR, "automacao", str(ag.get("meta_account_id") or ""))
+
+            for item in arquivos:
+                saved_name = _nome_arquivo_do_item(item)
+                if not saved_name or saved_name in em_uso:
+                    continue
+
+                stem = os.path.splitext(saved_name)[0]
+                if os.path.isdir(automacao_dir):
+                    import glob
+                    for local_path in glob.glob(os.path.join(automacao_dir, glob.escape(stem) + "*")):
+                        try:
+                            os.remove(local_path)
+                            logger.info(f"🗑️  Mídia local removida: {local_path}")
+                        except OSError as e:
+                            logger.warning(f"Não foi possível remover '{local_path}': {e}")
+
+                if not remover_do_supabase(saved_name):
+                    logger.warning(f"Mídia '{saved_name}' pode ter ficado órfã no Supabase Storage.")
+                # Cobre a variante convertida (PNG/WEBP → JPEG) enviada sob outro nome.
+                if not saved_name.lower().endswith((".jpg", ".jpeg")):
+                    remover_do_supabase(f"{stem}.jpg")
+
+            conn.execute(
+                "UPDATE automacao_agendamentos SET midia_removida_em = datetime('now') WHERE id = ?",
+                (ag["id"],)
+            )
+            conn.commit()
+            limpos += 1
+
+        if limpos:
+            logger.info(f"🧹 Mídia limpa de {limpos} agendamento(s) finalizado(s) (data específica publicada ou rotina encerrada).")
+        return limpos
+    except Exception as e:
+        logger.warning(f"Erro na limpeza de mídia publicada: {e}")
+        return 0
+    finally:
+        if fechar:
+            conn.close()
+
+
 def publicar_item_meta(agendamento, config, dry_run=False):
     """Executa a criação do container e publicação na Meta Graph API"""
     access_token = config.get("access_token")
@@ -1700,6 +1818,11 @@ def executar_agendamentos_pendentes(agendamento_id=None, force=False, dry_run=Fa
 
     if not agendamentos:
         logger.info("Nenhum agendamento pendente encontrado para processar.")
+        if not dry_run:
+            try:
+                limpar_midia_publicada()
+            except Exception as e:
+                logger.warning(f"Erro ao limpar mídia publicada: {e}")
         return []
 
     agora = datetime.now()
@@ -1850,6 +1973,12 @@ def executar_agendamentos_pendentes(agendamento_id=None, force=False, dry_run=Fa
             })
         finally:
             conn.close()
+
+    if not dry_run:
+        try:
+            limpar_midia_publicada()
+        except Exception as e:
+            logger.warning(f"Erro ao limpar mídia publicada: {e}")
 
     return resultados
 
