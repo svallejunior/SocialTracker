@@ -1118,6 +1118,14 @@ def remover_do_supabase(filename: str) -> bool:
         res = requests.delete(url, headers=headers, timeout=15)
         if res.status_code in (200, 204, 404):
             return True
+        # O Supabase Storage responde objeto inexistente com HTTP 400 e um corpo
+        # {"statusCode":"404", "error":"not_found", ...} — não é um 404 de verdade.
+        if res.status_code == 400:
+            try:
+                if str(res.json().get("statusCode")) == "404":
+                    return True
+            except Exception:
+                pass
         logger.warning(f"Falha ao remover '{filename}' do Supabase Storage ({res.status_code}): {res.text[:200]}")
         return False
     except Exception as e:
