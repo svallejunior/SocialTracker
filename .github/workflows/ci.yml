@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  dashboard:
+    name: Dashboard (typecheck + lint)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - run: npm ci
+
+      # Bloqueante: hoje passa limpo. Uma quebra de tipo real deve travar o CI.
+      - name: Type check
+        run: npm run typecheck
+
+      # Informativo, não bloqueia: o código atual já tem ~250 avisos/erros de
+      # lint pré-existentes (principalmente `no-explicit-any` e regras de
+      # hooks). Bloquear agora deixaria o CI permanentemente vermelho sem
+      # sinalizar regressões novas. Promova para bloqueante quando o débito
+      # for limpo.
+      - name: Lint (não bloqueia)
+        run: npm run lint
+        continue-on-error: true
+
+  python:
+    name: Scripts Python (sintaxe)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      # Checagem de sintaxe pura (sem instalar dependências) — pega erros
+      # como os que já corrigimos manualmente antes de cada deploy.
+      - name: Checa sintaxe de todos os scripts .py
+        run: python -m compileall -q . -x "dashboard|node_modules|\.next|__pycache__|\.venv|automacao"
