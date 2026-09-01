@@ -1105,6 +1105,15 @@ def upload_para_supabase(local_path, filename, is_video=False):
     return None
 
 
+# A chave anon/publishable usada no projeto (mesma do upload) tem permissão de escrita
+# (upsert) mas NÃO tem permissão de DELETE no bucket — toda tentativa real de apagar um
+# objeto existente volta 403 "Access denied" (confirmado em produção em 01/09/2026).
+# Corrigir exige decisão do usuário: uma policy de RLS liberando DELETE no bucket, ou
+# trocar para a service_role key só nesta chamada. Até lá, a limpeza fica só no disco
+# local — não adianta insistir em apagar do Supabase, é erro de permissão, não transitório.
+LIMPAR_SUPABASE_AO_PUBLICAR = False
+
+
 def remover_do_supabase(filename: str) -> bool:
     """Remove um objeto do Supabase Storage. Retorna True se removido (ou já ausente)."""
     if not filename:
@@ -1141,8 +1150,9 @@ def _nome_arquivo_do_item(item: dict):
 
 
 def limpar_midia_publicada(conn=None):
-    """Remove do disco local e do Supabase Storage a mídia de agendamentos que não vão
-    reutilizá-la: DATA_ESPECIFICA já PUBLICADO ou RECORRENTE já ENCERRADO.
+    """Remove do disco local (e do Supabase Storage, se LIMPAR_SUPABASE_AO_PUBLICAR estiver
+    ligado) a mídia de agendamentos que não vão reutilizá-la: DATA_ESPECIFICA já PUBLICADO
+    ou RECORRENTE já ENCERRADO.
 
     Idempotente via a coluna midia_removida_em. Nunca apaga um arquivo que ainda esteja
     referenciado por um agendamento ativo (AGENDADO/PAUSADO/PUBLICANDO) — cobre o caso raro
@@ -1205,11 +1215,12 @@ def limpar_midia_publicada(conn=None):
                         except OSError as e:
                             logger.warning(f"Não foi possível remover '{local_path}': {e}")
 
-                if not remover_do_supabase(saved_name):
-                    logger.warning(f"Mídia '{saved_name}' pode ter ficado órfã no Supabase Storage.")
-                # Cobre a variante convertida (PNG/WEBP → JPEG) enviada sob outro nome.
-                if not saved_name.lower().endswith((".jpg", ".jpeg")):
-                    remover_do_supabase(f"{stem}.jpg")
+                if LIMPAR_SUPABASE_AO_PUBLICAR:
+                    if not remover_do_supabase(saved_name):
+                        logger.warning(f"Mídia '{saved_name}' pode ter ficado órfã no Supabase Storage.")
+                    # Cobre a variante convertida (PNG/WEBP → JPEG) enviada sob outro nome.
+                    if not saved_name.lower().endswith((".jpg", ".jpeg")):
+                        remover_do_supabase(f"{stem}.jpg")
 
             conn.execute(
                 "UPDATE automacao_agendamentos SET midia_removida_em = datetime('now') WHERE id = ?",
