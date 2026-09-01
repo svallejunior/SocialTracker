@@ -4,3 +4,16 @@ node_modules/
 .next/
 
 .env
+
+# Bancos de dados locais (dados, não código — não devem entrar no histórico do git)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+backups_locais/
+
+# Mídia de automação: uploads/backup local por conta, recriado sob demanda pelo app
+automacao/
+
+# Vídeos de teste manuais
+dashboard/*.mp4
