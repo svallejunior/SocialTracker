@@ -297,7 +297,6 @@ export async function GET(request: NextRequest) {
         ORDER BY c.pendentes_count DESC, datetime(r.timestamp) DESC
       `, [username, username]);
 
-      await db.close();
       return NextResponse.json({
         success: true,
         meta_account_id: creds.meta_account_id,
@@ -310,7 +309,6 @@ export async function GET(request: NextRequest) {
 
     if (action === 'mensagens') {
       if (!remetente) {
-        await db.close();
         return NextResponse.json({ success: false, error: 'Remetente é obrigatório para carregar o chat' }, { status: 400 });
       }
 
@@ -331,7 +329,6 @@ export async function GET(request: NextRequest) {
         ORDER BY datetime(timestamp) ASC, id ASC
       `, [username, remetente]);
 
-      await db.close();
       return NextResponse.json({
         success: true,
         meta_account_id: creds.meta_account_id,
@@ -340,7 +337,6 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    await db.close();
     return NextResponse.json({ success: false, error: 'Ação inválida' }, { status: 400 });
   } catch (error: any) {
     console.error("Erro no GET /api/respostas:", error);
@@ -367,7 +363,6 @@ export async function POST(request: NextRequest) {
 
     if (action === 'send_message') {
       if (!texto || String(texto).trim().length === 0) {
-        await db.close();
         return NextResponse.json({ success: false, error: 'Texto da mensagem é obrigatório' }, { status: 400 });
       }
 
@@ -419,7 +414,6 @@ export async function POST(request: NextRequest) {
         WHERE LOWER(modelo_username) = ? AND LOWER(remetente_username) = ? AND direcao = 'recebida'
       `, [cleanModelo, cleanRemetente]);
 
-      await db.close();
       return NextResponse.json({
         success: true,
         message: 'Mensagem enviada com sucesso',
@@ -446,7 +440,6 @@ export async function POST(request: NextRequest) {
         WHERE LOWER(modelo_username) = ? AND LOWER(remetente_username) = ? AND direcao = 'recebida'
       `, [cleanModelo, cleanRemetente]);
 
-      await db.close();
       return NextResponse.json({ success: true, message: 'Conversa marcada como lida e respondida' });
     }
 
@@ -458,11 +451,9 @@ export async function POST(request: NextRequest) {
         WHERE LOWER(modelo_username) = ? AND LOWER(remetente_username) = ? AND direcao = 'recebida'
       `, [cleanModelo, cleanRemetente]);
 
-      await db.close();
       return NextResponse.json({ success: true, message: 'Conversa dispensada. Pendência baixada sem enviar resposta.' });
     }
 
-    await db.close();
     return NextResponse.json({ success: false, error: 'Ação não reconhecida' }, { status: 400 });
   } catch (error: any) {
     console.error("Erro no POST /api/respostas:", error);

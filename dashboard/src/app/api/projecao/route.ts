@@ -68,8 +68,6 @@ export async function GET(req: NextRequest) {
       ORDER BY data_coleta ASC
     `);
 
-    await db.close();
-
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 

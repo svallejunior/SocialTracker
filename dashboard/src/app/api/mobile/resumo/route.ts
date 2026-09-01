@@ -240,8 +240,6 @@ export async function GET(req: NextRequest) {
       concluidos = [];
     }
 
-    await db.close();
-
     return NextResponse.json({
       success: true,
       ultima_atualizacao: ultimaAtualizacao,

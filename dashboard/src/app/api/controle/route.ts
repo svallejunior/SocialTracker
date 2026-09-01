@@ -157,8 +157,6 @@ export async function GET() {
       console.warn("Aviso ao buscar última execução Meta:", err);
     }
 
-    await db.close();
-
     // 5. Tratamento de Dados: Transforma 'null' em valores seguros que o React aceita
 
     const perfisTratados = linhasBanco.map((p: any) => {
@@ -262,8 +260,6 @@ export async function PUT(request: NextRequest) {
         body.id
       ]);
 
-      await db.close();
-
       return NextResponse.json({
         success: true,
         modo: "lancamento_editado"
@@ -328,7 +324,6 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    await db.close();
     return NextResponse.json({ success: true });
 
   } catch (error: any) {
@@ -394,7 +389,6 @@ export async function POST(request: NextRequest) {
       ]);
     }
 
-    await db.close();
     return NextResponse.json({ success: true, grupo_rateio: grupoRateio });
 
   } catch (error: any) {
@@ -424,7 +418,6 @@ export async function DELETE(request: NextRequest) {
       await db.run('DELETE FROM lancamentos WHERE id = ?', [id]);
     }
 
-    await db.close();
     return NextResponse.json({ success: true });
 
   } catch (error: any) {

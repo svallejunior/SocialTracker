@@ -96,7 +96,6 @@ export async function POST(request: NextRequest) {
     );
 
     if (existing) {
-      await db.close();
       const horasAntesColeta = (() => {
         if (!data_coleta) return null;
         const dtColeta = new Date(data_coleta.replace(' ', 'T'));
@@ -130,8 +129,6 @@ export async function POST(request: NextRequest) {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [postId, usernameClean, dataPostagem, formato, '', 0, 0, 0, 0.0, agora, shortcode]
     );
-
-    await db.close();
 
     const horasAntesColeta = (() => {
       if (!data_coleta) return null;

@@ -12,11 +12,17 @@ export function resolveDbPath(): string {
   return parentDb;
 }
 
-/**
- * Abre conexão SQLite com busyTimeout de 10 segundos (10000ms) e modo WAL
- * para concorrência segura com scripts Python e o daemon.
- */
-export async function getDb(): Promise<Database<sqlite3.Database, sqlite3.Statement>> {
+type Db = Database<sqlite3.Database, sqlite3.Statement>;
+
+// Conexão única reaproveitada por todas as requisições: o processo do Next.js
+// roda continuamente sob PM2 (não é serverless), então abrir e fechar uma
+// conexão a cada request só desperdiçava tempo e vazava handles nas rotas que
+// esqueciam de fechar. Se a abertura inicial falhar, dbPromise volta a null
+// para a próxima chamada tentar de novo em vez de ficar presa numa promise
+// rejeitada para sempre.
+let dbPromise: Promise<Db> | null = null;
+
+async function abrirConexao(): Promise<Db> {
   const db = await open({
     filename: resolveDbPath(),
     driver: sqlite3.Database
@@ -37,4 +43,19 @@ export async function getDb(): Promise<Database<sqlite3.Database, sqlite3.Statem
   }
 
   return db;
+}
+
+/**
+ * Retorna a conexão SQLite compartilhada do processo (busyTimeout de 10s e
+ * modo WAL, para concorrência segura com scripts Python e o daemon). Não
+ * feche a conexão retornada — ela é reaproveitada por todas as rotas.
+ */
+export async function getDb(): Promise<Db> {
+  if (!dbPromise) {
+    dbPromise = abrirConexao().catch((err) => {
+      dbPromise = null;
+      throw err;
+    });
+  }
+  return dbPromise;
 }

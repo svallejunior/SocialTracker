@@ -214,8 +214,6 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    await db.close();
-
     return NextResponse.json({
       success: true,
       stats,
@@ -300,8 +298,6 @@ export async function POST() {
       WHERE COALESCE(revisado_manualmente, 0) = 0 AND inativo = 0
     `);
 
-    await db.close();
-
     return NextResponse.json({
       success: true,
       marcados: marcadosAnalise,
@@ -353,8 +349,6 @@ export async function PUT(request: NextRequest) {
         [newRevisado, id]
       );
     }
-
-    await db.close();
 
     return NextResponse.json({
       success: true,

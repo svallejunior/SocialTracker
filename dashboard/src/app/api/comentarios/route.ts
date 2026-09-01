@@ -105,7 +105,6 @@ export async function GET(request: NextRequest) {
     const creds = await getMetaCredentials(db, username);
 
     if (!creds.meta_account_id || !creds.access_token) {
-      await db.close();
       const linkAuth = gerarLinkAutorizacao(username);
       return NextResponse.json({
         success: false,
@@ -129,7 +128,6 @@ export async function GET(request: NextRequest) {
     const data = await res.json();
 
     if (!res.ok || data.error) {
-      await db.close();
       const errCode = data.error?.code;
       // Erros 100 e 200 indicam falta de permissão — conta não autorizou o app
       const isPermissionError = errCode === 100 || errCode === 200 || errCode === 190;
@@ -236,8 +234,6 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    await db.close();
-
     return NextResponse.json({
       success: true,
       posts: postsTratados,
@@ -267,7 +263,6 @@ export async function POST(request: NextRequest) {
     const creds = await getMetaCredentials(db, cleanModelo);
 
     if (!creds.access_token) {
-      await db.close();
       return NextResponse.json({ success: false, error: `Nenhum token encontrado para @${cleanModelo}` }, { status: 400 });
     }
 
@@ -278,7 +273,6 @@ export async function POST(request: NextRequest) {
         [comment_id]
       );
 
-      await db.close();
       return NextResponse.json({ success: true, message: 'Comentário marcado como curtido!', curtido: true });
     }
 
@@ -289,14 +283,12 @@ export async function POST(request: NextRequest) {
         [comment_id]
       );
 
-      await db.close();
       return NextResponse.json({ success: true, message: 'Marcação de curtida removida!', curtido: false });
     }
 
     // ─── 3. RESPONDER COMENTÁRIO ───
     if (action === 'reply') {
       if (!message || String(message).trim().length === 0) {
-        await db.close();
         return NextResponse.json({ success: false, error: 'O texto da resposta é obrigatório' }, { status: 400 });
       }
 
@@ -314,7 +306,6 @@ export async function POST(request: NextRequest) {
       const dataMeta = await resMeta.json();
 
       if (!resMeta.ok || dataMeta.error) {
-        await db.close();
         return NextResponse.json({
           success: false,
           error: `Erro Meta API ao responder: ${dataMeta.error?.message || 'Falha no envio da resposta'}`
@@ -328,7 +319,6 @@ export async function POST(request: NextRequest) {
         WHERE id = ?
       `, [cleanMessage, comment_id]);
 
-      await db.close();
       return NextResponse.json({
         success: true,
         message: 'Resposta enviada com sucesso!',
@@ -341,7 +331,6 @@ export async function POST(request: NextRequest) {
     if (action === 'hide') {
       const urlHide = `${GRAPH_API_BASE}/${comment_id}?hide=true&access_token=${creds.access_token}`;
       await fetch(urlHide, { method: 'POST' });
-      await db.close();
       return NextResponse.json({ success: true, message: 'Comentário ocultado' });
     }
 
@@ -353,7 +342,6 @@ export async function POST(request: NextRequest) {
         WHERE id = ?
       `, [comment_id]);
 
-      await db.close();
       return NextResponse.json({
         success: true,
         message: 'Comentário dispensado com sucesso! Pendência baixada.',
@@ -365,7 +353,6 @@ export async function POST(request: NextRequest) {
     // ─── 6. DISPENSAR TODOS OS COMENTÁRIOS DE UM POST ───
     if (action === 'dismiss_post') {
       if (!media_id) {
-        await db.close();
         return NextResponse.json({ success: false, error: 'media_id é obrigatório para dispensar o post' }, { status: 400 });
       }
 
@@ -375,7 +362,6 @@ export async function POST(request: NextRequest) {
         WHERE media_id = ?
       `, [media_id]);
 
-      await db.close();
       return NextResponse.json({
         success: true,
         message: 'Todos os comentários desta publicação foram dispensados!',
@@ -391,7 +377,6 @@ export async function POST(request: NextRequest) {
         WHERE id = ?
       `, [comment_id]);
 
-      await db.close();
       return NextResponse.json({
         success: true,
         message: 'Pendência reaberta com sucesso!',
@@ -399,7 +384,6 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    await db.close();
     return NextResponse.json({ success: false, error: 'Ação não suportada' }, { status: 400 });
   } catch (error: any) {
     console.error("Erro no POST /api/comentarios:", error);
