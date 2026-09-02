@@ -136,10 +136,10 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      // 3) Postagens da Modelo no Dia
+      // 3) Últimas 5 Postagens da Modelo (independentemente da data)
       const userPosts = postsByUser[u] || [];
-      const postsHojeList = userPosts
-        .filter((post: any) => diaRef ? String(post.data_postagem || '').startsWith(diaRef) : false)
+      const ultimasPublicacoes = userPosts
+        .slice(0, 5)
         .map((post: any) => {
           let fmt = post.formato || 'Imagem';
           const fUpper = fmt.toUpperCase();
@@ -185,7 +185,8 @@ export async function GET(req: NextRequest) {
         variacao_ultima: variacaoUltima,
         variacao_dia: variacaoDia,
         posts_dia: postsDia,
-        posts_hoje: postsHojeList,
+        ultimas_publicacoes: ultimasPublicacoes,
+        posts_hoje: ultimasPublicacoes,
         meu_perfil: true,
         ultima_coleta: atual ? atual.data_coleta : null
       };

@@ -1479,10 +1479,19 @@ export default function Dashboard() {
           // Gerar link do post no Instagram convertendo ID numérico para Shortcode se necessário
           const postLink = getInstagramPostUrl(p);
 
+          // Fallback de visualizações: igual à lógica mobile
+          // Reels → views (play_count), Carrossel/Imagem → reach, senão likes+comentarios
+          const rawViews = Number(p.views) || 0;
+          const rawReach = Number(p.reach) || 0;
+          const viewsEfetivas = rawViews > 0 ? rawViews : (rawReach > 0 ? rawReach : eng);
+          const viewsLabel = rawViews > 0 ? 'plays' : (rawReach > 0 ? 'alcance' : 'eng');
+
           return {
             ...p,
             performanceMultiplier: pMult,
-            link: postLink
+            link: postLink,
+            viewsEfetivas,
+            viewsLabel
           };
         });
 
@@ -2143,7 +2152,10 @@ export default function Dashboard() {
     } else if (sortField === 'performanceMultiplier') {
       aVal = a.performanceMultiplier || 0;
       bVal = b.performanceMultiplier || 0;
-    } else if (['likes', 'comentarios', 'views'].includes(sortField)) {
+    } else if (sortField === 'views') {
+      aVal = Number(a.viewsEfetivas) || 0;
+      bVal = Number(b.viewsEfetivas) || 0;
+    } else if (['likes', 'comentarios'].includes(sortField)) {
       aVal = Number(aVal) || 0;
       bVal = Number(bVal) || 0;
     }
@@ -4387,7 +4399,11 @@ export default function Dashboard() {
                     <th className={`sortable ${sortField === 'comentarios' ? 'active' : ''}`} onClick={() => handleSort('comentarios')}>
                       Comentários {sortField === 'comentarios' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                     </th>
-                    <th className={`sortable ${sortField === 'views' ? 'active' : ''}`} onClick={() => handleSort('views')}>
+                    <th
+                      className={`sortable ${sortField === 'views' ? 'active' : ''}`}
+                      onClick={() => handleSort('views')}
+                      title="Reels: plays · Carrossel/Imagem: alcance (reach) ou engajamento como fallback"
+                    >
                       Visualizações {sortField === 'views' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                     </th>
                     <th className={`sortable ${sortField === 'taxa_engajamento' ? 'active' : ''}`} onClick={() => handleSort('taxa_engajamento')}>
@@ -4452,7 +4468,18 @@ export default function Dashboard() {
                         </td>
                         <td>{formatNumber(post.likes)}</td>
                         <td>{formatNumber(post.comentarios)}</td>
-                        <td>{post.views > 0 ? formatNumber(post.views) : <span style={{ opacity: 0.3 }}>—</span>}</td>
+                        <td>
+                          {post.viewsEfetivas > 0 ? (
+                            <span style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                              <span>{formatNumber(post.viewsEfetivas)}</span>
+                              {post.viewsLabel && post.viewsLabel !== 'plays' && (
+                                <span style={{ fontSize: '10px', opacity: 0.45, fontStyle: 'italic' }}>{post.viewsLabel}</span>
+                              )}
+                            </span>
+                          ) : (
+                            <span style={{ opacity: 0.3 }}>—</span>
+                          )}
+                        </td>
                         <td style={{ fontWeight: '600' }}>{post.taxa_engajamento ? `${post.taxa_engajamento.toFixed(2)}%` : '0,00%'}</td>
                         <td>
                           <span className={`performance-badge ${performanceClass}`}>

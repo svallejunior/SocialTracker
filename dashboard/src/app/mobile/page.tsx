@@ -4,11 +4,11 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   Clock, RefreshCw, Calendar, CheckCircle2, TrendingUp,
-  TrendingDown, Users, Layers, Monitor, ChevronRight,
+  TrendingDown, Users, Layers, ExternalLink,
   AlertCircle, Sparkles, Image as ImageIcon, Film, PlayCircle
 } from 'lucide-react';
 
-interface PostHojeMobile {
+interface PostMobile {
   post_id: string;
   formato: string;
   visualizacoes: number;
@@ -29,7 +29,8 @@ interface PerfilMobile {
   variacao_ultima: number;
   variacao_dia: number;
   posts_dia: number;
-  posts_hoje?: PostHojeMobile[];
+  ultimas_publicacoes?: PostMobile[];
+  posts_hoje?: PostMobile[];
   meu_perfil?: boolean;
   ultima_coleta: string | null;
 }
@@ -76,6 +77,8 @@ export default function MobileDashboard() {
             variacao_ultima: 0,
             variacao_dia: Number(p.novosSeguidores24h || 0),
             posts_dia: 0,
+            ultimas_publicacoes: [],
+            posts_hoje: [],
             ultima_coleta: p.data_coleta || null
           }));
 
@@ -127,10 +130,37 @@ export default function MobileDashboard() {
       if (isNaN(d.getTime())) return dateStr;
       
       const hoje = new Date();
+      const ontem = new Date();
+      ontem.setDate(ontem.getDate() - 1);
+
       const isHoje = d.toDateString() === hoje.toDateString();
+      const isOntem = d.toDateString() === ontem.toDateString();
       const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
       if (isHoje) return `Hoje às ${hora}`;
+      if (isOntem) return `Ontem às ${hora}`;
+      return `${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} às ${hora}`;
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const formatDataPostagem = (dateStr: string | null) => {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr.replace(' ', 'T'));
+      if (isNaN(d.getTime())) return dateStr;
+      
+      const hoje = new Date();
+      const ontem = new Date();
+      ontem.setDate(ontem.getDate() - 1);
+
+      const isHoje = d.toDateString() === hoje.toDateString();
+      const isOntem = d.toDateString() === ontem.toDateString();
+      const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+      if (isHoje) return `Hoje às ${hora}`;
+      if (isOntem) return `Ontem às ${hora}`;
       return `${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} às ${hora}`;
     } catch {
       return dateStr;
@@ -182,8 +212,9 @@ export default function MobileDashboard() {
     }
     return (
       <span style={{
-        color: '#6B7280',
-        background: 'rgba(107, 114, 128, 0.1)',
+        color: '#8B949E',
+        background: 'rgba(255, 255, 255, 0.05)',
+        border: '1px solid rgba(255, 255, 255, 0.08)',
         padding: '2px 6px',
         borderRadius: '6px',
         fontSize: '11px',
@@ -198,7 +229,7 @@ export default function MobileDashboard() {
     return (
       <div style={{
         minHeight: '100vh',
-        background: '#090A0F',
+        background: '#0D0F12',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -228,7 +259,7 @@ export default function MobileDashboard() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#090A0F',
+      background: '#0E1015',
       color: '#FFFFFF',
       fontFamily: 'var(--font-plus-jakarta, sans-serif)',
       paddingBottom: '40px'
@@ -238,9 +269,9 @@ export default function MobileDashboard() {
         position: 'sticky',
         top: 0,
         zIndex: 50,
-        background: 'rgba(13, 17, 23, 0.92)',
-        backdropFilter: 'blur(12px)',
-        borderBottom: '1px solid rgba(240, 246, 252, 0.08)',
+        background: 'rgba(18, 20, 26, 0.95)',
+        backdropFilter: 'blur(16px)',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
         padding: '12px 16px',
         display: 'flex',
         alignItems: 'center',
@@ -270,8 +301,8 @@ export default function MobileDashboard() {
             onClick={handleRefresh}
             disabled={refreshing}
             style={{
-              background: 'rgba(255,255,255,0.06)',
-              border: '1px solid rgba(255,255,255,0.1)',
+              background: 'rgba(255, 255, 255, 0.08)',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
               borderRadius: '8px',
               padding: '6px 12px',
               color: '#FFFFFF',
@@ -289,18 +320,18 @@ export default function MobileDashboard() {
         </div>
       </header>
 
-      <main style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <main style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
 
         {/* ── CARD: HORA DA ÚLTIMA ATUALIZAÇÃO ── */}
         <div style={{
-          background: 'linear-gradient(135deg, rgba(22, 27, 34, 0.8) 0%, rgba(13, 17, 23, 0.95) 100%)',
-          border: '1px solid rgba(240, 246, 252, 0.1)',
-          borderRadius: '14px',
+          background: '#202327',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          borderRadius: '18px',
           padding: '14px 16px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.3)'
+          boxShadow: '0 8px 24px -2px rgba(0, 0, 0, 0.4)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div style={{
@@ -317,7 +348,7 @@ export default function MobileDashboard() {
               <Clock size={18} />
             </div>
             <div>
-              <div style={{ fontSize: '11px', color: '#8B949E', fontWeight: 600, textTransform: 'uppercase' }}>
+              <div style={{ fontSize: '11px', color: '#9CA3AF', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                 Última Atualização
               </div>
               <div style={{ fontSize: '14px', fontWeight: 700, color: '#FFFFFF' }}>
@@ -330,9 +361,9 @@ export default function MobileDashboard() {
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
-            background: 'rgba(16, 185, 129, 0.1)',
-            border: '1px solid rgba(16, 185, 129, 0.2)',
-            padding: '4px 8px',
+            background: 'rgba(16, 185, 129, 0.12)',
+            border: '1px solid rgba(16, 185, 129, 0.25)',
+            padding: '4px 10px',
             borderRadius: '20px',
             fontSize: '11px',
             color: '#10B981',
@@ -343,7 +374,7 @@ export default function MobileDashboard() {
           </div>
         </div>
 
-        {/* ── SEÇÃO: TABELA / CARDS DE ATUALIZAÇÃO DOS PERFIS ── */}
+        {/* ── SEÇÃO: CARDS DOS PERFIS E SUAS PUBLICAÇÕES ── */}
         <div>
           <div style={{
             display: 'flex',
@@ -352,11 +383,11 @@ export default function MobileDashboard() {
             marginBottom: '12px'
           }}>
             <h2 style={{
-              fontSize: '14px',
+              fontSize: '13px',
               fontWeight: 800,
-              letterSpacing: '0.04em',
+              letterSpacing: '0.05em',
               textTransform: 'uppercase',
-              color: '#8B949E',
+              color: '#9CA3AF',
               display: 'flex',
               alignItems: 'center',
               gap: '6px'
@@ -366,203 +397,217 @@ export default function MobileDashboard() {
             </h2>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {perfis.map((p) => (
-              <div
-                key={p.username}
-                style={{
-                  background: 'rgba(22, 27, 34, 0.75)',
-                  border: '1px solid rgba(240, 246, 252, 0.08)',
-                  borderRadius: '14px',
-                  padding: '14px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '12px'
-                }}
-              >
-                {/* Linha Superior: Foto, Nome e Total de Seguidores */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{
-                      width: '40px',
-                      height: '40px',
-                      borderRadius: '50%',
-                      overflow: 'hidden',
-                      background: '#161B22',
-                      border: '2px solid rgba(240, 246, 252, 0.15)',
-                      flexShrink: 0
-                    }}>
-                      {p.foto_url ? (
-                        <img src={p.foto_url} alt={p.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      ) : (
-                        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>
-                          👤
-                        </div>
-                      )}
-                    </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {perfis.map((p) => {
+              const postsList = p.ultimas_publicacoes || p.posts_hoje || [];
 
-                    <div>
-                      <div style={{ fontSize: '14px', fontWeight: 800, color: '#FFFFFF' }}>
-                        {p.nome || p.username}
-                      </div>
-                      <div style={{ fontSize: '11px', color: '#8B949E' }}>
-                        @{p.username}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: '15px', fontWeight: 800, color: '#FFFFFF' }}>
-                      {formatNumero(p.seguidores)}
-                    </div>
-                    <div style={{ fontSize: '10px', color: '#8B949E', textTransform: 'uppercase' }}>
-                      Seguidores
-                    </div>
-                  </div>
-                </div>
-
-                {/* Linha do Meio: 3 Colunas de Métricas (Última Coleta, No Dia, Postagens) */}
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr 1fr',
-                  gap: '6px',
-                  background: 'rgba(13, 17, 23, 0.6)',
-                  borderRadius: '10px',
-                  padding: '8px 10px',
-                  border: '1px solid rgba(240, 246, 252, 0.04)'
-                }}>
-                  {/* 1. Evolução na Última Atualização */}
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '9px', color: '#8B949E', textTransform: 'uppercase', marginBottom: '3px', fontWeight: 600 }}>
-                      Última Coleta
-                    </div>
-                    <div>
-                      {renderBadgeVariacao(p.variacao_ultima)}
-                    </div>
-                  </div>
-
-                  {/* 2. Evolução no Dia */}
-                  <div style={{ textAlign: 'center', borderLeft: '1px solid rgba(255,255,255,0.06)', borderRight: '1px solid rgba(255,255,255,0.06)' }}>
-                    <div style={{ fontSize: '9px', color: '#8B949E', textTransform: 'uppercase', marginBottom: '3px', fontWeight: 600 }}>
-                      No Dia
-                    </div>
-                    <div>
-                      {renderBadgeVariacao(p.variacao_dia)}
-                    </div>
-                  </div>
-
-                  {/* 3. Postagens */}
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '9px', color: '#8B949E', textTransform: 'uppercase', marginBottom: '3px', fontWeight: 600 }}>
-                      Posts
-                    </div>
-                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }}>
-                      <Layers size={11} color="#00F0FF" />
-                      <span>{p.total_posts}</span>
-                      {p.posts_dia > 0 && (
-                        <span style={{ fontSize: '10px', color: '#10B981' }}>(+{p.posts_dia})</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* ── Linha Inferior: Postagens do Dia da Modelo ── */}
-                {p.posts_hoje && p.posts_hoje.length > 0 ? (
-                  <div style={{
-                    marginTop: '2px',
-                    paddingTop: '8px',
-                    borderTop: '1px solid rgba(240, 246, 252, 0.08)',
+              return (
+                <div
+                  key={p.username}
+                  style={{
+                    background: '#202327',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    borderRadius: '18px',
+                    padding: '16px',
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '6px'
-                  }}>
-                    <div style={{
-                      fontSize: '10px',
-                      color: '#8B949E',
-                      fontWeight: 700,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.03em',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '5px'
-                    }}>
-                      <Film size={11} color="#00F0FF" />
-                      Postagens do Dia ({p.posts_hoje.length})
+                    gap: '12px',
+                    boxShadow: '0 8px 24px -2px rgba(0, 0, 0, 0.45)'
+                  }}
+                >
+                  {/* Linha Superior: Foto, Nome e Total de Seguidores */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{
+                        width: '44px',
+                        height: '44px',
+                        borderRadius: '50%',
+                        overflow: 'hidden',
+                        background: '#16191E',
+                        border: '2px solid rgba(255, 255, 255, 0.15)',
+                        flexShrink: 0
+                      }}>
+                        {p.foto_url ? (
+                          <img src={p.foto_url} alt={p.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>
+                            👤
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <div style={{ fontSize: '15px', fontWeight: 800, color: '#FFFFFF', lineHeight: 1.2 }}>
+                          {p.nome || p.username}
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#9CA3AF', marginTop: '2px' }}>
+                          @{p.username}
+                        </div>
+                      </div>
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                      {p.posts_hoje.map((post) => (
-                        <a
-                          key={post.post_id}
-                          href={post.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{
-                            background: 'rgba(13, 17, 23, 0.65)',
-                            border: '1px solid rgba(240, 246, 252, 0.06)',
-                            borderRadius: '8px',
-                            padding: '6px 10px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            textDecoration: 'none',
-                            transition: 'all 0.2s ease',
-                            gap: '8px'
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px' }}>
-                            <span style={{
-                              fontWeight: 800,
-                              color: post.formato === 'Reels' ? '#FF007A' : (post.formato === 'Carrossel' ? '#00F0FF' : '#C084FC')
-                            }}>
-                              {post.formato}
-                            </span>
-                            <span style={{ color: 'rgba(255,255,255,0.2)' }}>-</span>
-                            <span style={{ color: '#E6EDF3', fontWeight: 600 }}>
-                              {formatNumero(post.visualizacoes)} {post.visualizacoes === 1 ? 'visualização' : 'visualizações'}
-                            </span>
-                          </div>
-
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '2px',
-                              fontWeight: 800,
-                              fontSize: '11px',
-                              color: post.destaque ? '#FF9E0B' : (post.multiplicador >= 1.0 ? '#10B981' : '#8B949E'),
-                              background: post.destaque ? 'rgba(255, 158, 11, 0.15)' : 'rgba(255, 255, 255, 0.05)',
-                              border: post.destaque ? '1px solid rgba(255, 158, 11, 0.3)' : '1px solid rgba(255, 255, 255, 0.08)',
-                              padding: '2px 6px',
-                              borderRadius: '5px'
-                            }}>
-                              {post.destaque ? `🔥 ${post.multiplicador_str}` : post.multiplicador_str}
-                            </span>
-                            <span style={{ fontSize: '10px', color: '#8B949E', fontWeight: 600 }}>
-                              Desempenho
-                            </span>
-                          </div>
-                        </a>
-                      ))}
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '16px', fontWeight: 800, color: '#FFFFFF' }}>
+                        {formatNumero(p.seguidores)}
+                      </div>
+                      <div style={{ fontSize: '10px', color: '#9CA3AF', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.04em' }}>
+                        Seguidores
+                      </div>
                     </div>
                   </div>
-                ) : (
+
+                  {/* Linha do Meio: 3 Colunas de Métricas (Última Coleta, No Dia, Postagens) */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr 1fr',
+                    gap: '6px',
+                    background: '#17191D',
+                    borderRadius: '12px',
+                    padding: '9px 10px',
+                    border: '1px solid rgba(255, 255, 255, 0.06)'
+                  }}>
+                    {/* 1. Evolução na Última Atualização */}
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '9px', color: '#9CA3AF', textTransform: 'uppercase', marginBottom: '4px', fontWeight: 700 }}>
+                        Última Coleta
+                      </div>
+                      <div>
+                        {renderBadgeVariacao(p.variacao_ultima)}
+                      </div>
+                    </div>
+
+                    {/* 2. Evolução no Dia */}
+                    <div style={{ textAlign: 'center', borderLeft: '1px solid rgba(255,255,255,0.08)', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+                      <div style={{ fontSize: '9px', color: '#9CA3AF', textTransform: 'uppercase', marginBottom: '4px', fontWeight: 700 }}>
+                        No Dia
+                      </div>
+                      <div>
+                        {renderBadgeVariacao(p.variacao_dia)}
+                      </div>
+                    </div>
+
+                    {/* 3. Postagens */}
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '9px', color: '#9CA3AF', textTransform: 'uppercase', marginBottom: '4px', fontWeight: 700 }}>
+                        Posts
+                      </div>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }}>
+                        <Layers size={11} color="#00F0FF" />
+                        <span>{p.total_posts}</span>
+                        {p.posts_dia > 0 && (
+                          <span style={{ fontSize: '10px', color: '#10B981' }}>(+{p.posts_dia})</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Linha Inferior: Últimas 5 Publicações da Modelo ── */}
                   <div style={{
                     marginTop: '2px',
-                    paddingTop: '6px',
-                    borderTop: '1px solid rgba(240, 246, 252, 0.05)',
-                    fontSize: '10px',
-                    color: '#6E7681',
-                    fontStyle: 'italic',
+                    paddingTop: '10px',
+                    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
                     display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px'
+                    flexDirection: 'column',
+                    gap: '8px'
                   }}>
-                    <span>Sem postagens registradas hoje</span>
+                    <div style={{
+                      fontSize: '11px',
+                      color: '#9CA3AF',
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <Film size={12} color="#00F0FF" />
+                        Últimas Publicações ({postsList.length})
+                      </div>
+                      <span style={{ fontSize: '10px', color: '#6B7280', fontWeight: 600, textTransform: 'none' }}>
+                        Até 5 mais recentes
+                      </span>
+                    </div>
+
+                    {postsList.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {postsList.slice(0, 5).map((post) => (
+                          <a
+                            key={post.post_id}
+                            href={post.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              background: '#17191D',
+                              border: '1px solid rgba(255, 255, 255, 0.06)',
+                              borderRadius: '10px',
+                              padding: '8px 10px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              textDecoration: 'none',
+                              transition: 'all 0.15s ease',
+                              gap: '8px'
+                            }}
+                          >
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px' }}>
+                                <span style={{
+                                  fontWeight: 800,
+                                  color: post.formato === 'Reels' ? '#FF007A' : (post.formato === 'Carrossel' ? '#00F0FF' : '#C084FC')
+                                }}>
+                                  {post.formato}
+                                </span>
+                                <span style={{ color: 'rgba(255,255,255,0.2)' }}>•</span>
+                                <span style={{ color: '#F3F4F6', fontWeight: 600 }}>
+                                  {formatNumero(post.visualizacoes)} {post.visualizacoes === 1 ? 'view' : 'views'}
+                                </span>
+                              </div>
+                              {post.data_postagem && (
+                                <div style={{ fontSize: '10px', color: '#8B949E' }}>
+                                  {formatDataPostagem(post.data_postagem)}
+                                </div>
+                              )}
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                fontWeight: 800,
+                                fontSize: '11px',
+                                color: post.destaque ? '#F59E0B' : (post.multiplicador >= 1.0 ? '#10B981' : '#8B949E'),
+                                background: post.destaque ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255, 255, 255, 0.06)',
+                                border: post.destaque ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(255, 255, 255, 0.08)',
+                                padding: '2px 6px',
+                                borderRadius: '6px'
+                              }}>
+                                {post.destaque ? `🔥 ${post.multiplicador_str}` : post.multiplicador_str}
+                              </span>
+                              <ExternalLink size={12} color="#6B7280" />
+                            </div>
+                          </a>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{
+                        background: '#17191D',
+                        borderRadius: '10px',
+                        padding: '10px',
+                        fontSize: '11px',
+                        color: '#6B7280',
+                        fontStyle: 'italic',
+                        textAlign: 'center',
+                        border: '1px solid rgba(255, 255, 255, 0.04)'
+                      }}>
+                        Nenhuma publicação recente encontrada
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -575,11 +620,11 @@ export default function MobileDashboard() {
             marginBottom: '12px'
           }}>
             <h2 style={{
-              fontSize: '14px',
+              fontSize: '13px',
               fontWeight: 800,
-              letterSpacing: '0.04em',
+              letterSpacing: '0.05em',
               textTransform: 'uppercase',
-              color: '#8B949E',
+              color: '#9CA3AF',
               display: 'flex',
               alignItems: 'center',
               gap: '6px'
@@ -590,11 +635,11 @@ export default function MobileDashboard() {
 
             {/* Toggle Abas: A Fazer / Feitos */}
             <div style={{
-              background: '#161B22',
+              background: '#202327',
               borderRadius: '8px',
               padding: '2px',
               display: 'flex',
-              border: '1px solid rgba(240, 246, 252, 0.08)'
+              border: '1px solid rgba(255, 255, 255, 0.08)'
             }}>
               <button
                 onClick={() => setActiveTabAgendamento('fazer')}
@@ -631,11 +676,12 @@ export default function MobileDashboard() {
 
           {/* LISTA: O QUE TEM PRA FAZER */}
           {activeTabAgendamento === 'fazer' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {aFazer.length === 0 ? (
                 <div style={{
-                  background: 'rgba(22, 27, 34, 0.5)',
-                  borderRadius: '12px',
+                  background: '#202327',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: '16px',
                   padding: '24px 16px',
                   textAlign: 'center',
                   color: '#8B949E',
@@ -652,14 +698,15 @@ export default function MobileDashboard() {
                     <div
                       key={ag.id}
                       style={{
-                        background: 'rgba(22, 27, 34, 0.75)',
-                        border: '1px solid rgba(240, 246, 252, 0.08)',
-                        borderRadius: '12px',
-                        padding: '12px',
+                        background: '#202327',
+                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                        borderRadius: '16px',
+                        padding: '12px 14px',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        gap: '10px'
+                        gap: '10px',
+                        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.3)'
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -694,7 +741,7 @@ export default function MobileDashboard() {
                             </span>
                           </div>
 
-                          <div style={{ fontSize: '11px', color: '#8B949E', marginTop: '2px' }}>
+                          <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '2px' }}>
                             📅 {dataStr || 'Recorrente'} • ⏰ {horaStr}
                           </div>
                         </div>
@@ -720,11 +767,12 @@ export default function MobileDashboard() {
 
           {/* LISTA: O QUE FOI FEITO */}
           {activeTabAgendamento === 'feitos' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {concluidos.length === 0 ? (
                 <div style={{
-                  background: 'rgba(22, 27, 34, 0.5)',
-                  borderRadius: '12px',
+                  background: '#202327',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: '16px',
                   padding: '24px 16px',
                   textAlign: 'center',
                   color: '#8B949E',
@@ -737,14 +785,15 @@ export default function MobileDashboard() {
                   <div
                     key={pub.id}
                     style={{
-                      background: 'rgba(22, 27, 34, 0.75)',
-                      border: '1px solid rgba(240, 246, 252, 0.08)',
-                      borderRadius: '12px',
-                      padding: '12px',
+                      background: '#202327',
+                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                      borderRadius: '16px',
+                      padding: '12px 14px',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                      gap: '10px'
+                      gap: '10px',
+                      boxShadow: '0 4px 16px rgba(0, 0, 0, 0.3)'
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -779,7 +828,7 @@ export default function MobileDashboard() {
                           </span>
                         </div>
 
-                        <div style={{ fontSize: '11px', color: '#8B949E', marginTop: '2px' }}>
+                        <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '2px' }}>
                           Publicado em {formatDataCompleta(pub.publicado_em || `${pub.data_local} ${pub.hora_local}`)}
                         </div>
                       </div>
