@@ -137,6 +137,8 @@ def inicializar_estrutura_banco():
             except Exception as e:
                 print(f"Aviso ao adicionar coluna {col_name} em posts_historico: {e}")
 
+    c.execute("CREATE INDEX IF NOT EXISTS idx_posts_historico_user_data ON posts_historico(username, data_postagem)")
+
     # 3. Tabela de Perfis Histórico
     c.execute("""
         CREATE TABLE IF NOT EXISTS perfis_historico (
@@ -159,6 +161,8 @@ def inicializar_estrutura_banco():
             c.execute("ALTER TABLE perfis_historico ADD COLUMN data_carga DATETIME")
         except Exception as e:
             print(f"Aviso ao adicionar data_carga em perfis_historico: {e}")
+
+    c.execute("CREATE INDEX IF NOT EXISTS idx_perfis_historico_user_data ON perfis_historico(username, data_coleta)")
 
     # 4. Tabela de Seguidores Histórico
     c.execute("""

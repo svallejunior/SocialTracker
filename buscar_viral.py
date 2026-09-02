@@ -173,6 +173,7 @@ def salvar_posts_no_banco(username, posts_data):
             shortcode TEXT
         )
     """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_posts_historico_user_data ON posts_historico(username, data_postagem)")
 
     salvos = 0
     agora = agora_brasil().strftime('%Y-%m-%d %H:%M:%S')
