@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
 
     // 4. Posts Históricos para calcular médias por formato e posts do dia
     const rawPosts = await db.all(`
-      SELECT post_id, username, data_postagem, formato, views, likes, comentarios, reach, shortcode, permalink
+      SELECT post_id, username, data_postagem, formato, views, likes, comentarios, reach, shortcode, permalink, total_interactions
       FROM posts_historico
       ORDER BY data_postagem DESC
     `);
@@ -76,7 +76,15 @@ export async function GET(req: NextRequest) {
       const reach = Number(p.reach) || 0;
       const likes = Number(p.likes) || 0;
       const coms = Number(p.comentarios) || 0;
-      const val = views > 0 ? views : (reach > 0 ? reach : (likes + coms));
+      const totalInteractions = Number(p.total_interactions) || 0;
+
+      let val = 0;
+      if (fmt === 'Reels') {
+        val = views > 0 ? views : (reach > 0 ? reach : (totalInteractions > 0 ? totalInteractions : (likes + coms)));
+      } else {
+        // Imagem ou Carrossel -> métrica é interação
+        val = totalInteractions > 0 ? totalInteractions : (likes + coms);
+      }
 
       const key = `${u}_${fmt.toLowerCase()}`;
       if (!mediasFormato[key]) mediasFormato[key] = [];
@@ -151,7 +159,15 @@ export async function GET(req: NextRequest) {
           const reach = Number(post.reach) || 0;
           const likes = Number(post.likes) || 0;
           const coms = Number(post.comentarios) || 0;
-          const val = views > 0 ? views : (reach > 0 ? reach : (likes + coms));
+          const totalInteractions = Number(post.total_interactions) || 0;
+
+          let val = 0;
+          if (fmt === 'Reels') {
+            val = views > 0 ? views : (reach > 0 ? reach : (totalInteractions > 0 ? totalInteractions : (likes + coms)));
+          } else {
+            // Imagem ou Carrossel -> Interações (likes + comentários + salvos ou total_interactions)
+            val = totalInteractions > 0 ? totalInteractions : (likes + coms);
+          }
 
           const media = mediaCalculada[`${u}_${fmt.toLowerCase()}`] || (val > 0 ? val : 1);
           const mult = media > 0 ? (val / media) : 1.0;

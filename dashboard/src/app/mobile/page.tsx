@@ -563,7 +563,10 @@ export default function MobileDashboard() {
                                 </span>
                                 <span style={{ color: 'rgba(255,255,255,0.2)' }}>•</span>
                                 <span style={{ color: '#F3F4F6', fontWeight: 600 }}>
-                                  {formatNumero(post.visualizacoes)} {post.visualizacoes === 1 ? 'view' : 'views'}
+                                  {formatNumero(post.visualizacoes)}{' '}
+                                  {post.formato === 'Reels'
+                                    ? (post.visualizacoes === 1 ? 'view' : 'views')
+                                    : (post.visualizacoes === 1 ? 'interação' : 'interações')}
                                 </span>
                               </div>
                               {post.data_postagem && (
