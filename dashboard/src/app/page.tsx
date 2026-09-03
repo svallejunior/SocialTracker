@@ -1507,7 +1507,8 @@ export default function Dashboard() {
         const rawPosts = json.posts || [];
         const rawProfiles = json.profiles || [];
 
-        // Calcular engajamento médio de posts por perfil
+        // Calcular engajamento médio de posts por perfil (usado só na média
+        // histórica exibida na aba Acompanhados — mediaHistoricaConta abaixo)
         const userAvgEng: Record<string, number> = {};
         const userPostCounts: Record<string, number> = {};
 
@@ -1524,22 +1525,55 @@ export default function Dashboard() {
           }
         });
 
+        // Visualizações efetivas: Reels → views (play_count), Carrossel/Imagem →
+        // reach, senão likes+comentarios como último fallback.
+        const viewsEfetivasDe = (p: any) => {
+          const likes = Number(p.likes) || 0;
+          const comentarios = Number(p.comentarios) || 0;
+          const rawViews = Number(p.views) || 0;
+          const rawReach = Number(p.reach) || 0;
+          return rawViews > 0 ? rawViews : (rawReach > 0 ? rawReach : (likes + comentarios));
+        };
+
+        // Score de "Desempenho" de um post: mesma fórmula de tração usada em
+        // buscar_viral.py pra achar posts virais (views + likes×3 + comentários×5).
+        // Pesa mais likes/comentários (ação deliberada do usuário) que views
+        // (passivo), mas incorpora as views — sem isso, um Carrossel sem
+        // views nenhuma e um Reels com milhares de plays eram tratados igual.
+        const scoreTracao = (p: any) => {
+          const likes = Number(p.likes) || 0;
+          const comentarios = Number(p.comentarios) || 0;
+          return viewsEfetivasDe(p) + likes * 3 + comentarios * 5;
+        };
+
+        // Média do score por perfil + FORMATO: Reels só compara com Reels da
+        // mesma conta, Carrossel só com Carrossel, Imagem só com Imagem — cada
+        // formato tem um patamar de views completamente diferente, misturar
+        // tudo numa média só distorcia o "desempenho" de quem posta pouco Reels.
+        const groupAvgScore: Record<string, number> = {};
+        const groupPostCounts: Record<string, number> = {};
+
+        rawPosts.forEach((p: any) => {
+          const groupKey = `${(p.username || '').toLowerCase()}|${p.formato || ''}`;
+          groupAvgScore[groupKey] = (groupAvgScore[groupKey] || 0) + scoreTracao(p);
+          groupPostCounts[groupKey] = (groupPostCounts[groupKey] || 0) + 1;
+        });
+
+        Object.keys(groupAvgScore).forEach(k => {
+          if (groupPostCounts[k] > 0) {
+            groupAvgScore[k] = groupAvgScore[k] / groupPostCounts[k];
+          }
+        });
+
         const enrichedPosts = rawPosts.map((p: any) => {
-          const u = (p.username || '').toLowerCase();
-          const eng = (Number(p.likes) || 0) + (Number(p.comentarios) || 0);
-          const avg = userAvgEng[u] || 0;
-          const pMult = typeof p.performanceMultiplier === 'number' && !isNaN(p.performanceMultiplier)
-            ? p.performanceMultiplier
-            : (avg > 0 ? Number((eng / avg).toFixed(2)) : 1.0);
+          const groupKey = `${(p.username || '').toLowerCase()}|${p.formato || ''}`;
+          const avgScore = groupAvgScore[groupKey] || 0;
+          const pMult = avgScore > 0 ? Number((scoreTracao(p) / avgScore).toFixed(2)) : 1.0;
           // Gerar link do post no Instagram convertendo ID numérico para Shortcode se necessário
           const postLink = getInstagramPostUrl(p);
 
-          // Fallback de visualizações: igual à lógica mobile
-          // Reels → views (play_count), Carrossel/Imagem → reach, senão likes+comentarios
-          const rawViews = Number(p.views) || 0;
-          const rawReach = Number(p.reach) || 0;
-          const viewsEfetivas = rawViews > 0 ? rawViews : (rawReach > 0 ? rawReach : eng);
-          const viewsLabel = rawViews > 0 ? 'plays' : (rawReach > 0 ? 'alcance' : 'eng');
+          const viewsEfetivas = viewsEfetivasDe(p);
+          const viewsLabel = (Number(p.views) || 0) > 0 ? 'plays' : ((Number(p.reach) || 0) > 0 ? 'alcance' : 'eng');
 
           return {
             ...p,
