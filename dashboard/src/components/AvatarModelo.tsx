@@ -92,6 +92,8 @@ export function AvatarModelo({
         <img
           src={src}
           alt={alt || username}
+          loading="lazy"
+          decoding="async"
           onError={() => setImgError(true)}
           style={{
             width: size,

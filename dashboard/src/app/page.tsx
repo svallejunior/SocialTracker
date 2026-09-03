@@ -4520,6 +4520,8 @@ export default function Dashboard() {
                                 <img
                                   src={post.thumbnail_url || post.media_url}
                                   alt={post.formato}
+                                  loading="lazy"
+                                  decoding="async"
                                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                                   onError={(e) => {
                                     // URL é vídeo ou inválida — esconde imagem, mostra ícone
