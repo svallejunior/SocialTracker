@@ -261,7 +261,18 @@ export default function ModalEvolucaoPost({
     ? post.performanceMultiplier
     : 1.0;
 
-  const temViews = (Number(post?.views) > 0) || (post?.formato === 'Reels' && Number(post?.viewsEfetivas) > 0);
+  // Os cards do topo devem refletir o mesmo dado mais recente que o gráfico
+  // (snapshots), não o `post` vindo da lista da aba — que pode estar
+  // desatualizado em relação à última coleta, causando números divergentes
+  // entre o card e a curva.
+  const latestSnapshot = snapshots.length > 0 ? snapshots[snapshots.length - 1] : null;
+  const displayLikes = latestSnapshot ? latestSnapshot.likes : Number(post?.likes) || 0;
+  const displayComentarios = latestSnapshot ? latestSnapshot.comentarios : Number(post?.comentarios) || 0;
+  const displayViews = latestSnapshot
+    ? latestSnapshot.views
+    : (Number(post?.views) || (post?.formato === 'Reels' ? Number(post?.viewsEfetivas) : 0));
+
+  const temViews = displayViews > 0;
 
   return (
     <div
@@ -455,7 +466,7 @@ export default function ModalEvolucaoPost({
                 <span style={{ fontSize: '16px' }}>❤️</span>
               </div>
               <div style={{ fontSize: '22px', fontWeight: '800', color: 'white', marginTop: '6px' }}>
-                {formatNumber(post?.likes)}
+                {formatNumber(displayLikes)}
               </div>
               {variacoes && variacoes.diffLikes > 0 && (
                 <div style={{ fontSize: '11px', color: 'var(--color-green)', fontWeight: '600', marginTop: '4px' }}>
@@ -480,7 +491,7 @@ export default function ModalEvolucaoPost({
                 <span style={{ fontSize: '16px' }}>💬</span>
               </div>
               <div style={{ fontSize: '22px', fontWeight: '800', color: 'white', marginTop: '6px' }}>
-                {formatNumber(post?.comentarios)}
+                {formatNumber(displayComentarios)}
               </div>
               {variacoes && variacoes.diffComentarios > 0 && (
                 <div style={{ fontSize: '11px', color: 'var(--color-green)', fontWeight: '600', marginTop: '4px' }}>
@@ -505,7 +516,7 @@ export default function ModalEvolucaoPost({
                 <span style={{ fontSize: '16px' }}>👁️</span>
               </div>
               <div style={{ fontSize: '22px', fontWeight: '800', color: 'white', marginTop: '6px' }}>
-                {temViews ? formatNumber(post?.viewsEfetivas || post?.views) : '—'}
+                {temViews ? formatNumber(displayViews) : '—'}
               </div>
               {variacoes && variacoes.diffViews > 0 && (
                 <div style={{ fontSize: '11px', color: 'var(--color-cyan)', fontWeight: '600', marginTop: '4px' }}>
@@ -714,7 +725,7 @@ export default function ModalEvolucaoPost({
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="colorLikes" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#FF007A" stopOpacity={0.4} />
