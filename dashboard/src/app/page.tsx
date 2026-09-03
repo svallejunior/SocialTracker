@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import nextDynamic from 'next/dynamic';
 import {
   TrendingUp, ExternalLink, LogOut, Calendar, Search, Users, MessageSquare, Eye, EyeOff, Heart, Filter,
   BarChart3, Play, Hash, Hash as TagIcon, Image as ImageIcon, Film as VideoIcon, Layers as LayersIcon,
@@ -19,12 +20,32 @@ interface Props {
   onSave: (payload: any) => void;
 }
 import ModalLancamento from "../components/ModalLancamento";
-import GraficoProjecao from "../components/GraficoProjecao";
-import CentralAnomalias from "../components/CentralAnomalias";
-import CentralAutomatizacao from "../components/CentralAutomatizacao";
-import CentralRespostas from "../components/CentralRespostas";
 import AvatarModelo from "../components/AvatarModelo";
 import ModalEvolucaoPost from "../components/ModalEvolucaoPost";
+
+const TabLoading = () => (
+  <div className="loading-box"><div className="spinner"></div><p>Carregando...</p></div>
+);
+
+// Code-split: cada aba pesada só baixa/compila seu JS quando é aberta pela
+// primeira vez, em vez de entrar no bundle inicial de "/" (que hoje carrega
+// todas as abas de uma vez, mesmo as que o usuário nunca abre).
+const GraficoProjecao = nextDynamic(() => import("../components/GraficoProjecao"), {
+  loading: TabLoading,
+  ssr: false,
+});
+const CentralAnomalias = nextDynamic(() => import("../components/CentralAnomalias"), {
+  loading: TabLoading,
+  ssr: false,
+});
+const CentralAutomatizacao = nextDynamic(() => import("../components/CentralAutomatizacao"), {
+  loading: TabLoading,
+  ssr: false,
+});
+const CentralRespostas = nextDynamic(() => import("../components/CentralRespostas"), {
+  loading: TabLoading,
+  ssr: false,
+});
 
 const ModalLancamentoInline = ({ isOpen, onClose, username, onSave, perfisDisponiveis }: any) => {
   useEffect(() => {
