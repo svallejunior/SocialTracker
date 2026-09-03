@@ -4489,6 +4489,10 @@ export default function Dashboard() {
                                   src={post.thumbnail_url || post.media_url}
                                   alt={post.formato}
                                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                  onError={(e) => {
+                                    // URL é vídeo ou inválida — esconde imagem, mostra ícone
+                                    e.currentTarget.style.display = 'none';
+                                  }}
                                 />
                               </div>
                               <span

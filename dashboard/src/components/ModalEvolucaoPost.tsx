@@ -442,7 +442,7 @@ export default function ModalEvolucaoPost({
           </div>
 
           {/* Se houver imagem ou legenda, mostra banner compacto com preview */}
-          {(post?.media_url || post?.legenda) && (
+          {((post?.thumbnail_url || post?.media_url) || post?.legenda) && (
             <div
               style={{
                 background: 'rgba(22, 27, 34, 0.6)',
@@ -454,7 +454,7 @@ export default function ModalEvolucaoPost({
                 alignItems: 'flex-start'
               }}
             >
-              {post?.media_url && (
+              {(post?.thumbnail_url || post?.media_url) && (
                 <div
                   style={{
                     width: '64px',
@@ -463,13 +463,27 @@ export default function ModalEvolucaoPost({
                     overflow: 'hidden',
                     flexShrink: 0,
                     border: '1px solid #30363D',
-                    backgroundColor: '#090A0F'
+                    backgroundColor: '#090A0F',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
                   }}
                 >
                   <img
-                    src={post.media_url}
+                    src={post.thumbnail_url || post.media_url}
                     alt="Preview da Mídia"
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    onError={(e) => {
+                      // Se a URL for um vídeo/inválida, esconde a imagem e mostra ícone
+                      const target = e.currentTarget;
+                      target.style.display = 'none';
+                      const parent = target.parentElement;
+                      if (parent) {
+                        parent.innerHTML = `<span style="font-size:24px;opacity:0.4">${
+                          post?.formato === 'Reels' ? '🎬' : post?.formato === 'Carrossel' ? '🖼️' : '📷'
+                        }</span>`;
+                      }
+                    }}
                   />
                 </div>
               )}
