@@ -1,0 +1,749 @@
+'use client';
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  X, ExternalLink, Calendar, Heart, MessageSquare, Eye,
+  TrendingUp, Award, Clock, Image as ImageIcon, Film as VideoIcon,
+  Layers as LayersIcon, ChevronRight, Activity, Zap, BarChart2
+} from 'lucide-react';
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  Legend
+} from 'recharts';
+
+interface Snapshot {
+  id: number;
+  post_id: string;
+  username: string;
+  likes: number;
+  comentarios: number;
+  views: number;
+  reach: number;
+  saved: number;
+  shares: number;
+  total_interactions: number;
+  data_carga: string;
+}
+
+interface ModalEvolucaoPostProps {
+  post: any;
+  onClose: () => void;
+  getInstagramPostUrl: (p: any) => string;
+}
+
+export default function ModalEvolucaoPost({
+  post,
+  onClose,
+  getInstagramPostUrl
+}: ModalEvolucaoPostProps) {
+  const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [metricFoco, setMetricFoco] = useState<'todas' | 'likes' | 'views' | 'comentarios'>('todas');
+
+  // Trata tecla Esc
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  // Carrega snapshots do post
+  useEffect(() => {
+    let isMounted = true;
+    async function loadSnapshots() {
+      if (!post?.post_id) return;
+      try {
+        setLoading(true);
+        const res = await fetch(`/api/posts/${post.post_id}/snapshots`);
+        const json = await res.json();
+        if (isMounted && json.success) {
+          setSnapshots(json.snapshots || []);
+        }
+      } catch (err) {
+        console.error('Erro ao carregar snapshots do post:', err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+    loadSnapshots();
+    return () => {
+      isMounted = false;
+    };
+  }, [post?.post_id]);
+
+  // Formatação de data e hora completa
+  const formatDateTimeFull = (dtStr: string) => {
+    if (!dtStr) return '—';
+    try {
+      const parts = dtStr.trim().split(' ');
+      const datePart = parts[0];
+      const timePart = parts[1] || '';
+      const [ano, mes, dia] = datePart.split('-');
+      if (dia && mes && ano) {
+        const horaMin = timePart ? timePart.substring(0, 5) : '';
+        return horaMin ? `${dia}/${mes}/${ano} às ${horaMin}` : `${dia}/${mes}/${ano}`;
+      }
+      return dtStr;
+    } catch {
+      return dtStr;
+    }
+  };
+
+  // Formata hora curta para o eixo X do gráfico
+  const formatTimeLabel = (dtStr: string) => {
+    if (!dtStr) return '';
+    try {
+      const parts = dtStr.trim().split(' ');
+      const [ano, mes, dia] = parts[0].split('-');
+      const horaMin = parts[1] ? parts[1].substring(0, 5) : '';
+      return horaMin ? `${dia}/${mes} ${horaMin}` : `${dia}/${mes}`;
+    } catch {
+      return dtStr;
+    }
+  };
+
+  const formatNumber = (num: number | string) => {
+    const val = typeof num === 'string' ? parseFloat(num) : num;
+    if (isNaN(val)) return '0';
+    return new Intl.NumberFormat('pt-BR').format(val);
+  };
+
+  // Dados formatados para o gráfico
+  const chartData = useMemo(() => {
+    if (!snapshots || snapshots.length === 0) {
+      // Se não há histórico salvo ainda, gera um ponto com o estado atual do post
+      const baseViews = Number(post?.views) || (post?.formato === 'Reels' ? Number(post?.viewsEfetivas) : 0);
+      return [
+        {
+          dataHora: formatTimeLabel(post?.data_postagem || new Date().toISOString()),
+          timestamp: post?.data_postagem || '',
+          likes: Number(post?.likes) || 0,
+          comentarios: Number(post?.comentarios) || 0,
+          views: baseViews,
+          reach: Number(post?.reach) || 0
+        }
+      ];
+    }
+
+    return snapshots.map((s, idx) => ({
+      index: idx + 1,
+      dataHora: formatTimeLabel(s.data_carga),
+      timestamp: s.data_carga,
+      likes: Number(s.likes) || 0,
+      comentarios: Number(s.comentarios) || 0,
+      views: Number(s.views) || 0,
+      reach: Number(s.reach) || 0,
+      interacoes: Number(s.total_interactions) || (Number(s.likes) + Number(s.comentarios))
+    }));
+  }, [snapshots, post]);
+
+  // Variação calculada entre o primeiro e o último snapshot
+  const variacoes = useMemo(() => {
+    if (snapshots.length < 2) return null;
+    const first = snapshots[0];
+    const last = snapshots[snapshots.length - 1];
+    return {
+      diffLikes: last.likes - first.likes,
+      diffViews: last.views - first.views,
+      diffComentarios: last.comentarios - first.comentarios
+    };
+  }, [snapshots]);
+
+  const pMult = typeof post?.performanceMultiplier === 'number' && !isNaN(post.performanceMultiplier)
+    ? post.performanceMultiplier
+    : 1.0;
+
+  const temViews = (Number(post?.views) > 0) || (post?.formato === 'Reels' && Number(post?.viewsEfetivas) > 0);
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(5, 7, 12, 0.82)',
+        backdropFilter: 'blur(8px)',
+        zIndex: 9999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '20px'
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          backgroundColor: '#0D1117',
+          border: '1px solid #30363D',
+          borderRadius: '16px',
+          width: '100%',
+          maxWidth: '920px',
+          maxHeight: '92vh',
+          display: 'flex',
+          flexDirection: 'column',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 25px rgba(113, 0, 226, 0.25)',
+          overflow: 'hidden',
+          animation: 'fadeIn 0.2s ease-out'
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '20px 24px',
+            borderBottom: '1px solid #21262D',
+            background: 'linear-gradient(180deg, rgba(22, 27, 34, 0.8) 0%, rgba(13, 17, 23, 0.95) 100%)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            {/* Ícone de Formato / Badge */}
+            <div
+              style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '10px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: post?.formato === 'Reels'
+                  ? 'rgba(0, 240, 255, 0.12)'
+                  : post?.formato === 'Carrossel'
+                    ? 'rgba(168, 85, 247, 0.12)'
+                    : 'rgba(255, 0, 122, 0.12)',
+                border: `1px solid ${
+                  post?.formato === 'Reels'
+                    ? 'rgba(0, 240, 255, 0.3)'
+                    : post?.formato === 'Carrossel'
+                      ? 'rgba(168, 85, 247, 0.3)'
+                      : 'rgba(255, 0, 122, 0.3)'
+                }`
+              }}
+            >
+              {post?.formato === 'Reels' ? (
+                <VideoIcon size={20} style={{ color: 'var(--color-cyan)' }} />
+              ) : post?.formato === 'Carrossel' ? (
+                <LayersIcon size={20} style={{ color: 'var(--color-purple)' }} />
+              ) : (
+                <ImageIcon size={20} style={{ color: '#FF007A' }} />
+              )}
+            </div>
+
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h2 style={{ fontSize: '18px', fontWeight: '800', color: 'white', margin: 0 }}>
+                  @{post?.username}
+                </h2>
+                <span
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: '700',
+                    padding: '2px 8px',
+                    borderRadius: '6px',
+                    backgroundColor: '#161B22',
+                    border: '1px solid #30363D',
+                    color: '#8B949E'
+                  }}
+                >
+                  {post?.formato}
+                </span>
+                <span
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: '700',
+                    padding: '2px 8px',
+                    borderRadius: '6px',
+                    backgroundColor: pMult >= 1.8 ? 'rgba(0, 255, 200, 0.15)' : 'rgba(0, 240, 255, 0.1)',
+                    border: `1px solid ${pMult >= 1.8 ? 'rgba(0, 255, 200, 0.3)' : 'rgba(0, 240, 255, 0.3)'}`,
+                    color: pMult >= 1.8 ? 'var(--color-green)' : 'var(--color-cyan)'
+                  }}
+                >
+                  {pMult >= 1.8 ? '🔥 ' : ''}{pMult.toFixed(1).replace('.', ',')}x Desempenho
+                </span>
+              </div>
+              <p style={{ fontSize: '12px', color: '#8B949E', margin: '3px 0 0 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Clock size={12} /> Publicado em {formatDateTimeFull(post?.data_postagem)}
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <a
+              href={getInstagramPostUrl(post)}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 14px',
+                borderRadius: '8px',
+                backgroundColor: '#161B22',
+                border: '1px solid #30363D',
+                color: 'var(--color-cyan)',
+                fontSize: '12px',
+                fontWeight: '600',
+                textDecoration: 'none',
+                transition: 'all 0.2s'
+              }}
+            >
+              Ver no Instagram <ExternalLink size={13} />
+            </a>
+            <button
+              onClick={onClose}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#8B949E',
+                cursor: 'pointer',
+                padding: '6px',
+                borderRadius: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'color 0.2s'
+              }}
+              title="Fechar (Esc)"
+            >
+              <X size={20} />
+            </button>
+          </div>
+        </div>
+
+        {/* Corpo do Modal */}
+        <div
+          style={{
+            padding: '20px 24px',
+            overflowY: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '20px'
+          }}
+          className="custom-scrollbar"
+        >
+          {/* Top Cards de Métricas Consolidadas */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+              gap: '12px'
+            }}
+          >
+            {/* Card Curtidas */}
+            <div
+              style={{
+                background: '#161B22',
+                border: '1px solid #30363D',
+                borderRadius: '12px',
+                padding: '14px 16px',
+                position: 'relative'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', color: '#8B949E' }}>
+                  Curtidas
+                </span>
+                <span style={{ fontSize: '16px' }}>❤️</span>
+              </div>
+              <div style={{ fontSize: '22px', fontWeight: '800', color: 'white', marginTop: '6px' }}>
+                {formatNumber(post?.likes)}
+              </div>
+              {variacoes && variacoes.diffLikes > 0 && (
+                <div style={{ fontSize: '11px', color: 'var(--color-green)', fontWeight: '600', marginTop: '4px' }}>
+                  +{formatNumber(variacoes.diffLikes)} durante monitoramento
+                </div>
+              )}
+            </div>
+
+            {/* Card Comentários */}
+            <div
+              style={{
+                background: '#161B22',
+                border: '1px solid #30363D',
+                borderRadius: '12px',
+                padding: '14px 16px'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', color: '#8B949E' }}>
+                  Comentários
+                </span>
+                <span style={{ fontSize: '16px' }}>💬</span>
+              </div>
+              <div style={{ fontSize: '22px', fontWeight: '800', color: 'white', marginTop: '6px' }}>
+                {formatNumber(post?.comentarios)}
+              </div>
+              {variacoes && variacoes.diffComentarios > 0 && (
+                <div style={{ fontSize: '11px', color: 'var(--color-green)', fontWeight: '600', marginTop: '4px' }}>
+                  +{formatNumber(variacoes.diffComentarios)} durante monitoramento
+                </div>
+              )}
+            </div>
+
+            {/* Card Visualizações */}
+            <div
+              style={{
+                background: '#161B22',
+                border: '1px solid #30363D',
+                borderRadius: '12px',
+                padding: '14px 16px'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', color: '#8B949E' }}>
+                  Visualizações / Plays
+                </span>
+                <span style={{ fontSize: '16px' }}>👁️</span>
+              </div>
+              <div style={{ fontSize: '22px', fontWeight: '800', color: 'white', marginTop: '6px' }}>
+                {temViews ? formatNumber(post?.viewsEfetivas || post?.views) : '—'}
+              </div>
+              {variacoes && variacoes.diffViews > 0 && (
+                <div style={{ fontSize: '11px', color: 'var(--color-cyan)', fontWeight: '600', marginTop: '4px' }}>
+                  +{formatNumber(variacoes.diffViews)} novas views
+                </div>
+              )}
+            </div>
+
+            {/* Card Engajamento */}
+            <div
+              style={{
+                background: '#161B22',
+                border: '1px solid #30363D',
+                borderRadius: '12px',
+                padding: '14px 16px'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', color: '#8B949E' }}>
+                  Taxa Engajamento
+                </span>
+                <TrendingUp size={16} style={{ color: 'var(--color-cyan)' }} />
+              </div>
+              <div style={{ fontSize: '22px', fontWeight: '800', color: 'white', marginTop: '6px' }}>
+                {temViews && post?.taxa_engajamento != null
+                  ? `${Number(post.taxa_engajamento).toFixed(2)}%`
+                  : '—'}
+              </div>
+              <div style={{ fontSize: '11px', color: '#8B949E', marginTop: '4px' }}>
+                {temViews ? 'Interações sobre views' : 'Sem base de views'}
+              </div>
+            </div>
+          </div>
+
+          {/* Se houver imagem ou legenda, mostra banner compacto com preview */}
+          {(post?.media_url || post?.legenda) && (
+            <div
+              style={{
+                background: 'rgba(22, 27, 34, 0.6)',
+                border: '1px solid #21262D',
+                borderRadius: '12px',
+                padding: '14px 16px',
+                display: 'flex',
+                gap: '16px',
+                alignItems: 'flex-start'
+              }}
+            >
+              {post?.media_url && (
+                <div
+                  style={{
+                    width: '64px',
+                    height: '64px',
+                    borderRadius: '8px',
+                    overflow: 'hidden',
+                    flexShrink: 0,
+                    border: '1px solid #30363D',
+                    backgroundColor: '#090A0F'
+                  }}
+                >
+                  <img
+                    src={post.media_url}
+                    alt="Preview da Mídia"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                </div>
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', color: '#8B949E', display: 'block', marginBottom: '4px' }}>
+                  Legenda da Publicação
+                </span>
+                <p
+                  style={{
+                    fontSize: '13px',
+                    color: '#C9D1D9',
+                    lineHeight: '1.45',
+                    margin: 0,
+                    maxHeight: '75px',
+                    overflowY: 'auto'
+                  }}
+                >
+                  {post?.legenda || <span style={{ color: '#6E7681', fontStyle: 'italic' }}>Sem texto de legenda</span>}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Gráfico de Evolução Temporal */}
+          <div
+            style={{
+              background: '#161B22',
+              border: '1px solid #21262D',
+              borderRadius: '14px',
+              padding: '18px 20px'
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px',
+                marginBottom: '16px'
+              }}
+            >
+              <div>
+                <h3 style={{ fontSize: '15px', fontWeight: '800', color: 'white', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Activity size={16} style={{ color: 'var(--color-cyan)' }} />
+                  Curva de Evolução da Publicação
+                </h3>
+                <span style={{ fontSize: '12px', color: '#8B949E', marginTop: '2px', display: 'block' }}>
+                  {snapshots.length > 1
+                    ? `${snapshots.length} coletas registradas ao longo do tempo`
+                    : 'Acompanhamento inicial da publicação'}
+                </span>
+              </div>
+
+              {/* Filtros de Métricas */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <button
+                  onClick={() => setMetricFoco('todas')}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    background: metricFoco === 'todas' ? 'var(--color-purple)' : '#0D1117',
+                    border: '1px solid #30363D',
+                    color: metricFoco === 'todas' ? 'white' : '#8B949E'
+                  }}
+                >
+                  Todas
+                </button>
+                <button
+                  onClick={() => setMetricFoco('likes')}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    background: metricFoco === 'likes' ? 'rgba(255, 0, 122, 0.2)' : '#0D1117',
+                    border: `1px solid ${metricFoco === 'likes' ? '#FF007A' : '#30363D'}`,
+                    color: metricFoco === 'likes' ? '#FF007A' : '#8B949E'
+                  }}
+                >
+                  ❤️ Curtidas
+                </button>
+                <button
+                  onClick={() => setMetricFoco('views')}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    background: metricFoco === 'views' ? 'rgba(0, 240, 255, 0.2)' : '#0D1117',
+                    border: `1px solid ${metricFoco === 'views' ? '#00F0FF' : '#30363D'}`,
+                    color: metricFoco === 'views' ? '#00F0FF' : '#8B949E'
+                  }}
+                >
+                  👁️ Views
+                </button>
+                <button
+                  onClick={() => setMetricFoco('comentarios')}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    background: metricFoco === 'comentarios' ? 'rgba(0, 255, 200, 0.2)' : '#0D1117',
+                    border: `1px solid ${metricFoco === 'comentarios' ? '#00FFC8' : '#30363D'}`,
+                    color: metricFoco === 'comentarios' ? '#00FFC8' : '#8B949E'
+                  }}
+                >
+                  💬 Comentários
+                </button>
+              </div>
+            </div>
+
+            {/* Container do Gráfico */}
+            <div style={{ width: '100%', height: '280px' }}>
+              {loading ? (
+                <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8B949E' }}>
+                  Carregando histórico do post...
+                </div>
+              ) : chartData.length === 0 ? (
+                <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8B949E' }}>
+                  Nenhum dado temporal encontrado para este post.
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorLikes" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#FF007A" stopOpacity={0.4} />
+                        <stop offset="95%" stopColor="#FF007A" stopOpacity={0.0} />
+                      </linearGradient>
+                      <linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#00F0FF" stopOpacity={0.35} />
+                        <stop offset="95%" stopColor="#00F0FF" stopOpacity={0.0} />
+                      </linearGradient>
+                      <linearGradient id="colorComentarios" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#00FFC8" stopOpacity={0.35} />
+                        <stop offset="95%" stopColor="#00FFC8" stopOpacity={0.0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#21262D" vertical={false} />
+                    <XAxis
+                      dataKey="dataHora"
+                      stroke="#484F58"
+                      tick={{ fill: '#8B949E', fontSize: 11 }}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      stroke="#484F58"
+                      tick={{ fill: '#8B949E', fontSize: 11 }}
+                      tickLine={false}
+                      tickFormatter={(v) => formatNumber(v)}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#161B22',
+                        border: '1px solid #30363D',
+                        borderRadius: '8px',
+                        color: 'white',
+                        fontSize: '12px'
+                      }}
+                      formatter={(val: any, name: any) => [
+                        formatNumber(val),
+                        name === 'likes' ? 'Curtidas' : name === 'views' ? 'Visualizações' : name === 'comentarios' ? 'Comentários' : name
+                      ]}
+                      labelFormatter={(label, payload) => {
+                        const item = payload && payload[0]?.payload;
+                        return item?.timestamp ? formatDateTimeFull(item.timestamp) : label;
+                      }}
+                    />
+                    <Legend
+                      verticalAlign="top"
+                      height={36}
+                      formatter={(val) => (
+                        <span style={{ color: '#C9D1D9', fontSize: '12px', fontWeight: '600' }}>
+                          {val === 'likes' ? '❤️ Curtidas' : val === 'views' ? '👁️ Views' : val === 'comentarios' ? '💬 Comentários' : val}
+                        </span>
+                      )}
+                    />
+
+                    {(metricFoco === 'todas' || metricFoco === 'views') && (
+                      <Area
+                        type="monotone"
+                        dataKey="views"
+                        name="views"
+                        stroke="#00F0FF"
+                        strokeWidth={2}
+                        fillOpacity={1}
+                        fill="url(#colorViews)"
+                      />
+                    )}
+
+                    {(metricFoco === 'todas' || metricFoco === 'likes') && (
+                      <Area
+                        type="monotone"
+                        dataKey="likes"
+                        name="likes"
+                        stroke="#FF007A"
+                        strokeWidth={2}
+                        fillOpacity={1}
+                        fill="url(#colorLikes)"
+                      />
+                    )}
+
+                    {(metricFoco === 'todas' || metricFoco === 'comentarios') && (
+                      <Area
+                        type="monotone"
+                        dataKey="comentarios"
+                        name="comentarios"
+                        stroke="#00FFC8"
+                        strokeWidth={2}
+                        fillOpacity={1}
+                        fill="url(#colorComentarios)"
+                      />
+                    )}
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            {snapshots.length <= 1 && (
+              <div
+                style={{
+                  marginTop: '12px',
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid #30363D',
+                  fontSize: '11px',
+                  color: '#8B949E',
+                  textAlign: 'center'
+                }}
+              >
+                ℹ️ Esta publicação ainda possui 1 único registro coletado. À medida que as coletas do SocialTracker rodarem, a curva de evolução acumulará novos pontos no gráfico.
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            padding: '14px 24px',
+            borderTop: '1px solid #21262D',
+            background: '#161B22'
+          }}
+        >
+          <button
+            onClick={onClose}
+            style={{
+              padding: '8px 20px',
+              borderRadius: '8px',
+              backgroundColor: '#30363D',
+              border: 'none',
+              color: 'white',
+              fontSize: '13px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              transition: 'background 0.2s'
+            }}
+          >
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

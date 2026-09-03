@@ -89,6 +89,30 @@ export async function GET() {
       "SELECT * FROM posts_historico ORDER BY data_postagem DESC"
     );
 
+    // Mapeia mídias/imagens salvas na automação por meta_media_id para thumbnail dos posts
+    const automacaoMidias = await db.all(`
+      SELECT meta_media_id, arquivos
+      FROM automacao_publicacoes
+      WHERE meta_media_id IS NOT NULL AND arquivos IS NOT NULL AND arquivos != ''
+    `).catch(() => []);
+
+    const midiaUrlMap: Record<string, string> = {};
+    for (const item of automacaoMidias) {
+      if (!item.meta_media_id) continue;
+      try {
+        const arqs = typeof item.arquivos === 'string' ? JSON.parse(item.arquivos) : item.arquivos;
+        if (Array.isArray(arqs) && arqs.length > 0) {
+          const first = arqs[0];
+          const url = first.previewUrl || first.url;
+          if (url && typeof url === 'string') {
+            midiaUrlMap[item.meta_media_id] = url;
+          }
+        }
+      } catch (e) {
+        // Ignora JSON mal formatado
+      }
+    }
+
     const posts = rawPosts.map((p: any) => {
       let formatoPadrao = p.formato || 'Imagem';
       const fUpper = (p.formato || '').toUpperCase();
@@ -102,9 +126,12 @@ export async function GET() {
         formatoPadrao = 'Imagem';
       }
 
+      const mediaUrl = midiaUrlMap[p.post_id] || midiaUrlMap[p.shortcode] || null;
+
       return {
         ...p,
-        formato: formatoPadrao
+        formato: formatoPadrao,
+        media_url: mediaUrl
       };
     });
 

@@ -24,6 +24,7 @@ import CentralAnomalias from "../components/CentralAnomalias";
 import CentralAutomatizacao from "../components/CentralAutomatizacao";
 import CentralRespostas from "../components/CentralRespostas";
 import AvatarModelo from "../components/AvatarModelo";
+import ModalEvolucaoPost from "../components/ModalEvolucaoPost";
 
 const ModalLancamentoInline = ({ isOpen, onClose, username, onSave, perfisDisponiveis }: any) => {
   useEffect(() => {
@@ -174,6 +175,26 @@ const formatDate = (dateStr: string) => {
 
     // Junta no formato DD/MM/AAAA puro
     return `${dia}/${mes}/${ano}`;
+  } catch {
+    return dateStr;
+  }
+};
+
+// Formatação com data e hora (DD/MM/AAAA HH:mm)
+const formatDateTime = (dateStr: string) => {
+  if (!dateStr) return '';
+  try {
+    const parts = dateStr.trim().split(' ');
+    const dataPart = parts[0].split('T')[0];
+    const timePart = parts[1] || (dateStr.includes('T') ? dateStr.split('T')[1] : '');
+
+    const datePieces = dataPart.split('-');
+    if (datePieces.length !== 3) return dateStr;
+
+    const [ano, mes, dia] = datePieces;
+    const horaMin = timePart ? timePart.substring(0, 5) : '';
+
+    return horaMin ? `${dia}/${mes}/${ano} ${horaMin}` : `${dia}/${mes}/${ano}`;
   } catch {
     return dateStr;
   }
@@ -1248,6 +1269,7 @@ export default function Dashboard() {
   // Paginação da Tabela Feed Geral
   const [postsPage, setPostsPage] = useState<number>(1);
   const [postsPerPage, setPostsPerPage] = useState<number>(20);
+  const [modalPostEvolucao, setModalPostEvolucao] = useState<any | null>(null);
   const [searchAcompanhados, setSearchAcompanhados] = useState('');
   const [acompStatusFilter, setAcompStatusFilter] = useState<'TODOS' | 'ATIVO' | 'INATIVO' | 'INDISPONIVEL' | 'MORREU'>('TODOS');
   const [incluirTodosPerfis, setIncluirTodosPerfis] = useState(false);
@@ -4387,24 +4409,23 @@ export default function Dashboard() {
               <table className="social-table">
                 <thead>
                   <tr>
-                    <th>Perfil</th>
+                    <th>PERFIL</th>
                     <th className={`sortable ${sortField === 'data_postagem' ? 'active' : ''}`} onClick={() => handleSort('data_postagem')}>
-                      Data {sortField === 'data_postagem' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                      DATA {sortField === 'data_postagem' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                     </th>
-                    <th>Formato</th>
-                    <th style={{ width: '30%' }}>Legenda / Hashtags</th>
-                    <th className={`sortable ${sortField === 'likes' ? 'active' : ''}`} onClick={() => handleSort('likes')}>
-                      Curtidas {sortField === 'likes' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                    <th>MÍDIA / FORMATO</th>
+                    <th className={`sortable ${sortField === 'likes' ? 'active' : ''}`} onClick={() => handleSort('likes')} title="Curtidas">
+                      ❤️ {sortField === 'likes' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                     </th>
-                    <th className={`sortable ${sortField === 'comentarios' ? 'active' : ''}`} onClick={() => handleSort('comentarios')}>
-                      Comentários {sortField === 'comentarios' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                    <th className={`sortable ${sortField === 'comentarios' ? 'active' : ''}`} onClick={() => handleSort('comentarios')} title="Comentários">
+                      💬 {sortField === 'comentarios' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                     </th>
                     <th
                       className={`sortable ${sortField === 'views' ? 'active' : ''}`}
                       onClick={() => handleSort('views')}
-                      title="Reels: plays · Carrossel/Imagem: alcance (reach) ou engajamento como fallback"
+                      title="Visualizações / Plays (Reels) ou Alcance"
                     >
-                      Visualizações {sortField === 'views' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                      👁️ {sortField === 'views' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                     </th>
                     <th className={`sortable ${sortField === 'taxa_engajamento' ? 'active' : ''}`} onClick={() => handleSort('taxa_engajamento')}>
                       Engajamento {sortField === 'taxa_engajamento' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
@@ -4426,61 +4447,113 @@ export default function Dashboard() {
                         ? 'medium'
                         : 'low';
 
+                    const rawViews = Number(post.views) || 0;
+                    const hasViewsData = post.formato === 'Reels'
+                      ? rawViews > 0 || Number(post.viewsEfetivas) > 0
+                      : rawViews > 0 || (Number(post.reach) > 0);
+
+                    const viewsVal = post.formato === 'Reels'
+                      ? (rawViews > 0 ? rawViews : Number(post.viewsEfetivas) || 0)
+                      : (rawViews > 0 ? rawViews : (Number(post.reach) || 0));
+
                     return (
                       <tr key={post.post_id}>
                         <td style={{ fontWeight: '700' }}>@{post.username}</td>
-                        <td style={{ whiteSpace: 'nowrap' }}>{formatDate(post.data_postagem)}</td>
-                        <td>
-                          <span
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              fontSize: '12px'
-                            }}
-                          >
-                            {post.formato === 'Reels' ? (
-                              <VideoIcon size={12} style={{ color: 'var(--color-cyan)' }} />
-                            ) : post.formato === 'Carrossel' ? (
-                              <LayersIcon size={12} style={{ color: 'var(--color-purple)' }} />
-                            ) : (
-                              <ImageIcon size={12} style={{ color: 'var(--text-secondary)' }} />
-                            )}
-                            {post.formato}
-                          </span>
+                        <td style={{ whiteSpace: 'nowrap', fontSize: '13px' }}>
+                          {formatDateTime(post.data_postagem)}
                         </td>
-                        <td className="legenda-cell">
-                          <div
-                            style={{
-                              maxHeight: '60px',
-                              overflowY: 'auto',
-                              fontSize: '13px',
-                              lineHeight: '1.4',
-                              marginBottom: '6px'
-                            }}
-                          >
-                            {post.legenda || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Sem legenda</span>}
-                          </div>
-                          {/* Hashtags identificadas */}
-                          {post.hashtags && post.hashtags.map((tag: string, index: number) => (
-                            <span key={`${tag}-${index}`} className="hashtag-pill">{tag}</span>
-                          ))}
+                        <td>
+                          {post.media_url ? (
+                            <div
+                              onClick={() => setModalPostEvolucao(post)}
+                              title={`${post.formato} • Clique para ver evolução`}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <div
+                                style={{
+                                  width: '36px',
+                                  height: '36px',
+                                  borderRadius: '6px',
+                                  overflow: 'hidden',
+                                  border: '1px solid #30363D',
+                                  backgroundColor: '#0D1117',
+                                  flexShrink: 0
+                                }}
+                              >
+                                <img
+                                  src={post.media_url}
+                                  alt={post.formato}
+                                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                />
+                              </div>
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  padding: '4px',
+                                  borderRadius: '6px',
+                                  backgroundColor: 'rgba(255, 255, 255, 0.05)'
+                                }}
+                                title={post.formato}
+                              >
+                                {post.formato === 'Reels' ? (
+                                  <VideoIcon size={14} style={{ color: 'var(--color-cyan)' }} />
+                                ) : post.formato === 'Carrossel' ? (
+                                  <LayersIcon size={14} style={{ color: 'var(--color-purple)' }} />
+                                ) : (
+                                  <ImageIcon size={14} style={{ color: 'var(--text-secondary)' }} />
+                                )}
+                              </span>
+                            </div>
+                          ) : (
+                            <span
+                              title={post.formato}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: '32px',
+                                height: '32px',
+                                borderRadius: '6px',
+                                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                cursor: 'pointer'
+                              }}
+                              onClick={() => setModalPostEvolucao(post)}
+                            >
+                              {post.formato === 'Reels' ? (
+                                <VideoIcon size={16} style={{ color: 'var(--color-cyan)' }} />
+                              ) : post.formato === 'Carrossel' ? (
+                                <LayersIcon size={16} style={{ color: 'var(--color-purple)' }} />
+                              ) : (
+                                <ImageIcon size={16} style={{ color: 'var(--text-secondary)' }} />
+                              )}
+                            </span>
+                          )}
                         </td>
                         <td>{formatNumber(post.likes)}</td>
                         <td>{formatNumber(post.comentarios)}</td>
                         <td>
-                          {post.viewsEfetivas > 0 ? (
+                          {hasViewsData && viewsVal > 0 ? (
                             <span style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-                              <span>{formatNumber(post.viewsEfetivas)}</span>
-                              {post.viewsLabel && post.viewsLabel !== 'plays' && (
-                                <span style={{ fontSize: '10px', opacity: 0.45, fontStyle: 'italic' }}>{post.viewsLabel}</span>
-                              )}
+                              <span>{formatNumber(viewsVal)}</span>
                             </span>
                           ) : (
-                            <span style={{ opacity: 0.3 }}>—</span>
+                            <span style={{ color: '#8B949E', opacity: 0.6 }}>-</span>
                           )}
                         </td>
-                        <td style={{ fontWeight: '600' }}>{post.taxa_engajamento ? `${post.taxa_engajamento.toFixed(2)}%` : '0,00%'}</td>
+                        <td style={{ fontWeight: '600' }}>
+                          {hasViewsData && post.taxa_engajamento != null && post.taxa_engajamento > 0 ? (
+                            `${post.taxa_engajamento.toFixed(2)}%`
+                          ) : (
+                            <span style={{ color: '#8B949E', opacity: 0.6 }}>-</span>
+                          )}
+                        </td>
                         <td>
                           <span className={`performance-badge ${performanceClass}`}>
                             {pMult >= 1.8 ? '🔥 ' : ''}
@@ -4488,15 +4561,41 @@ export default function Dashboard() {
                           </span>
                         </td>
                         <td>
-                          <a
-                            href={getInstagramPostUrl(post)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="post-link"
-                            style={{ fontSize: '13px' }}
-                          >
-                            Abrir <ExternalLink size={12} />
-                          </a>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <button
+                              onClick={() => setModalPostEvolucao(post)}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                padding: '4px 10px',
+                                borderRadius: '6px',
+                                backgroundColor: '#161B22',
+                                border: '1px solid #30363D',
+                                color: 'white',
+                                fontSize: '12px',
+                                fontWeight: '600',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease'
+                              }}
+                              onMouseOver={(e) => (e.currentTarget.style.borderColor = 'var(--color-purple)')}
+                              onMouseOut={(e) => (e.currentTarget.style.borderColor = '#30363D')}
+                              title="Ver gráfico de evolução e histórico desta publicação"
+                            >
+                              <BarChart3 size={13} style={{ color: 'var(--color-cyan)' }} />
+                              Evolução
+                            </button>
+                            <a
+                              href={getInstagramPostUrl(post)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="post-link"
+                              style={{ fontSize: '12px', padding: '4px' }}
+                              title="Abrir no Instagram"
+                            >
+                              <ExternalLink size={13} />
+                            </a>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -5359,6 +5458,15 @@ export default function Dashboard() {
             setModalPerfilSemDados(null);
             fetchData();
           }}
+        />
+      )}
+
+      {/* Modal de Evolução Temporal do Post */}
+      {modalPostEvolucao && (
+        <ModalEvolucaoPost
+          post={modalPostEvolucao}
+          onClose={() => setModalPostEvolucao(null)}
+          getInstagramPostUrl={getInstagramPostUrl}
         />
       )}
     </div>
