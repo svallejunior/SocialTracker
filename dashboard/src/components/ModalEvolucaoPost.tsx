@@ -32,10 +32,44 @@ interface Snapshot {
   data_carga: string;
 }
 
+interface BenchmarkPoint {
+  minutesBucket: number;
+  avgViews: number;
+  avgLikes: number;
+  avgComentarios: number;
+  sampleCount: number;
+}
+
 interface ModalEvolucaoPostProps {
   post: any;
   onClose: () => void;
   getInstagramPostUrl: (p: any) => string;
+}
+
+/** Interpolação linear entre buckets do benchmark */
+function interpolateBenchmark(
+  bm: BenchmarkPoint[],
+  minutes: number,
+  key: 'avgViews' | 'avgLikes' | 'avgComentarios'
+): number | null {
+  if (!bm || bm.length === 0 || minutes < 0) return null;
+  if (minutes === 0) return 0;
+
+  let lower: BenchmarkPoint | null = null;
+  let upper: BenchmarkPoint | null = null;
+
+  for (const p of bm) {
+    if (p.minutesBucket <= minutes) lower = p;
+    if (p.minutesBucket >= minutes && upper === null) upper = p;
+  }
+
+  if (!lower && upper) return upper[key];
+  if (lower && !upper) return null; // além do último bucket — não extrapola
+  if (!lower || !upper) return null;
+  if (lower.minutesBucket === upper.minutesBucket) return lower[key];
+
+  const t = (minutes - lower.minutesBucket) / (upper.minutesBucket - lower.minutesBucket);
+  return Math.round(lower[key] + t * (upper[key] - lower[key]));
 }
 
 export default function ModalEvolucaoPost({
@@ -46,6 +80,8 @@ export default function ModalEvolucaoPost({
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [metricFoco, setMetricFoco] = useState<'todas' | 'likes' | 'views' | 'comentarios'>('todas');
+  const [benchmark, setBenchmark] = useState<BenchmarkPoint[]>([]);
+  const [benchmarkSampleSize, setBenchmarkSampleSize] = useState(0);
 
   // Trata tecla Esc
   useEffect(() => {
@@ -78,6 +114,20 @@ export default function ModalEvolucaoPost({
     return () => {
       isMounted = false;
     };
+  }, [post?.post_id]);
+
+  // Carrega benchmark histórico (comportamento esperado) do mesmo username + formato
+  useEffect(() => {
+    if (!post?.post_id) return;
+    fetch(`/api/posts/${post.post_id}/benchmark`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          setBenchmark(data.benchmark || []);
+          setBenchmarkSampleSize(data.sampleSize || 0);
+        }
+      })
+      .catch(() => {});
   }, [post?.post_id]);
 
   // Formatação de data e hora completa
@@ -117,34 +167,83 @@ export default function ModalEvolucaoPost({
     return new Intl.NumberFormat('pt-BR').format(val);
   };
 
-  // Dados formatados para o gráfico
+  // Dados formatados para o gráfico (com ponto zero na hora de publicação e campos de benchmark)
   const chartData = useMemo(() => {
+    // Parse da hora de publicação para calcular minutos relativos
+    let postTimeMs: number | null = null;
+    try {
+      if (post?.data_postagem) {
+        const t = new Date(post.data_postagem.replace(' ', 'T')).getTime();
+        if (!isNaN(t)) postTimeMs = t;
+      }
+    } catch { /* ignora */ }
+
+    // Calcula minutos desde a publicação para um dado timestamp
+    const minsFrom = (dtStr: string): number | null => {
+      if (!postTimeMs || !dtStr) return null;
+      try {
+        const t = new Date(dtStr.replace(' ', 'T')).getTime();
+        return isNaN(t) ? null : (t - postTimeMs) / 60000;
+      } catch { return null; }
+    };
+
+    // Adiciona campos expected* a um ponto de dados
+    const withExpected = (p: any, minutes: number | null) => {
+      if (benchmark.length < 2 || minutes === null || minutes < 0) return p;
+      return {
+        ...p,
+        expectedViews: interpolateBenchmark(benchmark, minutes, 'avgViews'),
+        expectedLikes: interpolateBenchmark(benchmark, minutes, 'avgLikes'),
+        expectedComentarios: interpolateBenchmark(benchmark, minutes, 'avgComentarios'),
+      };
+    };
+
+    let points: any[];
+
     if (!snapshots || snapshots.length === 0) {
-      // Se não há histórico salvo ainda, gera um ponto com o estado atual do post
+      // Sem histórico: usa métricas atuais como único ponto
       const baseViews = Number(post?.views) || (post?.formato === 'Reels' ? Number(post?.viewsEfetivas) : 0);
-      return [
-        {
-          dataHora: formatTimeLabel(post?.data_postagem || new Date().toISOString()),
-          timestamp: post?.data_postagem || '',
-          likes: Number(post?.likes) || 0,
-          comentarios: Number(post?.comentarios) || 0,
-          views: baseViews,
-          reach: Number(post?.reach) || 0
-        }
-      ];
+      const min = postTimeMs ? (Date.now() - postTimeMs) / 60000 : null;
+      points = [withExpected({
+        dataHora: formatTimeLabel(post?.data_postagem || new Date().toISOString()),
+        timestamp: post?.data_postagem || '',
+        likes: Number(post?.likes) || 0,
+        comentarios: Number(post?.comentarios) || 0,
+        views: baseViews,
+        reach: Number(post?.reach) || 0,
+      }, min)];
+    } else {
+      points = snapshots.map((s, idx) => {
+        const min = minsFrom(s.data_carga) ?? (idx + 1) * 15;
+        return withExpected({
+          index: idx + 1,
+          dataHora: formatTimeLabel(s.data_carga),
+          timestamp: s.data_carga,
+          likes: Number(s.likes) || 0,
+          comentarios: Number(s.comentarios) || 0,
+          views: Number(s.views) || 0,
+          reach: Number(s.reach) || 0,
+          interacoes: Number(s.total_interactions) || (Number(s.likes) + Number(s.comentarios)),
+        }, min);
+      });
     }
 
-    return snapshots.map((s, idx) => ({
-      index: idx + 1,
-      dataHora: formatTimeLabel(s.data_carga),
-      timestamp: s.data_carga,
-      likes: Number(s.likes) || 0,
-      comentarios: Number(s.comentarios) || 0,
-      views: Number(s.views) || 0,
-      reach: Number(s.reach) || 0,
-      interacoes: Number(s.total_interactions) || (Number(s.likes) + Number(s.comentarios))
-    }));
-  }, [snapshots, post]);
+    // Ponto zero: hora da publicação com valores 0 (início da linha do tempo)
+    if (postTimeMs) {
+      const zeroPoint = withExpected({
+        dataHora: '★ ' + formatTimeLabel(post.data_postagem),
+        timestamp: post.data_postagem,
+        isZero: true,
+        likes: 0,
+        comentarios: 0,
+        views: 0,
+        reach: 0,
+      }, 0);
+      return [zeroPoint, ...points];
+    }
+
+    return points;
+  }, [snapshots, post, benchmark]);
 
   // Variação calculada entre o primeiro e o último snapshot
   const variacoes = useMemo(() => {
@@ -651,21 +750,36 @@ export default function ModalEvolucaoPost({
                         color: 'white',
                         fontSize: '12px'
                       }}
-                      formatter={(val: any, name: any) => [
-                        formatNumber(val),
-                        name === 'likes' ? 'Curtidas' : name === 'views' ? 'Visualizações' : name === 'comentarios' ? 'Comentários' : name
-                      ]}
+                      formatter={(val: any, name: any) => {
+                        if (val === null || val === undefined) return ['', ''];
+                        const label =
+                          name === 'likes' ? '❤️ Curtidas'
+                          : name === 'views' ? '👁️ Views'
+                          : name === 'comentarios' ? '💬 Comentários'
+                          : name === 'Esperado' ? '– – Esperado (média histórica)'
+                          : name;
+                        return [formatNumber(val), label];
+                      }}
                       labelFormatter={(label, payload) => {
                         const item = payload && payload[0]?.payload;
-                        return item?.timestamp ? formatDateTimeFull(item.timestamp) : label;
+                        const timeStr = item?.timestamp ? formatDateTimeFull(item.timestamp) : label;
+                        return item?.isZero ? `${timeStr} — Publicação` : timeStr;
                       }}
                     />
                     <Legend
                       verticalAlign="top"
                       height={36}
                       formatter={(val) => (
-                        <span style={{ color: '#C9D1D9', fontSize: '12px', fontWeight: '600' }}>
-                          {val === 'likes' ? '❤️ Curtidas' : val === 'views' ? '👁️ Views' : val === 'comentarios' ? '💬 Comentários' : val}
+                        <span style={{
+                          color: val === 'Esperado' ? 'rgba(255,255,255,0.65)' : '#C9D1D9',
+                          fontSize: '12px',
+                          fontWeight: '600'
+                        }}>
+                          {val === 'likes' ? '❤️ Curtidas'
+                            : val === 'views' ? '👁️ Views'
+                            : val === 'comentarios' ? '💬 Comentários'
+                            : val === 'Esperado' ? '– – Esperado'
+                            : val}
                         </span>
                       )}
                     />
@@ -705,6 +819,26 @@ export default function ModalEvolucaoPost({
                         fill="url(#colorComentarios)"
                       />
                     )}
+
+                    {/* Linha tracejada branca: comportamento esperado baseado no histórico da conta */}
+                    {benchmark.length >= 2 && (
+                      <Line
+                        key={`expected-${metricFoco}`}
+                        type="monotone"
+                        dataKey={
+                          metricFoco === 'likes' ? 'expectedLikes'
+                          : metricFoco === 'comentarios' ? 'expectedComentarios'
+                          : 'expectedViews'
+                        }
+                        name="Esperado"
+                        stroke="rgba(255,255,255,0.65)"
+                        strokeWidth={1.5}
+                        strokeDasharray="6 4"
+                        dot={false}
+                        connectNulls
+                        legendType="plainline"
+                      />
+                    )}
                   </AreaChart>
                 </ResponsiveContainer>
               )}
@@ -724,6 +858,28 @@ export default function ModalEvolucaoPost({
                 }}
               >
                 ℹ️ Esta publicação ainda possui 1 único registro coletado. À medida que as coletas do SocialTracker rodarem, a curva de evolução acumulará novos pontos no gráfico.
+              </div>
+            )}
+
+            {/* Nota sobre o benchmark */}
+            {benchmark.length >= 2 && (
+              <div
+                style={{
+                  marginTop: '8px',
+                  fontSize: '11px',
+                  color: '#8B949E',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: '13px', letterSpacing: '2px', flexShrink: 0 }}>– – –</span>
+                <span>
+                  Linha esperada calculada a partir de{' '}
+                  <strong style={{ color: '#C9D1D9' }}>{benchmarkSampleSize}</strong>{' '}
+                  {post?.formato === 'Reels' ? 'Reels' : post?.formato === 'Carrossel' ? 'Carrosséis' : 'Imagens'} anteriores de{' '}
+                  <strong style={{ color: 'var(--color-cyan)' }}>@{post?.username}</strong>
+                </span>
               </div>
             )}
           </div>
