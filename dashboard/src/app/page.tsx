@@ -1,6 +1,6 @@
 "use client";
 export const dynamic = 'force-dynamic';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import nextDynamic from 'next/dynamic';
 import {
@@ -1322,22 +1322,34 @@ export default function Dashboard() {
     }
   };
 
-  const profilesBase = incluirTodosPerfis ? profiles : profiles.filter(p => p.exibir !== 0);
-  const countOcultos = profiles.filter(p => p.exibir === 0).length;
+  // profilesBase/counts e profilesFiltrados envolvem vários .filter()/.map()/.sort()
+  // encadeados sobre o array de perfis — useMemo evita recalcular tudo isso a
+  // cada render (ex: a cada tecla digitada em outro campo, fora desta aba).
+  const profilesBase = useMemo(
+    () => (incluirTodosPerfis ? profiles : profiles.filter(p => p.exibir !== 0)),
+    [profiles, incluirTodosPerfis]
+  );
+  const countOcultos = useMemo(() => profiles.filter(p => p.exibir === 0).length, [profiles]);
 
-  const countAtivos = profilesBase.filter(p => (p.status || 'ATIVO').toUpperCase() === 'ATIVO').length;
-  const countInativos = profilesBase.filter(p => (p.status || 'ATIVO').toUpperCase() === 'INATIVO').length;
-  const countIndisponiveis = profilesBase.filter(p => {
+  const countAtivos = useMemo(
+    () => profilesBase.filter(p => (p.status || 'ATIVO').toUpperCase() === 'ATIVO').length,
+    [profilesBase]
+  );
+  const countInativos = useMemo(
+    () => profilesBase.filter(p => (p.status || 'ATIVO').toUpperCase() === 'INATIVO').length,
+    [profilesBase]
+  );
+  const countIndisponiveis = useMemo(() => profilesBase.filter(p => {
     const st = (p.status || 'ATIVO').toUpperCase();
     return st === 'INDISPONIVEL' || st === 'INDISPONÍVEL';
-  }).length;
-  const countMorreu = profilesBase.filter(p => {
+  }).length, [profilesBase]);
+  const countMorreu = useMemo(() => profilesBase.filter(p => {
     const st = (p.status || 'ATIVO').toUpperCase();
     const stCtrl = (p.status_controle || '').toUpperCase();
     return st === 'MORREU' || stCtrl.includes('MORREU');
-  }).length;
+  }).length, [profilesBase]);
 
-  const profilesFiltrados = profiles
+  const profilesFiltrados = useMemo(() => profiles
     .filter(p => (incluirTodosPerfis ? true : p.exibir !== 0))
     .filter(p => p.username.toLowerCase().includes(searchAcompanhados.toLowerCase()))
     .filter(p => {
@@ -1472,7 +1484,7 @@ export default function Dashboard() {
       if (diff !== 0) return acompSortDir === 'desc' ? diff : -diff;
       // Desempate: ordem alfabética
       return (a.username || '').toLowerCase().localeCompare((b.username || '').toLowerCase());
-    });
+    }), [profiles, incluirTodosPerfis, searchAcompanhados, acompStatusFilter, followersHistory, acompSortField, acompSortDir]);
   const handleSort = (field: string) => {
     setPostsPage(1);
     if (sortField === field) {
@@ -1963,20 +1975,15 @@ export default function Dashboard() {
     }
     return { dadosFinais, usuarios };
   };
-  // Executa com segurança após as variáveis existirem no escopo do componente
-  const { dadosFinais, usuarios } = prepararDadosGrafico();
-  const dadosDoGrafico = graficoAtivo === 'financeiro'
-    ? prepararDadosGrafico().dadosFinais
-    : prepararDadosSeguidores();
-
-  // 2. Cálculo dos dados (Executa a lógica com base no estado atual)
-  const financeiro = prepararDadosGrafico();
-  const seguidores = prepararDadosSeguidores();
+  // Memoiza os 3 conjuntos de dados de gráfico: antes, prepararDadosGrafico() e
+  // prepararDadosSeguidores() eram chamadas várias vezes por render (inclusive
+  // uma dentro da outra, dentro de prepararDadosCorrelacao), recalculando tudo
+  // do zero mesmo fora da aba de gráficos e mesmo quando nada relevante mudou.
+  const financeiro = useMemo(() => prepararDadosGrafico(), [controleData]);
+  const seguidores = useMemo(() => prepararDadosSeguidores(), [controleData, followersHistory]);
 
   // 3. Correlação: calcula efetividade (saldo acumulado ÷ quantidade de seguidores) por dia
-  const prepararDadosCorrelacao = () => {
-    const fin = prepararDadosGrafico();
-    const seg = prepararDadosSeguidores();
+  const prepararDadosCorrelacao = (fin: { dadosFinais: any[]; usuarios: string[] }, seg: { dadosFinais: any[]; usuarios: string[] }) => {
     const todosUsuarios = fin.usuarios;
 
     const limiteCorrelacao = Math.max(fin.dadosFinais.length, seg.dadosFinais.length);
@@ -2021,7 +2028,7 @@ export default function Dashboard() {
     }
     return { dadosFinais: dadosMesclados, usuarios: todosUsuarios };
   };
-  const correlacao = prepararDadosCorrelacao();
+  const correlacao = useMemo(() => prepararDadosCorrelacao(financeiro, seguidores), [financeiro, seguidores]);
 
   const dadosAtivos = graficoAtivo === 'financeiro' ? financeiro.dadosFinais
     : graficoAtivo === 'seguidores' ? seguidores.dadosFinais
@@ -2131,6 +2138,56 @@ export default function Dashboard() {
     return new Intl.NumberFormat('pt-BR').format(val);
   };
 
+  // --- FILTRAGENS ---
+  // Precisam vir antes dos `return` condicionais de loading/error abaixo —
+  // hooks (useMemo) não podem ser chamados condicionalmente.
+
+  // Filtrar posts para a tabela da aba "Posts" — useMemo evita refazer o
+  // filter+sort sobre o array inteiro a cada render (ex: ao digitar em outro
+  // campo, fora desta aba), recalculando só quando os posts ou os filtros mudam.
+  const filteredPosts = useMemo(() => posts.filter(post => {
+    const matchesSearch = searchQuery === '' ||
+      (post.legenda && post.legenda.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      post.username.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const matchesFormat = selectedFormat === 'Todos' || post.formato === selectedFormat;
+
+    const matchesProfile = selectedProfileFilter === 'Todos' || post.username === selectedProfileFilter;
+
+    // Filtro de data simples
+    const dateLimit = post.data_postagem ? post.data_postagem.split(' ')[0] : '';
+    const matchesDate = (!startDate || dateLimit >= startDate) && (!endDate || dateLimit <= endDate);
+
+    return matchesSearch && matchesFormat && matchesProfile && matchesDate;
+  }), [posts, searchQuery, selectedFormat, selectedProfileFilter, startDate, endDate]);
+
+  // Ordenar posts para a tabela
+  const sortedPosts = useMemo(() => [...filteredPosts].sort((a, b) => {
+    let aVal = a[sortField];
+    let bVal = b[sortField];
+
+    if (sortField === 'data_postagem') {
+      aVal = a.data_postagem ? new Date(a.data_postagem).getTime() : 0;
+      bVal = b.data_postagem ? new Date(b.data_postagem).getTime() : 0;
+    } else if (sortField === 'taxa_engajamento') {
+      aVal = a.taxa_engajamento || 0;
+      bVal = b.taxa_engajamento || 0;
+    } else if (sortField === 'performanceMultiplier') {
+      aVal = a.performanceMultiplier || 0;
+      bVal = b.performanceMultiplier || 0;
+    } else if (sortField === 'views') {
+      aVal = Number(a.viewsEfetivas) || 0;
+      bVal = Number(b.viewsEfetivas) || 0;
+    } else if (['likes', 'comentarios'].includes(sortField)) {
+      aVal = Number(aVal) || 0;
+      bVal = Number(bVal) || 0;
+    }
+
+    if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+    if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+    return 0;
+  }), [filteredPosts, sortField, sortDirection]);
+
   if (loading) {
     return (
       <div className="loading-box">
@@ -2161,52 +2218,6 @@ export default function Dashboard() {
       </div>
     );
   }
-
-  // --- FILTRAGENS ---
-
-  // Filtrar posts para a tabela da aba "Posts"
-  const filteredPosts = posts.filter(post => {
-    const matchesSearch = searchQuery === '' ||
-      (post.legenda && post.legenda.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      post.username.toLowerCase().includes(searchQuery.toLowerCase());
-
-    const matchesFormat = selectedFormat === 'Todos' || post.formato === selectedFormat;
-
-    const matchesProfile = selectedProfileFilter === 'Todos' || post.username === selectedProfileFilter;
-
-    // Filtro de data simples
-    const dateLimit = post.data_postagem ? post.data_postagem.split(' ')[0] : '';
-    const matchesDate = (!startDate || dateLimit >= startDate) && (!endDate || dateLimit <= endDate);
-
-    return matchesSearch && matchesFormat && matchesProfile && matchesDate;
-  });
-
-  // Ordenar posts para a tabela
-  const sortedPosts = [...filteredPosts].sort((a, b) => {
-    let aVal = a[sortField];
-    let bVal = b[sortField];
-
-    if (sortField === 'data_postagem') {
-      aVal = a.data_postagem ? new Date(a.data_postagem).getTime() : 0;
-      bVal = b.data_postagem ? new Date(b.data_postagem).getTime() : 0;
-    } else if (sortField === 'taxa_engajamento') {
-      aVal = a.taxa_engajamento || 0;
-      bVal = b.taxa_engajamento || 0;
-    } else if (sortField === 'performanceMultiplier') {
-      aVal = a.performanceMultiplier || 0;
-      bVal = b.performanceMultiplier || 0;
-    } else if (sortField === 'views') {
-      aVal = Number(a.viewsEfetivas) || 0;
-      bVal = Number(b.viewsEfetivas) || 0;
-    } else if (['likes', 'comentarios'].includes(sortField)) {
-      aVal = Number(aVal) || 0;
-      bVal = Number(bVal) || 0;
-    }
-
-    if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
-    if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
-    return 0;
-  });
 
   // Paginação para a Tabela Feed Geral
   const totalPostsCount = sortedPosts.length;
