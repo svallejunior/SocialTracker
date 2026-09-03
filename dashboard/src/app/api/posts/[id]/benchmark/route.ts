@@ -147,15 +147,36 @@ export async function GET(
       }
     }
 
+    // 2b) Preenche cada post até maxBucket repetindo o último valor conhecido
+    //     dele (carry-forward), em vez de deixá-lo "sair" da amostra depois do
+    //     último snapshot. Sem isso, o divisor da média muda de bucket pra bucket
+    //     conforme cada post entra/sai de cobertura, e isso sozinho já é o
+    //     suficiente pra média cair mesmo sem nenhum view "sumir" de verdade. Com
+    //     carry-forward, todo post contribui em todo bucket (crescimento zero no
+    //     trecho sem coleta nova, nunca negativo), a amostra fica do mesmo tamanho
+    //     do começo ao fim, e a linha esperada vai até onde o post mais coletado
+    //     chegou — em vez de parar quando o primeiro post da amostra esgota dados.
+    for (const bucketMap of perPostBuckets.values()) {
+      let lastBucket = 0;
+      let lastValue = bucketMap.get(0)!;
+      for (const [bucket, value] of bucketMap) {
+        if (bucket > lastBucket) {
+          lastBucket = bucket;
+          lastValue = value;
+        }
+      }
+      for (let bucket = lastBucket + BUCKET_MINUTES; bucket <= maxBucket; bucket += BUCKET_MINUTES) {
+        bucketMap.set(bucket, lastValue);
+      }
+    }
+
     // 3) Constrói a curva como soma cumulativa do CRESCIMENTO médio entre buckets
-    //    consecutivos — não da média dos níveis absolutos. A cada passo de
-    //    BUCKET_MINUTES, olha só os posts que têm valor tanto no bucket anterior
-    //    quanto no atual, calcula o delta de cada um (nunca negativo — visualização
-    //    não some) e tira a média desses deltas. Isso garante que a curva nunca cai:
-    //    um crescimento observado fica acumulado para sempre, mesmo que depois um
-    //    post que puxava a média pra cima pare de ter dados novos — ele só para de
-    //    contribuir com MAIS crescimento, não faz o total recuar. Também evita o
-    //    viés de misturar níveis absolutos de posts muito diferentes num mesmo bucket.
+    //    consecutivos — não da média dos níveis absolutos direto (o que, mesmo com
+    //    amostra fixa, dá o mesmo resultado, mas evita reprocessar todo o histórico
+    //    de cada post a cada coluna). Em cada passo de BUCKET_MINUTES, calcula o
+    //    delta de cada post (nunca negativo — visualização não some) e tira a média
+    //    entre os N posts da amostra, que agora é constante em todo bucket graças
+    //    ao carry-forward acima.
     const benchmark: Array<{ minutesBucket: number; avgViews: number; avgLikes: number; avgComentarios: number; sampleCount: number }> = [
       { minutesBucket: 0, avgViews: 0, avgLikes: 0, avgComentarios: 0, sampleCount: perPostBuckets.size },
     ];
@@ -190,9 +211,9 @@ export async function GET(
 
       benchmark.push({
         minutesBucket: bucket,
-        avgViews: Math.round(cumViews),
-        avgLikes: Math.round(cumLikes),
-        avgComentarios: Math.round(cumComentarios),
+        avgViews: Math.floor(cumViews),
+        avgLikes: Math.floor(cumLikes),
+        avgComentarios: Math.floor(cumComentarios),
         sampleCount: n,
       });
     }
