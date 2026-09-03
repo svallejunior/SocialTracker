@@ -4463,7 +4463,7 @@ export default function Dashboard() {
                           {formatDateTime(post.data_postagem)}
                         </td>
                         <td>
-                          {post.media_url ? (
+                          {(post.thumbnail_url || post.media_url) ? (
                             <div
                               onClick={() => setModalPostEvolucao(post)}
                               title={`${post.formato} • Clique para ver evolução`}
@@ -4486,7 +4486,7 @@ export default function Dashboard() {
                                 }}
                               >
                                 <img
-                                  src={post.media_url}
+                                  src={post.thumbnail_url || post.media_url}
                                   alt={post.formato}
                                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                                 />

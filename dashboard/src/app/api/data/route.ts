@@ -97,6 +97,7 @@ export async function GET() {
     `).catch(() => []);
 
     const midiaUrlMap: Record<string, string> = {};
+    const thumbnailUrlMap: Record<string, string> = {};
     for (const item of automacaoMidias) {
       if (!item.meta_media_id) continue;
       try {
@@ -106,6 +107,10 @@ export async function GET() {
           const url = first.previewUrl || first.url;
           if (url && typeof url === 'string') {
             midiaUrlMap[item.meta_media_id] = url;
+          }
+          // previewUrl é sempre uma imagem estática (capa), mesmo para Reels
+          if (first.previewUrl && typeof first.previewUrl === 'string') {
+            thumbnailUrlMap[item.meta_media_id] = first.previewUrl;
           }
         }
       } catch (e) {
@@ -127,13 +132,16 @@ export async function GET() {
       }
 
       const mediaUrl = midiaUrlMap[p.post_id] || midiaUrlMap[p.shortcode] || null;
+      const thumbnailUrl = thumbnailUrlMap[p.post_id] || thumbnailUrlMap[p.shortcode] || null;
 
       return {
         ...p,
         formato: formatoPadrao,
-        media_url: mediaUrl
+        media_url: mediaUrl,
+        thumbnail_url: thumbnailUrl || mediaUrl
       };
     });
+
 
     // Mapeia status de cada perfil para saber se morreu/inativo
     const statusPerfilMap: Record<string, boolean> = {};
