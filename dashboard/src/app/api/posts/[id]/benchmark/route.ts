@@ -70,10 +70,13 @@ export async function GET(
     // 1) Reconstrói, por post histórico, sua própria série de pontos reais
     //    (minutos desde a publicação -> métricas), ignorando timestamps inválidos.
     const seriesByPost = new Map<string, Point[]>();
+    const postPublishMs = new Map<string, number>();
     for (const row of rows) {
       const postMs = new Date(row.data_postagem.replace(' ', 'T')).getTime();
       const snapMs = new Date(row.data_carga.replace(' ', 'T')).getTime();
       if (isNaN(postMs) || isNaN(snapMs)) continue;
+
+      if (!postPublishMs.has(row.post_id)) postPublishMs.set(row.post_id, postMs);
 
       const minutesSince = (snapMs - postMs) / 60000;
       if (minutesSince < 0 || minutesSince > MAX_MINUTES) continue;
@@ -147,16 +150,21 @@ export async function GET(
       }
     }
 
-    // 2b) Preenche cada post até maxBucket repetindo o último valor conhecido
-    //     dele (carry-forward), em vez de deixá-lo "sair" da amostra depois do
+    // 2b) Preenche cada post repetindo o último valor conhecido dele
+    //     (carry-forward), em vez de deixá-lo "sair" da amostra depois do
     //     último snapshot. Sem isso, o divisor da média muda de bucket pra bucket
     //     conforme cada post entra/sai de cobertura, e isso sozinho já é o
-    //     suficiente pra média cair mesmo sem nenhum view "sumir" de verdade. Com
-    //     carry-forward, todo post contribui em todo bucket (crescimento zero no
-    //     trecho sem coleta nova, nunca negativo), a amostra fica do mesmo tamanho
-    //     do começo ao fim, e a linha esperada vai até onde o post mais coletado
-    //     chegou — em vez de parar quando o primeiro post da amostra esgota dados.
-    for (const bucketMap of perPostBuckets.values()) {
+    //     suficiente pra média cair mesmo sem nenhum view "sumir" de verdade.
+    //
+    //     MAS só carrega até onde esse post JÁ VIVEU de verdade (agora − a
+    //     publicação dele) — nunca além disso. Um post publicado há só 18h
+    //     não tem dado em buckets de 24h+ porque ainda não chegou lá, não
+    //     porque "parou de crescer"; carregar o valor dele pra frente faria
+    //     um post jovem e ainda em alta parecer estabilizado bem antes da
+    //     hora, inflando artificialmente o esperado de OUTROS posts nos
+    //     buckets tardios (ele entra na amostra deles também).
+    const nowMs = Date.now();
+    for (const [postId, bucketMap] of perPostBuckets) {
       let lastBucket = 0;
       let lastValue = bucketMap.get(0)!;
       for (const [bucket, value] of bucketMap) {
@@ -165,7 +173,13 @@ export async function GET(
           lastValue = value;
         }
       }
-      for (let bucket = lastBucket + BUCKET_MINUTES; bucket <= maxBucket; bucket += BUCKET_MINUTES) {
+
+      const publishMs = postPublishMs.get(postId);
+      const maxBucketParaEssePost = publishMs
+        ? Math.min(maxBucket, Math.floor((nowMs - publishMs) / 60000 / BUCKET_MINUTES) * BUCKET_MINUTES)
+        : maxBucket;
+
+      for (let bucket = lastBucket + BUCKET_MINUTES; bucket <= maxBucketParaEssePost; bucket += BUCKET_MINUTES) {
         bucketMap.set(bucket, lastValue);
       }
     }
