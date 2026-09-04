@@ -33,7 +33,11 @@ export async function GET(
       return NextResponse.json({ success: true, benchmark: [], sampleSize: 0 });
     }
 
-    // Busca snapshots de OUTROS posts do mesmo username + formato
+    // Busca snapshots de posts ANTERIORES do mesmo username + formato — "esperado"
+    // é o que já se sabia sobre a conta até aquele momento, então um post não pode
+    // ser comparado usando dado de posts publicados DEPOIS dele (isso incluiria,
+    // por exemplo, um post viral futuro na régua de "esperado" de um post antigo).
+    // O 1º Reels da conta tem 0 amostras, o 2º tem 1 (só o 1º), o 3º tem 2, etc.
     const rows = await db.all(`
       SELECT
         s.post_id,
@@ -49,8 +53,9 @@ export async function GET(
         AND s.post_id != ?
         AND p.data_postagem IS NOT NULL
         AND p.data_postagem != ''
+        AND p.data_postagem < ?
       ORDER BY s.post_id ASC, s.data_carga ASC
-    `, [post.username, post.formato, post.post_id]);
+    `, [post.username, post.formato, post.post_id, post.data_postagem]);
 
     // Conta posts únicos na amostra (que têm pelo menos 1 snapshot)
     const uniqueRow = await db.get(`
@@ -59,8 +64,9 @@ export async function GET(
       WHERE p.username = ?
         AND p.formato = ?
         AND p.post_id != ?
+        AND p.data_postagem < ?
         AND EXISTS (SELECT 1 FROM posts_metricas_snapshots s WHERE s.post_id = p.post_id)
-    `, [post.username, post.formato, post.post_id]);
+    `, [post.username, post.formato, post.post_id, post.data_postagem]);
 
     const sampleSize = uniqueRow?.cnt || 0;
 
