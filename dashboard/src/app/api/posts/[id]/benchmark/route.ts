@@ -52,31 +52,35 @@ export async function GET(
       ORDER BY s.post_id ASC, s.data_carga ASC
     `, [post.username, post.formato, post.post_id, post.data_postagem]);
 
-    // Conta posts anteriores únicos com pelo menos 1 snapshot
-    const uniqueRow = await db.get(`
-      SELECT COUNT(DISTINCT p.post_id) as cnt
-      FROM posts_historico p
+    // Trava de Segurança: Exige pelo menos 1 post histórico na amostra e 2 snapshots no total;
+    // caso contrário, a linha não é plotada.
+    const totalSnapshotsRow = await db.get(`
+      SELECT COUNT(s.id) as total_snaps, COUNT(DISTINCT p.post_id) as total_posts
+      FROM posts_metricas_snapshots s
+      JOIN posts_historico p ON s.post_id = p.post_id
       WHERE p.username = ?
         AND p.formato = ?
         AND p.post_id != ?
+        AND p.data_postagem IS NOT NULL
+        AND p.data_postagem != ''
         AND p.data_postagem < ?
-        AND EXISTS (SELECT 1 FROM posts_metricas_snapshots s WHERE s.post_id = p.post_id)
     `, [post.username, post.formato, post.post_id, post.data_postagem]);
 
-    const sampleSize = uniqueRow?.cnt || 0;
+    const sampleSize = totalSnapshotsRow?.total_posts || 0;
+    const totalSnapshots = totalSnapshotsRow?.total_snaps || 0;
 
-    if (sampleSize < 1) {
-      return NextResponse.json({ success: true, benchmark: [], sampleSize });
+    if (sampleSize < 1 || totalSnapshots < 2) {
+      return NextResponse.json({ success: true, benchmark: [], sampleSize: 0 });
     }
 
     const MAX_MINUTES = MAX_DAYS * 24 * 60;
 
     type Point = { minutes: number; views: number; likes: number; comentarios: number };
 
-    // 1) Reconstrói, por post anterior, sua própria série de pontos reais
-    //    (minutos desde a publicação -> métricas), ignorando timestamps inválidos.
+    // 1) Reconstrói por post da amostra sua série de pontos reais (minutos desde a publicação)
     const seriesByPost = new Map<string, Point[]>();
     const postPublishMs = new Map<string, number>();
+
     for (const row of rows) {
       const postMs = new Date(row.data_postagem.replace(' ', 'T')).getTime();
       const snapMs = new Date(row.data_carga.replace(' ', 'T')).getTime();
@@ -98,23 +102,25 @@ export async function GET(
       else seriesByPost.set(row.post_id, [point]);
     }
 
-    // 2) Para cada post anterior, o valor DELE em cada bucket de 15min: interpola
-    //    linearmente entre os próprios pontos reais (ancorado em minutes=0 → 0,
-    //    fato garantido, ninguém viu o post antes dele existir), e — passado o
-    //    último ponto real — repete esse valor (carry-forward) só até onde esse
-    //    post JÁ VIVEU de verdade (agora − a publicação dele). Um post não
-    //    "inventa" dado além do que já teve tempo de ter.
-    const nowMs = Date.now();
-    const perPostBuckets = new Map<string, Map<number, { views: number; likes: number; comentarios: number }>>();
+    // Se nenhum post gerou pontos válidos
+    if (seriesByPost.size === 0) {
+      return NextResponse.json({ success: true, benchmark: [], sampleSize: 0 });
+    }
+
+    // 2) Interpolação Linear em passos de 15 min ancorados em T = 0 com 0 engajamento
+    // Preenche cada post até o seu último snapshot real
+    const rawBucketMapByPost = new Map<string, Map<number, { views: number; likes: number; comentarios: number }>>();
+    let globalMaxBucket = 0;
 
     for (const [postId, rawPoints] of seriesByPost) {
       const points = [...rawPoints].sort((a, b) => a.minutes - b.minutes);
+      // Garante ancoragem em T = 0 com 0 engajamento
       if (points[0].minutes > 0) {
         points.unshift({ minutes: 0, views: 0, likes: 0, comentarios: 0 });
       }
 
-      const bucketMap = new Map<number, { views: number; likes: number; comentarios: number }>();
-      bucketMap.set(0, { views: 0, likes: 0, comentarios: 0 });
+      const bMap = new Map<number, { views: number; likes: number; comentarios: number }>();
+      bMap.set(0, { views: 0, likes: 0, comentarios: 0 });
 
       for (let i = 0; i < points.length; i++) {
         const a = points[i];
@@ -122,82 +128,123 @@ export async function GET(
 
         if (!b) {
           const bucket = Math.round(a.minutes / BUCKET_MINUTES) * BUCKET_MINUTES;
-          bucketMap.set(bucket, { views: a.views, likes: a.likes, comentarios: a.comentarios });
+          bMap.set(bucket, { views: a.views, likes: a.likes, comentarios: a.comentarios });
+          if (bucket > globalMaxBucket) globalMaxBucket = bucket;
           continue;
         }
 
-        // Intervalo meio-aberto [a, b) para não contar o bucket em 'b' duas vezes
-        // (aqui e como firstBucket do próximo par) quando cai exatamente na grade.
         const firstBucket = Math.ceil(a.minutes / BUCKET_MINUTES) * BUCKET_MINUTES;
         const span = b.minutes - a.minutes;
         if (span <= 0) continue;
 
         for (let bucket = firstBucket; bucket < b.minutes; bucket += BUCKET_MINUTES) {
           const t = (bucket - a.minutes) / span;
-          bucketMap.set(bucket, {
+          bMap.set(bucket, {
             views: a.views + (b.views - a.views) * t,
             likes: a.likes + (b.likes - a.likes) * t,
             comentarios: a.comentarios + (b.comentarios - a.comentarios) * t,
           });
+          if (bucket > globalMaxBucket) globalMaxBucket = bucket;
         }
       }
 
-      const publishMs = postPublishMs.get(postId)!;
-      const realLifeBucket = Math.floor((nowMs - publishMs) / 60000 / BUCKET_MINUTES) * BUCKET_MINUTES;
+      rawBucketMapByPost.set(postId, bMap);
+    }
 
-      let lastBucket = 0;
-      let lastValue = bucketMap.get(0)!;
-      for (const [bucket, value] of bucketMap) {
-        if (bucket > lastBucket) {
-          lastBucket = bucket;
-          lastValue = value;
+    // 3) Manutenção de Amostra (Carry-Forward)
+    // Quando um post da amostra chega ao seu último snapshot real, seu valor final é repetido
+    // para todos os minutos futuros até globalMaxBucket.
+    // Isso garante que N seja constante e que esse post contribua com crescimento +0 nos intervalos
+    // em que já parou de ser monitorado.
+    const fullPerPostBuckets = new Map<string, Map<number, { views: number; likes: number; comentarios: number }>>();
+
+    for (const [postId, bMap] of rawBucketMapByPost) {
+      const fullMap = new Map<number, { views: number; likes: number; comentarios: number }>();
+
+      // Acha o maior bucket registrado e o valor correspondente desse post
+      let lastKnownBucket = 0;
+      let lastKnownValue = { views: 0, likes: 0, comentarios: 0 };
+      for (const [b, val] of bMap) {
+        if (b > lastKnownBucket) {
+          lastKnownBucket = b;
+          lastKnownValue = val;
         }
       }
-      for (let bucket = lastBucket + BUCKET_MINUTES; bucket <= realLifeBucket; bucket += BUCKET_MINUTES) {
-        bucketMap.set(bucket, lastValue);
+
+      // Preenche todos os buckets de 0 até globalMaxBucket com o carry-forward garantido
+      let runningVal = { views: 0, likes: 0, comentarios: 0 };
+      for (let bucket = 0; bucket <= globalMaxBucket; bucket += BUCKET_MINUTES) {
+        if (bMap.has(bucket)) {
+          runningVal = bMap.get(bucket)!;
+        } else if (bucket > lastKnownBucket) {
+          runningVal = lastKnownValue; // carry-forward
+        }
+        fullMap.set(bucket, { ...runningVal });
       }
 
-      perPostBuckets.set(postId, bucketMap);
+      fullPerPostBuckets.set(postId, fullMap);
     }
 
-    let maxBucket = 0;
-    for (const bucketMap of perPostBuckets.values()) {
-      for (const bucket of bucketMap.keys()) {
-        if (bucket > maxBucket) maxBucket = bucket;
+    // 4) Agregação por Incrementos Acumulados
+    // Em cada intervalo de 15 min de vida:
+    // - Calcula quanto cada post da amostra cresceu naquele intervalo (Δpost).
+    // - Tira a média desses crescimentos (Δmédio).
+    // - Soma esse ganho médio ao valor acumulado no minuto anterior.
+    // Resultado: A linha reflete realisticamente a velocidade média esperada e matematicamente nunca cai.
+    const benchmark: Array<{
+      minutesBucket: number;
+      avgViews: number;
+      avgLikes: number;
+      avgComentarios: number;
+      sampleCount: number;
+    }> = [];
+
+    const totalPostsInSample = fullPerPostBuckets.size;
+    let accViews = 0;
+    let accLikes = 0;
+    let accComentarios = 0;
+
+    // Bucket 0 (T = 0) é ancorado em 0
+    benchmark.push({
+      minutesBucket: 0,
+      avgViews: 0,
+      avgLikes: 0,
+      avgComentarios: 0,
+      sampleCount: totalPostsInSample,
+    });
+
+    for (let bucket = BUCKET_MINUTES; bucket <= globalMaxBucket; bucket += BUCKET_MINUTES) {
+      const prevBucket = bucket - BUCKET_MINUTES;
+      let sumDeltaViews = 0;
+      let sumDeltaLikes = 0;
+      let sumDeltaComentarios = 0;
+
+      for (const fullMap of fullPerPostBuckets.values()) {
+        const curr = fullMap.get(bucket) || { views: 0, likes: 0, comentarios: 0 };
+        const prev = fullMap.get(prevBucket) || { views: 0, likes: 0, comentarios: 0 };
+
+        // Crescimento naquele intervalo de 15 min (garantido >= 0)
+        sumDeltaViews += Math.max(0, curr.views - prev.views);
+        sumDeltaLikes += Math.max(0, curr.likes - prev.likes);
+        sumDeltaComentarios += Math.max(0, curr.comentarios - prev.comentarios);
       }
-    }
 
-    // 3) Esperado = MÉDIA SIMPLES dos posts anteriores em cada bucket. No post 2,
-    //    é a média de 1 amostra (só o post 1); no post 3, a média de 2 (post 1 e
-    //    2); no post N, a média das N-1 anteriores — cada uma no valor que ela
-    //    tinha naquele mesmo instante relativo (minutos desde a publicação dela).
-    //    Um post só entra na média de um bucket se tiver valor ali; não força
-    //    zero nem inventa dado.
-    const benchmark: Array<{ minutesBucket: number; avgViews: number; avgLikes: number; avgComentarios: number; sampleCount: number }> = [];
+      // Ganho médio da amostra no intervalo
+      const avgDeltaViews = sumDeltaViews / totalPostsInSample;
+      const avgDeltaLikes = sumDeltaLikes / totalPostsInSample;
+      const avgDeltaComentarios = sumDeltaComentarios / totalPostsInSample;
 
-    for (let bucket = 0; bucket <= maxBucket; bucket += BUCKET_MINUTES) {
-      let sumViews = 0;
-      let sumLikes = 0;
-      let sumComentarios = 0;
-      let n = 0;
-
-      for (const bucketMap of perPostBuckets.values()) {
-        const v = bucketMap.get(bucket);
-        if (!v) continue;
-        sumViews += v.views;
-        sumLikes += v.likes;
-        sumComentarios += v.comentarios;
-        n += 1;
-      }
-
-      if (n === 0) continue;
+      // Soma ao valor acumulado
+      accViews += avgDeltaViews;
+      accLikes += avgDeltaLikes;
+      accComentarios += avgDeltaComentarios;
 
       benchmark.push({
         minutesBucket: bucket,
-        avgViews: Math.floor(sumViews / n),
-        avgLikes: Math.floor(sumLikes / n),
-        avgComentarios: Math.floor(sumComentarios / n),
-        sampleCount: n,
+        avgViews: Math.round(accViews),
+        avgLikes: Math.round(accLikes),
+        avgComentarios: Math.round(accComentarios),
+        sampleCount: totalPostsInSample,
       });
     }
 

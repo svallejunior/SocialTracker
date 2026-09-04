@@ -64,7 +64,8 @@ function interpolateBenchmark(
   }
 
   if (!lower && upper) return upper[key];
-  if (lower && !upper) return null; // além do último bucket — não extrapola
+  // Se passar do último bucket calculado da amostra, mantém o último valor estável (carry-forward)
+  if (lower && !upper) return lower[key];
   if (!lower || !upper) return null;
   if (lower.minutesBucket === upper.minutesBucket) return lower[key];
 
