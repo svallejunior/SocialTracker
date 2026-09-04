@@ -245,7 +245,7 @@ export default function ModalEvolucaoPost({
     return points;
   }, [snapshots, post, benchmark]);
 
-  // Variação calculada entre o primeiro e o último snapshot
+  // Variação calculada entre o primeiro e o último snapshot (acumulado do monitoramento)
   const variacoes = useMemo(() => {
     if (snapshots.length < 2) return null;
     const first = snapshots[0];
@@ -254,6 +254,33 @@ export default function ModalEvolucaoPost({
       diffLikes: last.likes - first.likes,
       diffViews: last.views - first.views,
       diffComentarios: last.comentarios - first.comentarios
+    };
+  }, [snapshots]);
+
+  // Variação pontual entre a penúltima amostra e a última amostra coletada
+  const ultimasVariacoes = useMemo(() => {
+    if (snapshots.length < 2) return null;
+    const penultimo = snapshots[snapshots.length - 2];
+    const ultimo = snapshots[snapshots.length - 1];
+    const diffLikes = ultimo.likes - penultimo.likes;
+    const diffViews = ultimo.views - penultimo.views;
+    const diffComentarios = ultimo.comentarios - penultimo.comentarios;
+
+    // Crescimento percentual de views entre a penúltima e última amostra
+    let pctCurvaViews: number | null = null;
+    if (penultimo.views > 0) {
+      pctCurvaViews = ((ultimo.views - penultimo.views) / penultimo.views) * 100;
+    } else if (ultimo.views > 0) {
+      pctCurvaViews = 100.0;
+    } else {
+      pctCurvaViews = 0.0;
+    }
+
+    return {
+      diffLikes,
+      diffViews,
+      diffComentarios,
+      pctCurvaViews
     };
   }, [snapshots]);
 
@@ -445,7 +472,7 @@ export default function ModalEvolucaoPost({
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
               gap: '12px'
             }}
           >
@@ -465,8 +492,17 @@ export default function ModalEvolucaoPost({
                 </span>
                 <span style={{ fontSize: '16px' }}>❤️</span>
               </div>
-              <div style={{ fontSize: '22px', fontWeight: '800', color: 'white', marginTop: '6px' }}>
-                {formatNumber(displayLikes)}
+              <div style={{ fontSize: '20px', fontWeight: '800', color: 'white', marginTop: '6px', display: 'flex', alignItems: 'baseline', gap: '6px', flexWrap: 'wrap' }}>
+                <span>{formatNumber(displayLikes)}</span>
+                {ultimasVariacoes !== null && (
+                  <span style={{
+                    fontSize: '14px',
+                    fontWeight: '700',
+                    color: ultimasVariacoes.diffLikes > 0 ? 'var(--color-green)' : ultimasVariacoes.diffLikes < 0 ? '#FF007A' : '#8B949E'
+                  }}>
+                    ({ultimasVariacoes.diffLikes > 0 ? `+${formatNumber(ultimasVariacoes.diffLikes)}` : formatNumber(ultimasVariacoes.diffLikes)})
+                  </span>
+                )}
               </div>
               {variacoes && variacoes.diffLikes > 0 && (
                 <div style={{ fontSize: '11px', color: 'var(--color-green)', fontWeight: '600', marginTop: '4px' }}>
@@ -490,8 +526,17 @@ export default function ModalEvolucaoPost({
                 </span>
                 <span style={{ fontSize: '16px' }}>💬</span>
               </div>
-              <div style={{ fontSize: '22px', fontWeight: '800', color: 'white', marginTop: '6px' }}>
-                {formatNumber(displayComentarios)}
+              <div style={{ fontSize: '20px', fontWeight: '800', color: 'white', marginTop: '6px', display: 'flex', alignItems: 'baseline', gap: '6px', flexWrap: 'wrap' }}>
+                <span>{formatNumber(displayComentarios)}</span>
+                {ultimasVariacoes !== null && (
+                  <span style={{
+                    fontSize: '14px',
+                    fontWeight: '700',
+                    color: ultimasVariacoes.diffComentarios > 0 ? 'var(--color-green)' : ultimasVariacoes.diffComentarios < 0 ? '#FF007A' : '#8B949E'
+                  }}>
+                    ({ultimasVariacoes.diffComentarios > 0 ? `+${formatNumber(ultimasVariacoes.diffComentarios)}` : formatNumber(ultimasVariacoes.diffComentarios)})
+                  </span>
+                )}
               </div>
               {variacoes && variacoes.diffComentarios > 0 && (
                 <div style={{ fontSize: '11px', color: 'var(--color-green)', fontWeight: '600', marginTop: '4px' }}>
@@ -515,8 +560,17 @@ export default function ModalEvolucaoPost({
                 </span>
                 <span style={{ fontSize: '16px' }}>👁️</span>
               </div>
-              <div style={{ fontSize: '22px', fontWeight: '800', color: 'white', marginTop: '6px' }}>
-                {temViews ? formatNumber(displayViews) : '—'}
+              <div style={{ fontSize: '20px', fontWeight: '800', color: 'white', marginTop: '6px', display: 'flex', alignItems: 'baseline', gap: '6px', flexWrap: 'wrap' }}>
+                <span>{temViews ? formatNumber(displayViews) : '—'}</span>
+                {temViews && ultimasVariacoes !== null && (
+                  <span style={{
+                    fontSize: '14px',
+                    fontWeight: '700',
+                    color: ultimasVariacoes.diffViews > 0 ? 'var(--color-cyan)' : ultimasVariacoes.diffViews < 0 ? '#FF007A' : '#8B949E'
+                  }}>
+                    ({ultimasVariacoes.diffViews > 0 ? `+${formatNumber(ultimasVariacoes.diffViews)}` : formatNumber(ultimasVariacoes.diffViews)})
+                  </span>
+                )}
               </div>
               {variacoes && variacoes.diffViews > 0 && (
                 <div style={{ fontSize: '11px', color: 'var(--color-cyan)', fontWeight: '600', marginTop: '4px' }}>
@@ -525,7 +579,34 @@ export default function ModalEvolucaoPost({
               )}
             </div>
 
-            {/* Card Engajamento */}
+            {/* Card Curva (% crescimento de views da última amostra em relação à penúltima) */}
+            <div
+              style={{
+                background: '#161B22',
+                border: '1px solid #30363D',
+                borderRadius: '12px',
+                padding: '14px 16px'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', color: '#8B949E' }}>
+                  Curva
+                </span>
+                <TrendingUp size={16} style={{ color: 'var(--color-purple)' }} />
+              </div>
+              <div style={{ fontSize: '20px', fontWeight: '800', color: 'white', marginTop: '6px' }}>
+                {ultimasVariacoes?.pctCurvaViews !== null && ultimasVariacoes?.pctCurvaViews !== undefined
+                  ? `${(ultimasVariacoes.pctCurvaViews > 0 ? '+' : '')}${ultimasVariacoes.pctCurvaViews.toFixed(4).replace('.', ',')}%`
+                  : '—'}
+              </div>
+              <div style={{ fontSize: '11px', color: '#8B949E', marginTop: '4px' }}>
+                {ultimasVariacoes?.pctCurvaViews !== null && ultimasVariacoes?.pctCurvaViews !== undefined
+                  ? 'Crescimento na última leitura'
+                  : 'Aguardando próxima amostra'}
+              </div>
+            </div>
+
+            {/* Card Taxa Engajamento */}
             <div
               style={{
                 background: '#161B22',
@@ -538,9 +619,9 @@ export default function ModalEvolucaoPost({
                 <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', color: '#8B949E' }}>
                   Taxa Engajamento
                 </span>
-                <TrendingUp size={16} style={{ color: 'var(--color-cyan)' }} />
+                <Activity size={16} style={{ color: 'var(--color-cyan)' }} />
               </div>
-              <div style={{ fontSize: '22px', fontWeight: '800', color: 'white', marginTop: '6px' }}>
+              <div style={{ fontSize: '20px', fontWeight: '800', color: 'white', marginTop: '6px' }}>
                 {temViews && post?.taxa_engajamento != null
                   ? `${Number(post.taxa_engajamento).toFixed(2)}%`
                   : '—'}
