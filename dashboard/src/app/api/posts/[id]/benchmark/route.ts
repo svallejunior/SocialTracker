@@ -4,7 +4,12 @@ import { getDb } from '@/lib/db';
 export const dynamic = 'force-dynamic';
 
 const BUCKET_MINUTES = 15;
-const MAX_DAYS = 30;
+// Não é mais um recorte de "só compara com os últimos N dias" — é só uma trava
+// de segurança contra timestamp corrompido/absurdo indo pro banco. Alguns posts
+// só têm a primeira coleta 30-48 dias após a publicação (rastreamento começou
+// tarde pra eles); um corte de 30 dias os excluía inteiramente da amostra do
+// Esperado, mesmo tendo dado real. Toda a base agora entra.
+const MAX_DAYS = 730;
 
 export async function GET(
   request: NextRequest,
