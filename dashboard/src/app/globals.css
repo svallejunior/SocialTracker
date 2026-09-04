@@ -1810,7 +1810,7 @@ body::after {
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  padding: 20px;
+  padding: 24px;
 }
 
 .viral-modal-content {
@@ -1818,11 +1818,14 @@ body::after {
   border: 1px solid #30363D;
   border-radius: 16px;
   width: 100%;
-  max-width: 640px;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 30px rgba(113, 0, 226, 0.2);
+  max-width: 820px;
+  max-height: 92vh;
+  height: min(92vh, 880px);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 30px rgba(113, 0, 226, 0.25);
   animation: viralModalIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
 }
 
 @keyframes viralModalIn {

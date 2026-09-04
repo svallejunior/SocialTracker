@@ -1170,7 +1170,7 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
             </div>
 
             {/* Contexto da Coleta */}
-            <div style={{ padding: '14px 22px', background: '#161B22', borderBottom: '1px solid #21262D', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 12 }}>
+            <div style={{ padding: '14px 22px', background: '#161B22', borderBottom: '1px solid #21262D', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 12, flexShrink: 0 }}>
               <div>
                 <span style={{ fontSize: 10, color: '#8B949E', textTransform: 'uppercase', fontWeight: 700 }}>Data da Coleta</span>
                 <div style={{ fontSize: 13, fontWeight: 700, color: 'white', marginTop: 2 }}>{formatDateTimeBR(viralModalItem.data_coleta)}</div>
@@ -1192,8 +1192,8 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
               </div>
             </div>
 
-            {/* Corpo do Modal */}
-            <div style={{ padding: '20px 22px' }}>
+            {/* Corpo do Modal (com rolagem fluida e ocupando o espaço livre) */}
+            <div style={{ padding: '20px 24px', flex: 1, overflowY: 'auto' }}>
               {(() => {
                 const activePost = viralData.top_post || viralData.sugestao_viral;
                 const isSuggestion = !viralData.top_post && !!viralData.sugestao_viral;
@@ -1264,7 +1264,7 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                             padding: 10,
                             fontSize: 12,
                             color: '#C9D1D9',
-                            maxHeight: 70,
+                            maxHeight: 100,
                             overflowY: 'auto',
                             marginBottom: 14,
                             lineHeight: 1.4
@@ -1378,7 +1378,7 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                   <span style={{ fontSize: 11, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>
                     Outras publicações recentes encontradas ({viralData.outros_posts_recentes.length})
                   </span>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 150, overflowY: 'auto' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto' }}>
                     {viralData.outros_posts_recentes.map((op: any, opi: number) => {
                       const isViral = (op.views >= 5000 || op.likes >= 200 || (op.score_tracao && op.score_tracao >= 1500));
                       return (
@@ -1388,9 +1388,9 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                           alignItems: 'center',
                           background: isViral ? 'rgba(255, 184, 0, 0.08)' : '#161B22',
                           border: isViral ? '1px solid rgba(255, 184, 0, 0.3)' : '1px solid transparent',
-                          padding: '8px 12px',
+                          padding: '10px 14px',
                           borderRadius: 8,
-                          fontSize: 11
+                          fontSize: 12
                         }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             {isViral && (
@@ -1420,7 +1420,7 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
             </div>
 
             {/* Rodapé do Modal: Link manual + Ações de Triagem */}
-            <div style={{ borderTop: '1px solid #30363D', background: '#0D1117' }}>
+            <div style={{ borderTop: '1px solid #30363D', background: '#0D1117', flexShrink: 0 }}>
 
               {/* Campo de Link Manual (sempre visível no rodapé) */}
               <div style={{ padding: '14px 22px', borderBottom: '1px solid #21262D' }}>
