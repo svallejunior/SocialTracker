@@ -345,6 +345,44 @@ def extrair_posts_perfil(account_id, token, limite=50):
     return posts[:limite]
 
 
+# --- CONSTANTES DE DETECÇÃO DE ANOMALIAS ---
+# Mesmos limiares de ingestion.py:66-67 (pipeline Apify) — duplicados aqui
+# porque a coleta via Meta Graph API roda num pipeline separado que grava
+# direto em perfis_historico. Perfis próprios não podem pular a curadoria
+# de anomalias só por usarem esse pipeline.
+LIMIAR_DELTA_S_MINIMO = 10
+LIMIAR_PERCENTUAL_MINIMO = 2.0
+
+
+def classificar_variacao_seguidores(c, registro_id, username, seguidores_atual):
+    """Classifica o registro recém-inserido como ORGANICO (validado) ou ADS
+    (pendente de curadoria), comparando com a leitura válida anterior — mesma
+    regra de ingestion.py:avaliar_anomalia(). O INSERT em salvar_dados_no_banco
+    já grava como ORGANICO/validado por padrão; aqui só sobrescreve para ADS
+    quando a variação estourar os limiares."""
+    c.execute("""
+        SELECT seguidores FROM perfis_historico
+        WHERE LOWER(username) = LOWER(?) AND id < ? AND inativo = 0
+        ORDER BY data_coleta DESC, id DESC
+        LIMIT 1
+    """, (username, registro_id))
+    anterior = c.fetchone()
+
+    if not anterior:
+        # Primeira coleta do perfil — mantém ORGANICO/validado automaticamente
+        return
+
+    seg_anterior = anterior[0] or 0
+    delta_s = seguidores_atual - seg_anterior
+    pct_delta_s = (delta_s / seg_anterior * 100) if seg_anterior > 0 else 0
+
+    if pct_delta_s > LIMIAR_PERCENTUAL_MINIMO and delta_s > LIMIAR_DELTA_S_MINIMO:
+        c.execute("""
+            UPDATE perfis_historico SET tipo_janela = 'ADS', revisado_manualmente = 0 WHERE id = ?
+        """, (registro_id,))
+        print(f"  🔴 @{username}: variação > 2% e > 10 seg (ΔS={delta_s:+d}, %ΔS={pct_delta_s:.1f}%) → enviado para curadoria.")
+
+
 def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str):
     """Persiste dados de perfil, posts e snapshots no SQLite com data_carga."""
     conn = get_db_connection()
@@ -369,6 +407,7 @@ def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str):
                 username, data_coleta, seguidores, seguindo, total_posts, inativo, tipo_janela, revisado_manualmente, data_carga
             ) VALUES (?, ?, ?, ?, ?, 0, 'ORGANICO', 1, ?)
         """, (username, data_carga_str, seguidores, seguindo, total_posts, data_carga_str))
+        classificar_variacao_seguidores(c, c.lastrowid, username, seguidores)
 
         # Atualiza também seguidores_historico para gráficos legados
         c.execute("""
