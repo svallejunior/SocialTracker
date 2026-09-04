@@ -215,15 +215,48 @@ export default function ModalEvolucaoPost({
     } else {
       points = snapshots.map((s, idx) => {
         const min = minsFrom(s.data_carga) ?? (idx + 1) * 15;
+        const prev = idx > 0 ? snapshots[idx - 1] : null;
+
+        const currentLikes = Number(s.likes) || 0;
+        const currentComentarios = Number(s.comentarios) || 0;
+        const currentViews = Number(s.views) || 0;
+
+        let diffLikes: number | null = null;
+        let diffComentarios: number | null = null;
+        let diffViews: number | null = null;
+        let pctCurvaViews: number | null = null;
+
+        if (prev) {
+          const prevLikes = Number(prev.likes) || 0;
+          const prevComentarios = Number(prev.comentarios) || 0;
+          const prevViews = Number(prev.views) || 0;
+
+          diffLikes = currentLikes - prevLikes;
+          diffComentarios = currentComentarios - prevComentarios;
+          diffViews = currentViews - prevViews;
+
+          if (prevViews > 0) {
+            pctCurvaViews = ((currentViews - prevViews) / prevViews) * 100;
+          } else if (currentViews > 0) {
+            pctCurvaViews = 100.0;
+          } else {
+            pctCurvaViews = 0.0;
+          }
+        }
+
         return withExpected({
           index: idx + 1,
           dataHora: formatTimeLabel(s.data_carga),
           timestamp: s.data_carga,
-          likes: Number(s.likes) || 0,
-          comentarios: Number(s.comentarios) || 0,
-          views: Number(s.views) || 0,
+          likes: currentLikes,
+          comentarios: currentComentarios,
+          views: currentViews,
           reach: Number(s.reach) || 0,
-          interacoes: Number(s.total_interactions) || (Number(s.likes) + Number(s.comentarios)),
+          interacoes: Number(s.total_interactions) || (currentLikes + currentComentarios),
+          diffLikes,
+          diffComentarios,
+          diffViews,
+          pctCurvaViews
         }, min);
       });
     }
@@ -238,6 +271,10 @@ export default function ModalEvolucaoPost({
         comentarios: 0,
         views: 0,
         reach: 0,
+        diffLikes: null,
+        diffComentarios: null,
+        diffViews: null,
+        pctCurvaViews: null
       }, 0);
       return [zeroPoint, ...points];
     }
@@ -835,27 +872,133 @@ export default function ModalEvolucaoPost({
                       tickFormatter={(v) => formatNumber(v)}
                     />
                     <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#161B22',
-                        border: '1px solid #30363D',
-                        borderRadius: '8px',
-                        color: 'white',
-                        fontSize: '12px'
-                      }}
-                      formatter={(val: any, name: any) => {
-                        if (val === null || val === undefined) return ['', ''];
-                        const label =
-                          name === 'likes' ? '❤️ Curtidas'
-                          : name === 'views' ? '👁️ Views'
-                          : name === 'comentarios' ? '💬 Comentários'
-                          : name === 'Esperado' ? '– – Esperado (média histórica)'
-                          : name;
-                        return [formatNumber(val), label];
-                      }}
-                      labelFormatter={(label, payload) => {
-                        const item = payload && payload[0]?.payload;
-                        const timeStr = item?.timestamp ? formatDateTimeFull(item.timestamp) : label;
-                        return item?.isZero ? `${timeStr} — Publicação` : timeStr;
+                      content={({ active, payload, label }) => {
+                        if (!active || !payload || !payload.length) return null;
+                        const dataPoint = payload[0]?.payload;
+                        const timeStr = dataPoint?.timestamp ? formatDateTimeFull(dataPoint.timestamp) : label;
+
+                        // Se for ponto zero (início)
+                        if (dataPoint?.isZero) {
+                          return (
+                            <div style={{
+                              backgroundColor: '#0D1117',
+                              border: '1px solid #30363D',
+                              borderRadius: '10px',
+                              padding: '10px 14px',
+                              boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+                              fontSize: '12px',
+                              color: 'white'
+                            }}>
+                              <div style={{ fontWeight: '700', marginBottom: 4 }}>
+                                {timeStr} — Publicação
+                              </div>
+                              <div style={{ color: '#8B949E', fontSize: '11px' }}>
+                                Ponto de partida (0 interações)
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        const diffComentarios = dataPoint?.diffComentarios;
+                        const diffLikes = dataPoint?.diffLikes;
+                        const diffViews = dataPoint?.diffViews;
+                        const pctCurvaViews = dataPoint?.pctCurvaViews;
+                        const expectedVal = dataPoint?.expectedViews ?? dataPoint?.expectedLikes ?? dataPoint?.expectedComentarios;
+
+                        const formatDelta = (val: number | null | undefined, plusColor = '#00FFC8') => {
+                          if (val === null || val === undefined) return null;
+                          const sign = val > 0 ? '+' : '';
+                          const color = val > 0 ? plusColor : val < 0 ? '#FF007A' : '#8B949E';
+                          return (
+                            <span style={{ color, fontWeight: '700', marginLeft: '6px' }}>
+                              ({sign}{formatNumber(val)})
+                            </span>
+                          );
+                        };
+
+                        return (
+                          <div style={{
+                            backgroundColor: '#0D1117',
+                            border: '1px solid #30363D',
+                            borderRadius: '10px',
+                            padding: '12px 14px',
+                            boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+                            fontSize: '12px',
+                            minWidth: '220px',
+                            color: 'white',
+                            lineHeight: '1.6'
+                          }}>
+                            <div style={{ fontWeight: '800', marginBottom: '8px', color: 'white', borderBottom: '1px solid #21262D', paddingBottom: '6px' }}>
+                              {timeStr}
+                            </div>
+
+                            {expectedVal !== undefined && expectedVal !== null && (
+                              <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '11px', marginBottom: '4px' }}>
+                                – – Esperado (média histórica) : <strong style={{ color: 'white' }}>{formatNumber(expectedVal)}</strong>
+                              </div>
+                            )}
+
+                            {(metricFoco === 'todas' || metricFoco === 'comentarios') && (
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                                <span style={{ color: '#00FFC8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  💬 Comentários :
+                                </span>
+                                <div>
+                                  <strong style={{ color: 'white' }}>{formatNumber(dataPoint?.comentarios ?? 0)}</strong>
+                                  {formatDelta(diffComentarios, '#00FFC8')}
+                                </div>
+                              </div>
+                            )}
+
+                            {(metricFoco === 'todas' || metricFoco === 'likes') && (
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                                <span style={{ color: '#FF007A', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  ❤️ Curtidas :
+                                </span>
+                                <div>
+                                  <strong style={{ color: 'white' }}>{formatNumber(dataPoint?.likes ?? 0)}</strong>
+                                  {formatDelta(diffLikes, '#FF007A')}
+                                </div>
+                              </div>
+                            )}
+
+                            {(metricFoco === 'todas' || metricFoco === 'views') && (
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                                <span style={{ color: '#00F0FF', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  👁️ Views :
+                                </span>
+                                <div>
+                                  <strong style={{ color: 'white' }}>{formatNumber(dataPoint?.views ?? 0)}</strong>
+                                  {formatDelta(diffViews, '#00F0FF')}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Informação Dinâmica de Curva (% de views em relação à amostra anterior) */}
+                            {pctCurvaViews !== null && pctCurvaViews !== undefined && (
+                              <div style={{
+                                marginTop: '8px',
+                                paddingTop: '6px',
+                                borderTop: '1px dashed #21262D',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                fontSize: '11px'
+                              }}>
+                                <span style={{ color: '#C084FC', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  📈 Curva :
+                                </span>
+                                <span style={{
+                                  fontWeight: '800',
+                                  fontFamily: 'monospace',
+                                  color: pctCurvaViews > 0 ? '#39FF14' : pctCurvaViews < 0 ? '#FF007A' : '#8B949E'
+                                }}>
+                                  {pctCurvaViews > 0 ? '+' : ''}{pctCurvaViews.toFixed(4).replace('.', ',')}%
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        );
                       }}
                     />
                     <Legend
