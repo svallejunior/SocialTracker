@@ -132,6 +132,16 @@ function criadoEmIsoLocal(ag: Agendamento): string | null {
   return dataIsoLocal(dt);
 }
 
+/** Mesma conversão UTC->local de `criadoEmIsoLocal`, mas para um valor solto (ex: ultima_execucao). */
+function dataUtcParaIsoLocal(valor?: string | null): string | null {
+  if (!valor) return null;
+  const txt = String(valor).trim().replace(' ', 'T').split('.')[0];
+  const comFuso = /(Z|[+-]\d{2}:?\d{2})$/.test(txt) ? txt : `${txt}Z`;
+  const dt = new Date(comFuso);
+  if (isNaN(dt.getTime())) return null;
+  return dataIsoLocal(dt);
+}
+
 /**
  * A partir de que dia a rotina pode gerar ocorrências: nunca antes da criação e
  * nunca antes de `data_inicio`. É o que impede o calendário de pintar SEG/QUA/SEX
@@ -2322,7 +2332,15 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                               >
                                 <Check size={13} strokeWidth={2.8} />
                               </span>
-                            ) : ag.status === 'ERRO' ? (
+                            ) : (ag.status === 'ERRO' || (
+                                // Rotina recorrente nunca fica com status ERRO (senão as próximas
+                                // ocorrências parariam de disparar) — então a falha de HOJE só dá
+                                // pra saber comparando ultima_execucao/publicado_em com o dia visto.
+                                !(ag.tipo_agendamento === 'DATA_ESPECIFICA' || ag.recorrencia === 'UNICA') &&
+                                !!ag.erro_detalhe &&
+                                dataUtcParaIsoLocal(ag.ultima_execucao) === isoDataSelecionada &&
+                                dataUtcParaIsoLocal(ag.publicado_em) !== isoDataSelecionada
+                              )) ? (
                               <span
                                 onClick={(e) => {
                                   e.stopPropagation();

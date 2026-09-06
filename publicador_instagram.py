@@ -60,8 +60,10 @@ DIA_MAP = {0: "SEG", 1: "TER", 2: "QUA", 3: "QUI", 4: "SEX", 5: "SAB", 6: "DOM"}
 
 # Uma linha "PUBLICANDO" mais velha que isso é considerada de um processo morto
 CLAIM_TIMEOUT_MIN = 15
-# Máximo de tentativas com erro por dia, por agendamento (evita loop de retry)
-MAX_TENTATIVAS_DIA = 3
+# Máximo de tentativas com erro por dia, por agendamento (evita loop de retry).
+# Em 1: qualquer erro já esgota as tentativas do dia — não fica insistindo sozinho.
+# Data específica vira ERRO (X) na hora; recorrente só volta a tentar no próximo dia.
+MAX_TENTATIVAS_DIA = 1
 
 # Lock de instância única do daemon
 LOCK_PATH = os.path.join(BASE_DIR, "automacao", ".daemon.lock")
