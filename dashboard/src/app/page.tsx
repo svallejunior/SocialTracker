@@ -4747,14 +4747,33 @@ export default function Dashboard() {
                 </thead>
                 <tbody>
                   {paginatedPosts.map(post => {
-                    // Determinar classe de performance
+                    // Determinar classe de performance e cor da linha
                     const rawMult = post.performanceMultiplier;
                     const pMult = typeof rawMult === 'number' && !isNaN(rawMult) ? rawMult : 1.0;
-                    const performanceClass = pMult >= 1.8
-                      ? 'high'
-                      : pMult >= 1.0
-                        ? 'medium'
-                        : 'low';
+                    
+                    // Regra solicitada:
+                    // Desempenho > 10: Linha vermelha
+                    // Desempenho de 5 a 10: Linha laranja
+                    // Desempenho de 2 a 5: Linha amarela
+                    let rowPerfClass = '';
+                    let badgePerfClass = '';
+
+                    if (pMult > 10) {
+                      rowPerfClass = 'tr-perf-red';
+                      badgePerfClass = 'perf-red';
+                    } else if (pMult >= 5) {
+                      rowPerfClass = 'tr-perf-orange';
+                      badgePerfClass = 'perf-orange';
+                    } else if (pMult >= 2) {
+                      rowPerfClass = 'tr-perf-yellow';
+                      badgePerfClass = 'perf-yellow';
+                    } else if (pMult >= 1.8) {
+                      badgePerfClass = 'high';
+                    } else if (pMult >= 1.0) {
+                      badgePerfClass = 'medium';
+                    } else {
+                      badgePerfClass = 'low';
+                    }
 
                     const rawViews = Number(post.views) || 0;
                     const hasViewsData = post.formato === 'Reels'
@@ -4766,7 +4785,7 @@ export default function Dashboard() {
                       : (rawViews > 0 ? rawViews : (Number(post.reach) || 0));
 
                     return (
-                      <tr key={post.post_id}>
+                      <tr key={post.post_id} className={rowPerfClass}>
                         <td style={{ fontWeight: '700' }}>@{post.username}</td>
                         <td style={{ whiteSpace: 'nowrap', fontSize: '13px' }}>
                           {formatDateTime(post.data_postagem)}
@@ -4796,7 +4815,7 @@ export default function Dashboard() {
                           )}
                         </td>
                         <td>
-                          <span className={`performance-badge ${performanceClass}`}>
+                          <span className={`performance-badge ${badgePerfClass}`}>
                             {pMult >= 1.8 ? '🔥 ' : ''}
                             {pMult.toFixed(1).replace('.', ',')}x
                           </span>

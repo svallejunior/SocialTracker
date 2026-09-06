@@ -696,6 +696,58 @@ body::after {
   color: var(--text-secondary);
 }
 
+/* 🎯 FEED GERAL - DESTAQUES DE LINHA POR DESEMPENHO */
+/* Desempenho > 10: Linha Vermelha */
+.social-table tbody tr.tr-perf-red {
+  background-color: rgba(239, 68, 68, 0.08) !important;
+  border-left: 4px solid #EF4444 !important;
+  transition: all 0.2s ease;
+}
+.social-table tbody tr.tr-perf-red:hover {
+  background-color: rgba(239, 68, 68, 0.14) !important;
+}
+.social-table tbody tr.tr-perf-red td {
+  border-bottom: 1px solid rgba(239, 68, 68, 0.25) !important;
+}
+.performance-badge.perf-red {
+  color: #EF4444;
+  text-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+}
+
+/* Desempenho entre 5 e 10: Linha Laranja */
+.social-table tbody tr.tr-perf-orange {
+  background-color: rgba(249, 115, 22, 0.08) !important;
+  border-left: 4px solid #F97316 !important;
+  transition: all 0.2s ease;
+}
+.social-table tbody tr.tr-perf-orange:hover {
+  background-color: rgba(249, 115, 22, 0.14) !important;
+}
+.social-table tbody tr.tr-perf-orange td {
+  border-bottom: 1px solid rgba(249, 115, 22, 0.25) !important;
+}
+.performance-badge.perf-orange {
+  color: #F97316;
+  text-shadow: 0 0 10px rgba(249, 115, 22, 0.4);
+}
+
+/* Desempenho entre 2 e 5: Linha Amarela */
+.social-table tbody tr.tr-perf-yellow {
+  background-color: rgba(234, 179, 8, 0.07) !important;
+  border-left: 4px solid #EAB308 !important;
+  transition: all 0.2s ease;
+}
+.social-table tbody tr.tr-perf-yellow:hover {
+  background-color: rgba(234, 179, 8, 0.13) !important;
+}
+.social-table tbody tr.tr-perf-yellow td {
+  border-bottom: 1px solid rgba(234, 179, 8, 0.22) !important;
+}
+.performance-badge.perf-yellow {
+  color: #EAB308;
+  text-shadow: 0 0 10px rgba(234, 179, 8, 0.35);
+}
+
 /* Loading/Error State */
 .loading-box {
   display: flex;
