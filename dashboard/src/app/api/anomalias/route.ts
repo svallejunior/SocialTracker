@@ -265,8 +265,8 @@ export async function POST() {
         const precisaAnalise = pctDeltaS > 2.0 && deltaS > 10;
 
         if (precisaAnalise) {
-          // Se ainda não foi revisado manualmente pelo usuário, marca para análise
-          if (Number(r.revisado_manualmente || 0) === 0) {
+          // Se ainda não foi revisado manualmente pelo usuário nem classificado como VIRAL/ADS manual
+          if (Number(r.revisado_manualmente || 0) === 0 && r.tipo_janela !== 'VIRAL_ORGANICO') {
             await db.run(
               `UPDATE perfis_historico SET tipo_janela = 'ADS', revisado_manualmente = 0 WHERE id = ?`,
               [r.id]
@@ -274,20 +274,24 @@ export async function POST() {
             marcadosAnalise++;
           }
         } else {
-          // Dentro do parâmetro normal: marca automaticamente como ORGANICO e validado
+          // Dentro do parâmetro normal: se não foi manualmente marcado como ADS/VIRAL, valida como ORGANICO
+          if (Number(r.revisado_manualmente || 0) === 0) {
+            await db.run(
+              `UPDATE perfis_historico SET tipo_janela = 'ORGANICO', revisado_manualmente = 1 WHERE id = ?`,
+              [r.id]
+            );
+            autoValidados++;
+          }
+        }
+      } else {
+        // Primeira coleta do perfil: automaticamente validado como ORGANICO se ainda não revisado
+        if (Number(r.revisado_manualmente || 0) === 0) {
           await db.run(
             `UPDATE perfis_historico SET tipo_janela = 'ORGANICO', revisado_manualmente = 1 WHERE id = ?`,
             [r.id]
           );
           autoValidados++;
         }
-      } else {
-        // Primeira coleta do perfil: automaticamente validado como ORGANICO
-        await db.run(
-          `UPDATE perfis_historico SET tipo_janela = 'ORGANICO', revisado_manualmente = 1 WHERE id = ?`,
-          [r.id]
-        );
-        autoValidados++;
       }
 
       ultimoPorPerfil[r.username] = { seguidores: r.seguidores, total_posts: r.total_posts || 0 };

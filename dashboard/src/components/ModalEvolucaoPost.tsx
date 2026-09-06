@@ -168,6 +168,23 @@ export default function ModalEvolucaoPost({
     return new Intl.NumberFormat('pt-BR').format(val);
   };
 
+  // Snapshots com views "corrigidas": a métrica de views/plays do Instagram
+  // pode reportar temporariamente um valor menor que o da coleta anterior
+  // (recalculo/cache do lado do Meta) e depois se corrigir para cima na
+  // coleta seguinte. Isso não é perda real de views, então tratamos views
+  // como monotônica não-decrescente ao longo do tempo para exibição —
+  // suaviza o "buraco" no gráfico e evita um salto percentual artificial
+  // na correção. Likes/comentários não sofrem desse glitch e ficam como
+  // vieram (podem legitimamente cair, ex.: exclusão de comentário).
+  const monotonicSnapshots = useMemo(() => {
+    let maxViews = 0;
+    return snapshots.map((s) => {
+      const rawViews = Number(s.views) || 0;
+      maxViews = Math.max(maxViews, rawViews);
+      return { ...s, views: maxViews };
+    });
+  }, [snapshots]);
+
   // Dados formatados para o gráfico (com ponto zero na hora de publicação e campos de benchmark)
   const chartData = useMemo(() => {
     // Parse da hora de publicação para calcular minutos relativos
@@ -214,9 +231,9 @@ export default function ModalEvolucaoPost({
         reach: Number(post?.reach) || 0,
       }, min)];
     } else {
-      points = snapshots.map((s, idx) => {
+      points = monotonicSnapshots.map((s, idx) => {
         const min = minsFrom(s.data_carga) ?? (idx + 1) * 15;
-        const prev = idx > 0 ? snapshots[idx - 1] : null;
+        const prev = idx > 0 ? monotonicSnapshots[idx - 1] : null;
 
         const currentLikes = Number(s.likes) || 0;
         const currentComentarios = Number(s.comentarios) || 0;
@@ -281,25 +298,27 @@ export default function ModalEvolucaoPost({
     }
 
     return points;
-  }, [snapshots, post, benchmark]);
+  }, [monotonicSnapshots, post, benchmark]);
 
   // Variação calculada entre o primeiro e o último snapshot (acumulado do monitoramento)
   const variacoes = useMemo(() => {
     if (snapshots.length < 2) return null;
     const first = snapshots[0];
     const last = snapshots[snapshots.length - 1];
+    const lastViews = monotonicSnapshots[monotonicSnapshots.length - 1];
+    const firstViews = monotonicSnapshots[0];
     return {
       diffLikes: last.likes - first.likes,
-      diffViews: last.views - first.views,
+      diffViews: lastViews.views - firstViews.views,
       diffComentarios: last.comentarios - first.comentarios
     };
-  }, [snapshots]);
+  }, [snapshots, monotonicSnapshots]);
 
   // Variação pontual entre a penúltima amostra e a última amostra coletada
   const ultimasVariacoes = useMemo(() => {
     if (snapshots.length < 2) return null;
-    const penultimo = snapshots[snapshots.length - 2];
-    const ultimo = snapshots[snapshots.length - 1];
+    const penultimo = monotonicSnapshots[monotonicSnapshots.length - 2];
+    const ultimo = monotonicSnapshots[monotonicSnapshots.length - 1];
     const diffLikes = ultimo.likes - penultimo.likes;
     const diffViews = ultimo.views - penultimo.views;
     const diffComentarios = ultimo.comentarios - penultimo.comentarios;
@@ -320,7 +339,7 @@ export default function ModalEvolucaoPost({
       diffComentarios,
       pctCurvaViews
     };
-  }, [snapshots]);
+  }, [snapshots, monotonicSnapshots]);
 
   const pMult = typeof post?.performanceMultiplier === 'number' && !isNaN(post.performanceMultiplier)
     ? post.performanceMultiplier
@@ -334,7 +353,7 @@ export default function ModalEvolucaoPost({
   const displayLikes = latestSnapshot ? latestSnapshot.likes : Number(post?.likes) || 0;
   const displayComentarios = latestSnapshot ? latestSnapshot.comentarios : Number(post?.comentarios) || 0;
   const displayViews = latestSnapshot
-    ? latestSnapshot.views
+    ? monotonicSnapshots[monotonicSnapshots.length - 1].views
     : (Number(post?.views) || (post?.formato === 'Reels' ? Number(post?.viewsEfetivas) : 0));
 
   const temViews = displayViews > 0;

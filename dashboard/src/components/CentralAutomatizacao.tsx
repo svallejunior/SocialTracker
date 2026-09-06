@@ -1003,9 +1003,13 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button
             type="button"
-            onClick={fetchAgendamentos}
+            onClick={() => {
+              fetchMetaConfig();
+              fetchAgendamentos();
+              showToast('Agendamentos e publicações atualizados!');
+            }}
             disabled={loadingAgendamentos}
-            title="Atualizar Agendamentos"
+            title="Atualizar agendamentos, publicações e status"
             style={{
               display: 'flex',
               alignItems: 'center',

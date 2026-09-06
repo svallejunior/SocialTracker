@@ -189,8 +189,8 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
   }, []);
 
   // Busca dados iniciais (stats e lista de perfis)
-  const fetchOverview = useCallback(async (preserveSelected?: boolean) => {
-    setLoading(true);
+  const fetchOverview = useCallback(async (preserveSelected?: boolean, silent?: boolean) => {
+    if (!silent) setLoading(true);
     setError(null);
     try {
       const res = await fetch('/api/anomalias');
@@ -216,7 +216,7 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
     } catch (e: any) {
       setError(e.message || 'Erro de conexão ao carregar histórico');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [onCountUpdate]);
 
@@ -281,9 +281,29 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
       });
       const json = await res.json();
       if (json.success) {
+        // Marca como validado e com o novo tipo_janela imediatamente
         setItems(prev => prev.map(item => item.id === id ? { ...item, tipo_janela, revisado_manualmente: 1 } : item));
-        // Recarrega visão geral para sincronizar scores e sumários
-        fetchOverview(true);
+        
+        // Atualiza contadores locais dos perfis de forma otimista
+        setPerfis(prev => prev.map(p => {
+          if (p.username === selectedUsername) {
+            const currentItem = items.find(it => it.id === id);
+            const eraPendente = currentItem ? currentItem.revisado_manualmente === 0 : false;
+            const deltaPendentes = eraPendente ? -1 : 0;
+            return {
+              ...p,
+              pendentes: Math.max(0, p.pendentes + deltaPendentes),
+              ads_count: tipo_janela === 'ADS' ? p.ads_count + (currentItem?.tipo_janela !== 'ADS' ? 1 : 0) : Math.max(0, p.ads_count - (currentItem?.tipo_janela === 'ADS' ? 1 : 0)),
+              organicos_count: (tipo_janela === 'ORGANICO' || tipo_janela === 'VIRAL_ORGANICO') 
+                ? p.organicos_count + (currentItem?.tipo_janela !== 'ORGANICO' && currentItem?.tipo_janela !== 'VIRAL_ORGANICO' ? 1 : 0)
+                : Math.max(0, p.organicos_count - (currentItem?.tipo_janela === 'ORGANICO' || currentItem?.tipo_janela === 'VIRAL_ORGANICO' ? 1 : 0))
+            };
+          }
+          return p;
+        }));
+
+        // Sincroniza estatísticas e sumários com o backend sem piscar tela
+        fetchOverview(true, true);
       }
     } catch (e: any) {
       console.error('Erro ao atualizar registro:', e);
@@ -305,7 +325,16 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
       const json = await res.json();
       if (json.success) {
         setItems(prev => prev.map(item => item.id === id ? { ...item, revisado_manualmente: newRevisado } : item));
-        fetchOverview(true);
+        
+        setPerfis(prev => prev.map(p => {
+          if (p.username === selectedUsername) {
+            const delta = newRevisado === 1 ? -1 : 1;
+            return { ...p, pendentes: Math.max(0, p.pendentes + delta) };
+          }
+          return p;
+        }));
+
+        fetchOverview(true, true);
       }
     } catch (e: any) {
       console.error('Erro ao alternar status de validação:', e);

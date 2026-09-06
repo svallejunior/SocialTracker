@@ -1687,7 +1687,7 @@ export default function Dashboard() {
               setAnomaliasCount(anomJson.stats.pendentes_validacao);
             }
           })
-          .catch(() => {});
+          .catch(() => { });
       } else {
         setError(json.error || "Falha ao ler dados do SQLite");
       }
@@ -3574,234 +3574,234 @@ export default function Dashboard() {
                 return (b.seguidores || 0) - (a.seguidores || 0);
               })
               .map(perfil => {
-              // Pegar o post mais viral deste perfil
-              const topPost = perfil.postMaisViral;
-              const hasViral = topPost && topPost.viralStatus === 'Viralizando';
-              const formattedFollowers = formatNumber(perfil.seguidores);
+                // Pegar o post mais viral deste perfil
+                const topPost = perfil.postMaisViral;
+                const hasViral = topPost && topPost.viralStatus === 'Viralizando';
+                const formattedFollowers = formatNumber(perfil.seguidores);
 
-              // Histórico de seguidores deste perfil
-              const hist = (followersHistory[perfil.username] || [])
-                .sort((a: any, b: any) => new Date(a.data).getTime() - new Date(b.data).getTime())
-                .map((pt: any) => ({
-                  data: pt.data.substring(8, 16),
-                  seguidores: Number(pt.total_seguidores)
-                }));
+                // Histórico de seguidores deste perfil
+                const hist = (followersHistory[perfil.username] || [])
+                  .sort((a: any, b: any) => new Date(a.data).getTime() - new Date(b.data).getTime())
+                  .map((pt: any) => ({
+                    data: pt.data.substring(8, 16),
+                    seguidores: Number(pt.total_seguidores)
+                  }));
 
-              // Histórico de engajamento dos posts recentes para o gráfico mini
-              const postsDoPerfil = posts
-                .filter(p => p.username === perfil.username)
-                .slice(0, 10) // 10 posts recentes
-                .reverse() // Do antigo para o novo
-                .map((p, idx) => ({
-                  idx: idx + 1,
-                  engajamento: p.likes + p.comentarios
-                }));
-              // ── Modal de Lançamento ──────────────────────────────────
-              return (
-                <div key={perfil.username} className="profile-card">
-                  {/* Cabeçalho do Card */}
-                  <div className="card-header-row">
-                    <div className="user-info-group">
-                      <AvatarModelo
-                        src={perfil.foto_url || null}
-                        username={perfil.username}
-                        size={42}
-                        comentariosPendentes={perfil.comentarios_pendentes || 0}
-                        mensagensPendentes={perfil.mensagens_pendentes || 0}
-                        temPendencias={perfil.tem_pendencias || false}
-                      />
-                      <div className="user-handle-box">
-                        <span className="user-handle">@{perfil.username}</span>
+                // Histórico de engajamento dos posts recentes para o gráfico mini
+                const postsDoPerfil = posts
+                  .filter(p => p.username === perfil.username)
+                  .slice(0, 10) // 10 posts recentes
+                  .reverse() // Do antigo para o novo
+                  .map((p, idx) => ({
+                    idx: idx + 1,
+                    engajamento: p.likes + p.comentarios
+                  }));
+                // ── Modal de Lançamento ──────────────────────────────────
+                return (
+                  <div key={perfil.username} className="profile-card">
+                    {/* Cabeçalho do Card */}
+                    <div className="card-header-row">
+                      <div className="user-info-group">
+                        <AvatarModelo
+                          src={perfil.foto_url || null}
+                          username={perfil.username}
+                          size={42}
+                          comentariosPendentes={perfil.comentarios_pendentes || 0}
+                          mensagensPendentes={perfil.mensagens_pendentes || 0}
+                          temPendencias={perfil.tem_pendencias || false}
+                        />
+                        <div className="user-handle-box">
+                          <span className="user-handle">@{perfil.username}</span>
+                        </div>
+                        {Number(perfil.meu_perfil) === 1 && (
+                          <span title="Meu perfil" style={{ fontSize: '16px', marginLeft: '4px', cursor: 'default', userSelect: 'none' }}>
+                            ⭐
+                          </span>
+                        )}
                       </div>
-                      {Number(perfil.meu_perfil) === 1 && (
-                        <span title="Meu perfil" style={{ fontSize: '16px', marginLeft: '4px', cursor: 'default', userSelect: 'none' }}>
-                          ⭐
+                      <div className="badges-group">
+                        {perfil.status === 'INATIVO' && (
+                          <span style={{
+                            background: "#da363320",
+                            color: "#f85149",
+                            border: "1px solid #f85149",
+                            borderRadius: 6,
+                            padding: "2px 8px",
+                            fontSize: 11,
+                            fontWeight: 700
+                          }}>Em espera</span>
+                        )}
+                        {hasViral ? (
+                          <span className="viral-badge">🔥 Viralizando</span>
+                        ) : (
+                          <span className="normal-badge">Normal</span>
+                        )}
+                        <span className="time-badge">{perfil.diaMonitoramento}º dia de base</span>
+                      </div>
+                    </div>
+
+                    {/* Texto de Insight dinâmico */}
+                    <p className="insight-text">
+                      <strong>
+                        {topPost
+                          ? (topPost.viralStatus === 'Viralizando'
+                            ? `Um post está performando ${(topPost.performanceMultiplier || 1.0).toFixed(1).replace('.', ',')}x a média histórica da conta, e o ganho de seguidores acelerou no mesmo período — forte indício de que o post está atraindo novos seguidores.`
+                            : `A melhor publicação performou ${(topPost.performanceMultiplier || 1.0).toFixed(1).replace('.', ',')}x a média da conta, mantendo o nível estável de crescimento de seguidores.`)
+                          : "Aguardando mais coletas para computar desvios de desempenho."
+                        }
+                      </strong>
+                    </p>
+
+                    {/* Grid de 3 Métricas */}
+                    <div className="metrics-row">
+                      <div className="metric-box">
+                        <span className="metric-lbl">👥 Novos Seguidores</span>
+                        <span className="metric-val" style={{ color: perfil.novosSeguidores24h > 0 ? '#10B981' : perfil.novosSeguidores24h < 0 ? '#F85149' : undefined }}>
+                          {perfil.novosSeguidores24h > 0 ? '+' : ''}{perfil.novosSeguidores24h !== 0 ? formatNumber(perfil.novosSeguidores24h) : '0'}
                         </span>
-                      )}
-                    </div>
-                    <div className="badges-group">
-                      {perfil.status === 'INATIVO' && (
-                        <span style={{
-                          background: "#da363320",
-                          color: "#f85149",
-                          border: "1px solid #f85149",
-                          borderRadius: 6,
-                          padding: "2px 8px",
-                          fontSize: 11,
-                          fontWeight: 700
-                        }}>Em espera</span>
-                      )}
-                      {hasViral ? (
-                        <span className="viral-badge">🔥 Viralizando</span>
-                      ) : (
-                        <span className="normal-badge">Normal</span>
-                      )}
-                      <span className="time-badge">{perfil.diaMonitoramento}º dia de base</span>
-                    </div>
-                  </div>
-
-                  {/* Texto de Insight dinâmico */}
-                  <p className="insight-text">
-                    <strong>
-                      {topPost
-                        ? (topPost.viralStatus === 'Viralizando'
-                          ? `Um post está performando ${(topPost.performanceMultiplier || 1.0).toFixed(1).replace('.', ',')}x a média histórica da conta, e o ganho de seguidores acelerou no mesmo período — forte indício de que o post está atraindo novos seguidores.`
-                          : `A melhor publicação performou ${(topPost.performanceMultiplier || 1.0).toFixed(1).replace('.', ',')}x a média da conta, mantendo o nível estável de crescimento de seguidores.`)
-                        : "Aguardando mais coletas para computar desvios de desempenho."
-                      }
-                    </strong>
-                  </p>
-
-                  {/* Grid de 3 Métricas */}
-                  <div className="metrics-row">
-                    <div className="metric-box">
-                      <span className="metric-lbl">👥 Novos Seguidores</span>
-                      <span className="metric-val" style={{ color: perfil.novosSeguidores24h > 0 ? '#10B981' : perfil.novosSeguidores24h < 0 ? '#F85149' : undefined }}>
-                        {perfil.novosSeguidores24h > 0 ? '+' : ''}{perfil.novosSeguidores24h !== 0 ? formatNumber(perfil.novosSeguidores24h) : '0'}
-                      </span>
-                      <span className="metric-sub green">vs. coleta anterior</span>
-                    </div>
-                    <div className="metric-box">
-                      <span className="metric-lbl">🔥 Média Posts Virais</span>
-                      <span className="metric-val">
-                        {perfil.mediaPostsVirais > 0 ? formatNumber(perfil.mediaPostsVirais) : (topPost ? formatNumber(topPost.likes + topPost.comentarios) : '0')}
-                      </span>
-                      <span className="metric-sub">
-                        Média conta: {formatNumber(Math.round(perfil.mediaHistoricaConta || 0))}
-                      </span>
-                    </div>
-                    <div className="metric-box">
-                      <span className="metric-lbl">👁️ Visualizações</span>
-                      <span className="metric-val">
-                        {topPost && topPost.views > 0 ? formatNumber(topPost.views) : '—'}
-                      </span>
-                      <span className="metric-sub">
-                        {topPost && topPost.views > 0 ? 'Reels plays' : 'Post estático'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Thumbnail e Mini-Gráficos */}
-                  <div className="card-content-body">
-                    {/* Thumbnail placeholder elegante */}
-                    <div className="thumbnail-area">
-                      {topPost && topPost.formato === 'Reels' ? (
-                        <>
-                          <VideoIcon />
-                          <span>{topPost.formato}</span>
-                        </>
-                      ) : topPost && topPost.formato === 'Carrossel' ? (
-                        <>
-                          <LayersIcon />
-                          <span>{topPost.formato}</span>
-                        </>
-                      ) : (
-                        <>
-                          <ImageIcon />
-                          <span>Imagem</span>
-                        </>
-                      )}
-                      <span style={{ opacity: 0.5 }}>Post {topPost ? topPost.post_id : 'nulo'}</span>
+                        <span className="metric-sub green">vs. coleta anterior</span>
+                      </div>
+                      <div className="metric-box">
+                        <span className="metric-lbl">🔥 Média Posts Virais</span>
+                        <span className="metric-val">
+                          {perfil.mediaPostsVirais > 0 ? formatNumber(perfil.mediaPostsVirais) : (topPost ? formatNumber(topPost.likes + topPost.comentarios) : '0')}
+                        </span>
+                        <span className="metric-sub">
+                          Média conta: {formatNumber(Math.round(perfil.mediaHistoricaConta || 0))}
+                        </span>
+                      </div>
+                      <div className="metric-box">
+                        <span className="metric-lbl">👁️ Visualizações</span>
+                        <span className="metric-val">
+                          {topPost && topPost.views > 0 ? formatNumber(topPost.views) : '—'}
+                        </span>
+                        <span className="metric-sub">
+                          {topPost && topPost.views > 0 ? 'Reels plays' : 'Post estático'}
+                        </span>
+                      </div>
                     </div>
 
-                    {/* Área lateral com os 2 mini-gráficos */}
-                    <div className="mini-charts-area">
-                      {/* Mini Gráfico 1: Engajamento */}
-                      <div className="mini-chart-wrapper">
-                        <div className="mini-chart-title">
-                          <span>Engajamento</span>
-                          <span className="val">
-                            {postsDoPerfil.length > 0 ? formatNumber(postsDoPerfil[postsDoPerfil.length - 1].engajamento) : '0'}
-                          </span>
-                        </div>
-                        <div className="chart-container-mini">
-                          {postsDoPerfil.length > 0 ? (
-                            <ResponsiveContainer width="100%" height="100%">
-                              <LineChart data={postsDoPerfil}>
-                                <Line
-                                  type="monotone"
-                                  dataKey="engajamento"
-                                  stroke="#7100E2"
-                                  strokeWidth={2}
-                                  dot={false}
-                                />
-                              </LineChart>
-                            </ResponsiveContainer>
-                          ) : (
-                            <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Sem histórico de posts</div>
-                          )}
-                        </div>
+                    {/* Thumbnail e Mini-Gráficos */}
+                    <div className="card-content-body">
+                      {/* Thumbnail placeholder elegante */}
+                      <div className="thumbnail-area">
+                        {topPost && topPost.formato === 'Reels' ? (
+                          <>
+                            <VideoIcon />
+                            <span>{topPost.formato}</span>
+                          </>
+                        ) : topPost && topPost.formato === 'Carrossel' ? (
+                          <>
+                            <LayersIcon />
+                            <span>{topPost.formato}</span>
+                          </>
+                        ) : (
+                          <>
+                            <ImageIcon />
+                            <span>Imagem</span>
+                          </>
+                        )}
+                        <span style={{ opacity: 0.5 }}>Post {topPost ? topPost.post_id : 'nulo'}</span>
                       </div>
 
-                      {/* Mini Gráfico 2: Seguidores */}
-                      <div className="mini-chart-wrapper">
-                        <div className="mini-chart-title">
-                          <span>Seguidores</span>
-                          <span className="val">
-                            {formatNumber(perfil.seguidores)}
-                          </span>
+                      {/* Área lateral com os 2 mini-gráficos */}
+                      <div className="mini-charts-area">
+                        {/* Mini Gráfico 1: Engajamento */}
+                        <div className="mini-chart-wrapper">
+                          <div className="mini-chart-title">
+                            <span>Engajamento</span>
+                            <span className="val">
+                              {postsDoPerfil.length > 0 ? formatNumber(postsDoPerfil[postsDoPerfil.length - 1].engajamento) : '0'}
+                            </span>
+                          </div>
+                          <div className="chart-container-mini">
+                            {postsDoPerfil.length > 0 ? (
+                              <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={postsDoPerfil}>
+                                  <Line
+                                    type="monotone"
+                                    dataKey="engajamento"
+                                    stroke="#7100E2"
+                                    strokeWidth={2}
+                                    dot={false}
+                                  />
+                                </LineChart>
+                              </ResponsiveContainer>
+                            ) : (
+                              <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Sem histórico de posts</div>
+                            )}
+                          </div>
                         </div>
-                        <div className="chart-container-mini">
-                          {hist.length > 0 ? (
-                            <ResponsiveContainer width="100%" height="100%">
-                              <LineChart data={hist}>
-                                <YAxis
-                                  dataKey="seguidores"
-                                  domain={['dataMin - 1', 'dataMax + 1']}
-                                  hide
-                                />
-                                <Tooltip
-                                  contentStyle={{
-                                    backgroundColor: '#161B22',
-                                    borderColor: '#30363D',
-                                    borderRadius: '8px',
-                                    fontSize: '11px',
-                                    color: 'white',
-                                    padding: '6px 10px'
-                                  }}
-                                  formatter={(value: any) => [formatNumber(value), 'Seguidores']}
-                                  labelFormatter={(label: any) => `📅 ${label}`}
-                                />
-                                <Line
-                                  type="monotone"
-                                  dataKey="seguidores"
-                                  stroke="#00F0FF"
-                                  strokeWidth={2}
-                                  dot={{ r: 3, fill: '#00F0FF', strokeWidth: 0 }}
-                                  activeDot={{ r: 5, fill: '#00F0FF' }}
-                                  isAnimationActive={false}
-                                />
-                              </LineChart>
-                            </ResponsiveContainer>
-                          ) : (
-                            <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Sem histórico de base</div>
-                          )}
+
+                        {/* Mini Gráfico 2: Seguidores */}
+                        <div className="mini-chart-wrapper">
+                          <div className="mini-chart-title">
+                            <span>Seguidores</span>
+                            <span className="val">
+                              {formatNumber(perfil.seguidores)}
+                            </span>
+                          </div>
+                          <div className="chart-container-mini">
+                            {hist.length > 0 ? (
+                              <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={hist}>
+                                  <YAxis
+                                    dataKey="seguidores"
+                                    domain={['dataMin - 1', 'dataMax + 1']}
+                                    hide
+                                  />
+                                  <Tooltip
+                                    contentStyle={{
+                                      backgroundColor: '#161B22',
+                                      borderColor: '#30363D',
+                                      borderRadius: '8px',
+                                      fontSize: '11px',
+                                      color: 'white',
+                                      padding: '6px 10px'
+                                    }}
+                                    formatter={(value: any) => [formatNumber(value), 'Seguidores']}
+                                    labelFormatter={(label: any) => `📅 ${label}`}
+                                  />
+                                  <Line
+                                    type="monotone"
+                                    dataKey="seguidores"
+                                    stroke="#00F0FF"
+                                    strokeWidth={2}
+                                    dot={{ r: 3, fill: '#00F0FF', strokeWidth: 0 }}
+                                    activeDot={{ r: 5, fill: '#00F0FF' }}
+                                    isAnimationActive={false}
+                                  />
+                                </LineChart>
+                              </ResponsiveContainer>
+                            ) : (
+                              <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Sem histórico de base</div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Rodapé do Card */}
-                  <div className="card-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: perfil.confiancaCor || 'var(--text-muted)', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', textTransform: 'capitalize' }}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: perfil.confiancaCor || '#8B949E', display: 'inline-block' }} />
-                      {perfil.confiancaTexto} — {perfil.diaMonitoramento}d de base
-                    </span>
-                    {topPost && (topPost.permalink || topPost.shortcode || topPost.post_id) ? (
-                      <a
-                        href={getInstagramPostUrl(topPost)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="post-link"
-                        style={{ textTransform: 'uppercase', fontWeight: 800, fontSize: '11px', letterSpacing: '0.5px' }}
-                      >
-                        VER POST <ExternalLink size={12} />
-                      </a>
-                    ) : null}
+                    {/* Rodapé do Card */}
+                    <div className="card-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: perfil.confiancaCor || 'var(--text-muted)', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', textTransform: 'capitalize' }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: perfil.confiancaCor || '#8B949E', display: 'inline-block' }} />
+                        {perfil.confiancaTexto} — {perfil.diaMonitoramento}d de base
+                      </span>
+                      {topPost && (topPost.permalink || topPost.shortcode || topPost.post_id) ? (
+                        <a
+                          href={getInstagramPostUrl(topPost)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="post-link"
+                          style={{ textTransform: 'uppercase', fontWeight: 800, fontSize: '11px', letterSpacing: '0.5px' }}
+                        >
+                          VER POST <ExternalLink size={12} />
+                        </a>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
           </div>
         </div>
       )}
@@ -3837,10 +3837,10 @@ export default function Dashboard() {
                     return a.username.localeCompare(b.username);
                   })
                   .map(p => (
-                  <option key={p.username} value={p.username}>
-                    {(p.meu_perfil === 1 || p.meu_perfil === true) ? '⭐ ' : ''}{p.username}{p.status === 'INATIVO' ? ' (inativo)' : ''}
-                  </option>
-                ))}
+                    <option key={p.username} value={p.username}>
+                      {(p.meu_perfil === 1 || p.meu_perfil === true) ? '⭐ ' : ''}{p.username}{p.status === 'INATIVO' ? ' (inativo)' : ''}
+                    </option>
+                  ))}
               </select>
               {selectedProfile && (() => {
                 const perfilObj = profiles.find(p => p.username === selectedProfile);
@@ -4392,7 +4392,7 @@ export default function Dashboard() {
             <div className="filters-group">
               <input
                 type="text"
-                placeholder="🔍 Buscar na legenda..."
+                placeholder="🔍 Buscar perfil..."
                 className="filter-input"
                 value={searchQuery}
                 onChange={(e) => { setSearchQuery(e.target.value); setPostsPage(1); }}
@@ -4814,7 +4814,7 @@ export default function Dashboard() {
                 ) : (
                   <>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+                      <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" />
                     </svg>
                     Atualizar via Meta API
                   </>
