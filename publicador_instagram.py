@@ -19,7 +19,19 @@ import sqlite3
 import argparse
 import logging
 import requests
+import requests.utils
 from datetime import datetime, date, timedelta, timezone
+
+# Alguns devs relataram na comunidade da Meta que requisições sem um User-Agent
+# de navegador levam mais erro genérico de borda/proxy da Meta (o mesmo subcode
+# 2207085 que vemos no media_publish). Não é confirmado oficialmente, mas é
+# inofensivo tentar — troca o UA padrão usado em toda chamada requests.* deste
+# processo (a lib usa requests.utils.default_user_agent() quando nenhum
+# header é passado explicitamente).
+requests.utils.default_user_agent = lambda: (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
 try:
     from PIL import Image
     HAS_PILLOW = True
@@ -1493,6 +1505,11 @@ def publicar_item_meta(agendamento, config, dry_run=False):
                 f"⚠️ Erro no media_publish (tentativa {tent}/{max_tentativas}): {detalhe}"
             )
             logger.warning(f"   Payload completo da Meta: {json.dumps(pub_data, ensure_ascii=False)}")
+            # Comunidade da Meta relatou o mesmo subcode (2207085) em outro endpoint
+            # (DELETE de mídia) associado a um proxy interno da Meta com falha de
+            # roteamento (header 'proxy-status: http_request_error' na resposta).
+            # Loga os headers pra confirmar/descartar o mesmo padrão aqui.
+            logger.warning(f"   Headers da resposta: {dict(pub_res.headers)}")
 
             # Erros permanentes: insistir não resolve e pode agravar (spam/quota)
             if err_sub in SUBCODES_PERMANENTES:
