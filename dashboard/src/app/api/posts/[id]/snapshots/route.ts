@@ -15,9 +15,10 @@ export async function GET(
 
     const db = await getDb();
 
-    // Busca detalhes do post
+    // Só o post_id é usado (para resolver `id` quando um shortcode é passado);
+    // o único consumidor desta rota (ModalEvolucaoPost) usa apenas `snapshots`.
     const post = await db.get(
-      'SELECT * FROM posts_historico WHERE post_id = ? OR shortcode = ?',
+      'SELECT post_id FROM posts_historico WHERE post_id = ? OR shortcode = ?',
       [id, id]
     );
 
@@ -46,7 +47,6 @@ export async function GET(
     return NextResponse.json({
       success: true,
       postId: actualPostId,
-      post: post || null,
       snapshots: snapshots || []
     });
   } catch (error: any) {

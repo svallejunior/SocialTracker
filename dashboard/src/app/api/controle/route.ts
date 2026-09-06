@@ -159,11 +159,21 @@ export async function GET() {
 
     // 5. Tratamento de Dados: Transforma 'null' em valores seguros que o React aceita
 
+    // Agrupa lançamentos e observações por username uma única vez (O(n)) em vez de
+    // filtrar os arrays inteiros para cada perfil dentro do .map() abaixo (O(perfis × n)).
+    const lancamentosPorUsername: Record<string, any[]> = {};
+    for (const l of todosLancamentos) {
+      (lancamentosPorUsername[l.username] ??= []).push(l);
+    }
+    const obsPorUsername: Record<string, any[]> = {};
+    for (const o of todasObs) {
+      (obsPorUsername[o.username] ??= []).push(o);
+    }
+
     const perfisTratados = linhasBanco.map((p: any) => {
       const u = (p.username || '').toLowerCase();
-      // Filtra os lançamentos deste perfil específico
-      const lancamentosDoPerfil = todosLancamentos.filter((l: any) => l.username === p.username);
-      const obsDoPerfil = todasObs.filter((o: any) => o.username === p.username);
+      const lancamentosDoPerfil = lancamentosPorUsername[p.username] || [];
+      const obsDoPerfil = obsPorUsername[p.username] || [];
 
       // Quantidade de agendamentos futuros (reserva de posts)
       const totalReserva = contagemReserva[u] || 0;

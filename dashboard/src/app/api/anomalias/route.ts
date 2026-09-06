@@ -105,22 +105,39 @@ export async function GET(request: NextRequest) {
     }));
 
     // 3. Registros de Coleta Detalhados (para o perfil selecionado ou modo especificado)
+    // A coleta anterior de cada perfil vem via LAG() na própria query (partição por
+    // username, ordenada por data_coleta/id) — evita o N+1 de um db.get por linha.
+    // O ingestor sempre grava username em minúsculas (meta_ingestion.py), então a
+    // partição usa a coluna crua e aproveita o índice idx_perfis_historico_user_data
+    // sem sort extra (LOWER(username) forçaria um "USE TEMP B-TREE FOR ORDER BY").
     let query = `
-      SELECT 
+      WITH historico_com_anterior AS (
+        SELECT
+          h.*,
+          LAG(h.seguidores) OVER (PARTITION BY h.username ORDER BY h.data_coleta, h.id) AS seguidores_anterior,
+          LAG(h.total_posts) OVER (PARTITION BY h.username ORDER BY h.data_coleta, h.id) AS total_posts_anterior,
+          LAG(h.data_coleta) OVER (PARTITION BY h.username ORDER BY h.data_coleta, h.id) AS data_coleta_anterior
+        FROM perfis_historico h
+        WHERE h.inativo = 0
+      )
+      SELECT
         h.id,
         h.username,
         h.data_coleta,
         h.seguidores,
         h.total_posts,
+        h.seguidores_anterior,
+        h.total_posts_anterior,
+        h.data_coleta_anterior,
         COALESCE(h.tipo_janela, 'ORGANICO') AS tipo_janela,
         COALESCE(h.revisado_manualmente, 0) AS revisado_manualmente,
         COALESCE(cp.foto_url, '') as foto_url,
         COALESCE(pm.primeira_postagem, cp.inicio) as primeira_postagem,
         COALESCE(pm.meu_perfil, 0) as meu_perfil
-      FROM perfis_historico h
+      FROM historico_com_anterior h
       LEFT JOIN perfis_monitorados pm ON LOWER(pm.username) = LOWER(h.username)
       LEFT JOIN controle_perfis cp ON LOWER(cp.username) = LOWER(h.username)
-      WHERE h.inativo = 0
+      WHERE 1 = 1
     `;
     const params: any[] = [];
 
@@ -145,19 +162,10 @@ export async function GET(request: NextRequest) {
 
     const rows = await db.all(query, params);
 
-    // 4. Calcula as métricas comparando com a coleta anterior do mesmo perfil
-    const resultado = [];
-
-    for (const item of rows) {
-      const anterior = await db.get(`
-        SELECT seguidores, total_posts, data_coleta FROM perfis_historico
-        WHERE LOWER(username) = LOWER(?) AND id < ? AND inativo = 0
-        ORDER BY data_coleta DESC, id DESC
-        LIMIT 1
-      `, [item.username, item.id]);
-
-      const segAnterior = anterior?.seguidores || 0;
-      const postsAnterior = anterior?.total_posts || 0;
+    // 4. Calcula as métricas comparando com a coleta anterior (já veio da query acima)
+    const resultado = rows.map((item: any) => {
+      const segAnterior = item.seguidores_anterior || 0;
+      const postsAnterior = item.total_posts_anterior || 0;
 
       const deltaS = (item.seguidores || 0) - segAnterior;
       const deltaPosts = (item.total_posts || 0) - postsAnterior;
@@ -167,8 +175,8 @@ export async function GET(request: NextRequest) {
 
       // Calcular intervalo de dias entre coletas para obter média diária em dias em branco
       let diasIntervalo = 1;
-      if (anterior?.data_coleta && item.data_coleta) {
-        const dAnt = new Date(anterior.data_coleta).getTime();
+      if (item.data_coleta_anterior && item.data_coleta) {
+        const dAnt = new Date(item.data_coleta_anterior).getTime();
         const dAtual = new Date(item.data_coleta).getTime();
         if (!isNaN(dAnt) && !isNaN(dAtual) && dAtual > dAnt) {
           const diffDays = (dAtual - dAnt) / (1000 * 3600 * 24);
@@ -192,7 +200,7 @@ export async function GET(request: NextRequest) {
         gatilhos.push('EXPLOSAO_PERCENTUAL');
       }
 
-      resultado.push({
+      return {
         id: item.id,
         username: item.username,
         data_coleta: item.data_coleta,
@@ -211,8 +219,8 @@ export async function GET(request: NextRequest) {
         dias_intervalo: diasIntervalo,
         media_diaria_delta_s: mediaDiariaDeltaS,
         pct_media_diaria_delta_s: pctMediaDiariaDeltaS
-      });
-    }
+      };
+    });
 
     return NextResponse.json({
       success: true,
