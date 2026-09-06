@@ -1781,13 +1781,45 @@ export default function Dashboard() {
   }
 
   const USD_BRL = 5.10; // Atualize conforme necessário
-  async function fetchControle() {
-    setControleLoading(true);
+  // `background = true` evita o flash do spinner e substitui apenas as linhas
+  // que realmente mudaram (mantendo a referência das que não mudaram), em vez
+  // de trocar o array inteiro — usado pelo polling automático abaixo.
+  async function fetchControle(background = false) {
+    if (!background) setControleLoading(true);
     try {
       const res = await fetch('/api/controle');
       const json = await res.json();
       if (json.success) {
-        setControleData(json.perfis || []);
+        const fresh: any[] = json.perfis || [];
+        const freshByUser = new Map(fresh.map((f: any) => [f.username, f]));
+
+        setControleData(prev => {
+          if (prev.length === 0) return fresh;
+          const prevByUser = new Map(prev.map((p: any) => [p.username, p]));
+          return fresh.map((f: any) => {
+            const old = prevByUser.get(f.username);
+            return old && JSON.stringify(old) === JSON.stringify(f) ? old : f;
+          });
+        });
+
+        // Reflete os seguidores de "minhas modelos" (única origem desta rota)
+        // também na lista principal de perfis, sem refazer o fetchData() inteiro.
+        // Esta rota traz o valor bruto da última coleta (sem o forward-fill que
+        // /api/data aplica pra ignorar quedas transitórias pra 0) — só aplica
+        // o patch quando vier um valor positivo, pelo mesmo motivo.
+        setProfiles(prev => {
+          let changed = false;
+          const next = prev.map((p: any) => {
+            const f = freshByUser.get(p.username);
+            if (f && Number(f.seguidores) > 0 && Number(f.seguidores) !== Number(p.seguidores || 0)) {
+              changed = true;
+              return { ...p, seguidores: f.seguidores };
+            }
+            return p;
+          });
+          return changed ? next : prev;
+        });
+
         if (json.ultima_execucao_meta) {
           setUltimaMetaExec(json.ultima_execucao_meta);
         }
@@ -1795,12 +1827,20 @@ export default function Dashboard() {
     } catch (e) {
       console.error("Erro ao carregar controle:", e);
     } finally {
-      setControleLoading(false);
+      if (!background) setControleLoading(false);
     }
   }
   useEffect(() => {
     if (activeTab === 'controle') fetchControle();
   }, [activeTab]);
+
+  // A ingestão oficial da Meta API roda sozinha no servidor a cada 30min
+  // (cron :15/:45) e só afeta "minhas modelos" — este polling leve mantém os
+  // seguidores em dia (aqui e na aba Controle) sem exigir reload da página.
+  useEffect(() => {
+    const interval = setInterval(() => fetchControle(true), 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Busca contagem de anomalias pendentes para o badge na aba (independente da aba ativa)
   useEffect(() => {
