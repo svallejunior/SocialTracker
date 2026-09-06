@@ -2157,6 +2157,25 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                               }}
                             >
                               <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
+                                {/* 1. STATUS À FRENTE DE TUDO: "v" verde */}
+                                <span
+                                  title="Post publicado no Instagram oficial via Meta Graph API"
+                                  style={{
+                                    width: 24,
+                                    height: 24,
+                                    borderRadius: 6,
+                                    background: 'rgba(52, 211, 153, 0.15)',
+                                    border: '1px solid rgba(52, 211, 153, 0.35)',
+                                    color: '#34D399',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexShrink: 0
+                                  }}
+                                >
+                                  <Check size={13} strokeWidth={2.8} />
+                                </span>
+
                                 <span style={{
                                   fontSize: 10,
                                   fontWeight: 800,
@@ -2178,22 +2197,6 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                               </div>
 
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                                <span
-                                  title="Post publicado no Instagram oficial via Meta Graph API"
-                                  style={{
-                                    fontSize: 9,
-                                    fontWeight: 700,
-                                    background: 'rgba(52, 211, 153, 0.15)',
-                                    color: '#34D399',
-                                    padding: '2px 6px',
-                                    borderRadius: 4,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 3
-                                  }}
-                                >
-                                  <Check size={10} strokeWidth={3} /> Meta
-                                </span>
                                 {permalink && (
                                   <a
                                     href={permalink}
@@ -2282,7 +2285,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
-                            gap: 8,
+                            gap: 10,
                             cursor: 'pointer',
                             transition: 'border-color 0.15s, background 0.15s'
                           }}
@@ -2300,6 +2303,80 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                           }}
                         >
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
+                            {ag.status === 'PUBLICADO' ? (
+                              <span
+                                title={ag.publicado_em ? `Publicado em ${ag.publicado_em} (ID: ${ag.meta_media_id || 'N/A'})` : 'Publicado no Instagram com sucesso!'}
+                                style={{
+                                  width: 24,
+                                  height: 24,
+                                  borderRadius: 6,
+                                  background: 'rgba(52,211,153,0.15)',
+                                  border: '1px solid rgba(52,211,153,0.35)',
+                                  color: '#34D399',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  flexShrink: 0,
+                                  cursor: 'help'
+                                }}
+                              >
+                                <Check size={13} strokeWidth={2.8} />
+                              </span>
+                            ) : ag.status === 'ERRO' ? (
+                              <span
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const errMsg = ag.erro_detalhe || 'Erro na publicação Meta API';
+                                  if (navigator.clipboard) {
+                                    navigator.clipboard.writeText(errMsg);
+                                    showToast('📋 Erro copiado para a área de transferência!');
+                                  }
+                                  console.error(`[Automação @${ag.username} | ID ${ag.id}] Erro Meta API:`, errMsg);
+                                }}
+                                title={`❌ Erro: ${ag.erro_detalhe || 'Erro na publicação Meta API'}\n(Clique para copiar o erro)`}
+                                style={{
+                                  width: 24,
+                                  height: 24,
+                                  borderRadius: 6,
+                                  background: 'rgba(239,68,68,0.15)',
+                                  border: '1px solid rgba(239,68,68,0.35)',
+                                  color: '#F87171',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  flexShrink: 0,
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s'
+                                }}
+                                onMouseEnter={e => {
+                                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.3)';
+                                }}
+                                onMouseLeave={e => {
+                                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)';
+                                }}
+                              >
+                                <X size={13} strokeWidth={2.8} />
+                              </span>
+                            ) : (
+                              <span
+                                title="Publicação Agendada"
+                                style={{
+                                  width: 24,
+                                  height: 24,
+                                  borderRadius: 6,
+                                  background: 'rgba(59,130,246,0.15)',
+                                  border: '1px solid rgba(59,130,246,0.35)',
+                                  color: '#60A5FA',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  flexShrink: 0
+                                }}
+                              >
+                                <Clock size={13} strokeWidth={2.5} />
+                              </span>
+                            )}
+
                             <span style={{
                               fontSize: 10,
                               fontWeight: 800,
@@ -2318,77 +2395,6 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                           </div>
 
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                            {ag.status === 'PUBLICADO' ? (
-                              <span
-                                title={ag.publicado_em ? `Publicado em ${ag.publicado_em} (ID: ${ag.meta_media_id || 'N/A'})` : 'Publicado no Instagram com sucesso!'}
-                                style={{
-                                  width: 22,
-                                  height: 22,
-                                  borderRadius: 6,
-                                  background: 'rgba(52,211,153,0.15)',
-                                  border: '1px solid rgba(52,211,153,0.35)',
-                                  color: '#34D399',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  cursor: 'help'
-                                }}
-                              >
-                                <Check size={12} strokeWidth={2.8} />
-                              </span>
-                            ) : ag.status === 'ERRO' ? (
-                              <span
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const errMsg = ag.erro_detalhe || 'Erro na publicação Meta API';
-                                  if (navigator.clipboard) {
-                                    navigator.clipboard.writeText(errMsg);
-                                    showToast('📋 Erro copiado para a área de transferência!');
-                                  }
-                                  console.error(`[Automação @${ag.username} | ID ${ag.id}] Erro Meta API:`, errMsg);
-                                }}
-                                title={`❌ Erro: ${ag.erro_detalhe || 'Erro na publicação Meta API'}\n(Clique para copiar o erro)`}
-                                style={{
-                                  width: 22,
-                                  height: 22,
-                                  borderRadius: 6,
-                                  background: 'rgba(239,68,68,0.15)',
-                                  border: '1px solid rgba(239,68,68,0.35)',
-                                  color: '#F87171',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  cursor: 'pointer',
-                                  transition: 'all 0.15s'
-                                }}
-                                onMouseEnter={e => {
-                                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.3)';
-                                }}
-                                onMouseLeave={e => {
-                                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)';
-                                }}
-                              >
-                                <X size={12} strokeWidth={2.8} />
-                              </span>
-                            ) : (
-                              <span style={{
-                                fontSize: 9,
-                                fontWeight: 700,
-                                color: '#60A5FA',
-                                background: 'rgba(96,165,250,0.1)',
-                                border: '1px solid rgba(96,165,250,0.2)',
-                                padding: '2px 6px',
-                                borderRadius: 4,
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 4
-                              }}>
-                                <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#60A5FA', display: 'inline-block' }} />
-                                AGENDADO
-                              </span>
-                            )}
-
-                            {/* Botão de Disparo Imediato */}
                             {ag.status !== 'PUBLICADO' && (
                               <button
                                 type="button"
@@ -2421,7 +2427,6 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                               </button>
                             )}
 
-                            {/* Exclusão condicional */}
                             {ag.status !== 'PUBLICADO' && (
                               <button
                                 type="button"
