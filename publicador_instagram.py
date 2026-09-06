@@ -32,15 +32,23 @@ try:
 except ImportError:
     HAS_PROCESSADOR_IMAGEM = False
 
-# Configuração de Logging
+# Configuração de Logging (console e arquivo publicador.log)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+LOG_FILE = os.path.join(BASE_DIR, "publicador.log")
+
+file_handler = logging.FileHandler(LOG_FILE, encoding='utf-8')
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(logging.Formatter('[%(asctime)s] [%(levelname)s] %(message)s', '%Y-%m-%d %H:%M:%S'))
+
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(logging.Formatter('[%(asctime)s] [%(levelname)s] %(message)s', '%Y-%m-%d %H:%M:%S'))
+
 logging.basicConfig(
     level=logging.INFO,
-    format='[%(asctime)s] [%(levelname)s] %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
+    handlers=[file_handler, console_handler]
 )
 logger = logging.getLogger("PublicadorInstagram")
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 _raw_db = os.environ.get("DB_PATH", "instagram_tracker.db")
 DB_PATH = _raw_db if os.path.isabs(_raw_db) else os.path.join(BASE_DIR, _raw_db)
 GRAPH_API_VERSION = "v20.0"

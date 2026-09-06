@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Senha incorreta' }, { status: 401 });
     }
 
-    const response = NextResponse.json({ success: true });
+    const response = NextResponse.json({ success: true, role: cleanPin });
     // Cookie válido por 1 ano para conveniência no celular e desktop
     response.cookies.set(COOKIE_NAME, 'authenticated_' + cleanPin, {
       httpOnly: true,
@@ -30,9 +30,16 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   const cookie = req.cookies.get(COOKIE_NAME);
+  const val = cookie?.value || '';
   const isAuthenticated = Boolean(
-    cookie && (cookie.value.includes('2802') || cookie.value.includes('1707') || cookie.value === 'authenticated')
+    val && (val.includes('2802') || val.includes('1707') || val === 'authenticated')
   );
 
-  return NextResponse.json({ authenticated: isAuthenticated });
+  const isMaster = val.includes('2802');
+
+  return NextResponse.json({
+    authenticated: isAuthenticated,
+    isMaster,
+    role: isMaster ? '2802' : (val.includes('1707') ? '1707' : 'user')
+  });
 }

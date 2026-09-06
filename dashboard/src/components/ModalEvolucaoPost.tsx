@@ -44,6 +44,7 @@ interface ModalEvolucaoPostProps {
   post: any;
   onClose: () => void;
   getInstagramPostUrl: (p: any) => string;
+  onUpdatePostMetrics?: (metrics: any) => void;
 }
 
 /** Interpolação linear entre buckets do benchmark */
@@ -76,7 +77,8 @@ function interpolateBenchmark(
 export default function ModalEvolucaoPost({
   post,
   onClose,
-  getInstagramPostUrl
+  getInstagramPostUrl,
+  onUpdatePostMetrics
 }: ModalEvolucaoPostProps) {
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -103,7 +105,21 @@ export default function ModalEvolucaoPost({
         const res = await fetch(`/api/posts/${post.post_id}/snapshots`);
         const json = await res.json();
         if (isMounted && json.success) {
-          setSnapshots(json.snapshots || []);
+          const list = json.snapshots || [];
+          setSnapshots(list);
+          if (list.length > 0 && onUpdatePostMetrics) {
+            const latest = list[list.length - 1];
+            onUpdatePostMetrics({
+              post_id: post.post_id,
+              likes: latest.likes,
+              comentarios: latest.comentarios,
+              views: latest.views,
+              reach: latest.reach,
+              saved: latest.saved,
+              shares: latest.shares,
+              total_interactions: latest.total_interactions
+            });
+          }
         }
       } catch (err) {
         console.error('Erro ao carregar snapshots do post:', err);

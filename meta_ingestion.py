@@ -128,6 +128,8 @@ def inicializar_estrutura_banco():
         ("saved", "INTEGER DEFAULT 0"),
         ("shares", "INTEGER DEFAULT 0"),
         ("total_interactions", "INTEGER DEFAULT 0"),
+        ("media_url", "TEXT"),
+        ("thumbnail_url", "TEXT"),
     ]
     
     for col_name, col_type in colunas_para_adicionar:
@@ -310,7 +312,7 @@ def extrair_posts_perfil(account_id, token, limite=50):
     """Obtém as publicações recentes da conta com métricas e paginação."""
     url = f"{GRAPH_API_BASE}/{account_id}/media"
     params = {
-        "fields": "id,caption,media_type,media_product_type,permalink,timestamp,like_count,comments_count,shortcode",
+        "fields": "id,caption,media_type,media_product_type,permalink,timestamp,like_count,comments_count,shortcode,media_url,thumbnail_url",
         "limit": min(limite, 50),
         "access_token": token
     }
@@ -473,13 +475,18 @@ def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str):
         if dados_perfil and dados_perfil.get("followers_count", 0) > 0:
             taxa_engajamento = round(((likes + comentarios) / dados_perfil["followers_count"]) * 100, 2)
 
+        # Mídia / Imagem de Capa
+        media_url = p.get("media_url") or ""
+        thumbnail_url = p.get("thumbnail_url") or media_url or ""
+
         # Atualiza tabela consolidada de posts (posts_historico)
         c.execute("""
             INSERT INTO posts_historico (
                 post_id, username, data_postagem, formato, legenda,
                 likes, comentarios, views, taxa_engajamento, data_atualizacao,
-                shortcode, data_carga, permalink, media_product_type, reach, saved, shares, total_interactions
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                shortcode, data_carga, permalink, media_product_type, reach, saved, shares, total_interactions,
+                media_url, thumbnail_url
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(post_id) DO UPDATE SET
                 likes = excluded.likes,
                 comentarios = excluded.comentarios,
@@ -494,11 +501,14 @@ def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str):
                 permalink = COALESCE(excluded.permalink, posts_historico.permalink),
                 media_product_type = COALESCE(excluded.media_product_type, posts_historico.media_product_type),
                 legenda = COALESCE(excluded.legenda, posts_historico.legenda),
-                shortcode = COALESCE(excluded.shortcode, posts_historico.shortcode)
+                shortcode = COALESCE(excluded.shortcode, posts_historico.shortcode),
+                media_url = COALESCE(excluded.media_url, posts_historico.media_url),
+                thumbnail_url = COALESCE(excluded.thumbnail_url, posts_historico.thumbnail_url)
         """, (
             post_id, username, data_postagem, formato, legenda,
             likes, comentarios, views, taxa_engajamento, data_carga_str,
-            shortcode, data_carga_str, permalink, product_type, reach, saved, shares, total_interactions
+            shortcode, data_carga_str, permalink, product_type, reach, saved, shares, total_interactions,
+            media_url, thumbnail_url
         ))
         posts_salvos += 1
 
@@ -518,7 +528,7 @@ def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str):
         hora_local = partes_dt[1] if len(partes_dt) > 1 else "12:00:00"
         tipo_pub = "REELS" if product_type == "REELS" or formato == "VIDEO" else "FEED"
         pub_id = f"meta_{post_id}"
-        arquivos_json = json.dumps([{"url": permalink, "tipo": formato}])
+        arquivos_json = json.dumps([{"url": permalink, "tipo": formato, "previewUrl": thumbnail_url or media_url}])
 
         c.execute("""
             INSERT INTO automacao_publicacoes (

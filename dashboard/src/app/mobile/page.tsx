@@ -7,6 +7,7 @@ import {
   TrendingDown, Users, Layers, ExternalLink,
   AlertCircle, Sparkles, Image as ImageIcon, Film, PlayCircle
 } from 'lucide-react';
+import FloatingLogButton from '../../components/FloatingLogButton';
 
 interface PostMobile {
   post_id: string;
@@ -859,6 +860,9 @@ export default function MobileDashboard() {
         </div>
 
       </main>
+
+      {/* Botão flutuante de logs do sistema (apenas master 2802) */}
+      <FloatingLogButton />
     </div>
   );
 }

@@ -32,6 +32,16 @@ async function getDb() {
       await db.exec(`ALTER TABLE perfis_monitorados ADD COLUMN tipo_trafego TEXT DEFAULT 'ORGANICO'`);
     }
 
+    // Garante colunas de mídia em posts_historico
+    const postColsCheck = await db.all("PRAGMA table_info(posts_historico)");
+    const postCols = new Set(postColsCheck.map((c: any) => c.name));
+    if (!postCols.has("media_url")) {
+      await db.exec(`ALTER TABLE posts_historico ADD COLUMN media_url TEXT`);
+    }
+    if (!postCols.has("thumbnail_url")) {
+      await db.exec(`ALTER TABLE posts_historico ADD COLUMN thumbnail_url TEXT`);
+    }
+
     // Garante tabelas de engajamento (comentários e mensagens)
     await db.exec(`
       CREATE TABLE IF NOT EXISTS instagram_comentarios (
@@ -131,8 +141,8 @@ export async function GET() {
         formatoPadrao = 'Imagem';
       }
 
-      const mediaUrl = midiaUrlMap[p.post_id] || midiaUrlMap[p.shortcode] || null;
-      const thumbnailUrl = thumbnailUrlMap[p.post_id] || thumbnailUrlMap[p.shortcode] || null;
+      const mediaUrl = p.media_url || midiaUrlMap[p.post_id] || midiaUrlMap[p.shortcode] || null;
+      const thumbnailUrl = p.thumbnail_url || thumbnailUrlMap[p.post_id] || thumbnailUrlMap[p.shortcode] || mediaUrl;
 
       return {
         ...p,

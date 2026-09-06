@@ -7,7 +7,7 @@ import {
   TrendingUp, ExternalLink, LogOut, Calendar, Search, Users, MessageSquare, Eye, EyeOff, Heart, Filter,
   BarChart3, Play, Hash, Hash as TagIcon, Image as ImageIcon, Film as VideoIcon, Layers as LayersIcon,
   HelpCircle, CheckCircle2, DollarSign, Wallet, FileText, X, Brain, AlertTriangle, BadgeCheck, History,
-  Smartphone
+  Smartphone, RefreshCw
 } from "lucide-react";
 import {
   LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, AreaChart, Area, ReferenceLine, CartesianGrid,
@@ -22,6 +22,7 @@ interface Props {
 import ModalLancamento from "../components/ModalLancamento";
 import AvatarModelo from "../components/AvatarModelo";
 import ModalEvolucaoPost from "../components/ModalEvolucaoPost";
+import FloatingLogButton from "../components/FloatingLogButton";
 
 const TabLoading = () => (
   <div className="loading-box"><div className="spinner"></div><p>Carregando...</p></div>
@@ -271,6 +272,110 @@ const getInstagramPostUrl = (post: any): string => {
   }
 
   return '#';
+};
+
+// ============================================================
+// 📸 COMPONENTE DE MÍDIA DO FEED (Capa ou Ícone)
+// ============================================================
+const FeedMediaThumbnail = ({
+  post,
+  onClick
+}: {
+  post: any;
+  onClick: () => void;
+}) => {
+  const [imgError, setImgError] = useState(false);
+  const mediaSrc = post.thumbnail_url || post.media_url;
+  const isDirectVideo = typeof mediaSrc === 'string' && (mediaSrc.endsWith('.mp4') || mediaSrc.endsWith('.webm') || mediaSrc.includes('/video/'));
+  const hasValidMedia = Boolean(mediaSrc) && !imgError && !isDirectVideo;
+
+  const tooltipText = `${post.formato || 'Post'}${post.legenda ? ` • ${post.legenda.slice(0, 100)}` : ''} • Clique para ver evolução`;
+
+  return (
+    <div
+      onClick={onClick}
+      title={tooltipText}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: 'pointer'
+      }}
+    >
+      {hasValidMedia ? (
+        <div
+          style={{
+            width: '36px',
+            height: '36px',
+            borderRadius: '8px',
+            overflow: 'hidden',
+            border: '1px solid #30363D',
+            backgroundColor: '#0D1117',
+            flexShrink: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.35)',
+            transition: 'transform 0.15s ease, border-color 0.15s ease'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = '#00F0FF';
+            e.currentTarget.style.transform = 'scale(1.08)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = '#30363D';
+            e.currentTarget.style.transform = 'scale(1)';
+          }}
+        >
+          <img
+            src={mediaSrc}
+            alt={post.formato || 'Mídia'}
+            loading="lazy"
+            decoding="async"
+            onError={() => setImgError(true)}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              display: 'block'
+            }}
+          />
+        </div>
+      ) : (
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '36px',
+            height: '36px',
+            borderRadius: '8px',
+            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+            border: '1px solid #30363D',
+            flexShrink: 0,
+            boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
+            transition: 'transform 0.15s ease, border-color 0.15s ease'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = '#00F0FF';
+            e.currentTarget.style.transform = 'scale(1.08)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = '#30363D';
+            e.currentTarget.style.transform = 'scale(1)';
+          }}
+        >
+          {post.formato === 'Reels' ? (
+            <VideoIcon size={16} style={{ color: 'var(--color-cyan)' }} />
+          ) : post.formato === 'Carrossel' ? (
+            <LayersIcon size={16} style={{ color: 'var(--color-purple)' }} />
+          ) : (
+            <ImageIcon size={16} style={{ color: 'var(--text-secondary)' }} />
+          )}
+        </div>
+      )}
+    </div>
+  );
 };
 
 // ============================================================
@@ -1290,6 +1395,7 @@ export default function Dashboard() {
   // Paginação da Tabela Feed Geral
   const [postsPage, setPostsPage] = useState<number>(1);
   const [postsPerPage, setPostsPerPage] = useState<number>(20);
+  const [refreshingFeed, setRefreshingFeed] = useState<boolean>(false);
   const [modalPostEvolucao, setModalPostEvolucao] = useState<any | null>(null);
   const [searchAcompanhados, setSearchAcompanhados] = useState('');
   const [acompStatusFilter, setAcompStatusFilter] = useState<'TODOS' | 'ATIVO' | 'INATIVO' | 'INDISPONIVEL' | 'MORREU'>('TODOS');
@@ -1493,6 +1599,39 @@ export default function Dashboard() {
       setSortField(field);
       setSortDirection('desc');
     }
+  };
+
+  // Atualização rápida do feed e dados na página
+  const handleRefreshFeed = async () => {
+    setRefreshingFeed(true);
+    try {
+      await fetchData();
+      await fetchControle(true);
+    } catch (err) {
+      console.error('Erro ao atualizar feed:', err);
+    } finally {
+      setRefreshingFeed(false);
+    }
+  };
+
+  // Sincroniza métricas atualizadas quando o modal de evolução carrega snapshots mais recentes
+  const handleUpdatePostMetrics = (updated: any) => {
+    if (!updated?.post_id) return;
+    setPosts(prev => prev.map(p => {
+      if (p.post_id === updated.post_id) {
+        return {
+          ...p,
+          likes: updated.likes ?? p.likes,
+          comentarios: updated.comentarios ?? p.comentarios,
+          views: updated.views ?? p.views,
+          reach: updated.reach ?? p.reach,
+          saved: updated.saved ?? p.saved,
+          shares: updated.shares ?? p.shares,
+          total_interactions: updated.total_interactions ?? p.total_interactions
+        };
+      }
+      return p;
+    }));
   };
   // Carregar dados da API
   const fetchData = async () => {
@@ -4428,8 +4567,72 @@ export default function Dashboard() {
               </p>
             </div>
 
-            {/* Filtros */}
-            <div className="filters-group">
+            {/* Filtros e Botões de Ação */}
+            <div className="filters-group" style={{ alignItems: 'center' }}>
+              <button
+                onClick={handleRefreshFeed}
+                disabled={refreshingFeed}
+                title="Atualizar dados do feed na página com as leituras mais recentes da base"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '7px 16px',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(0, 240, 255, 0.4)',
+                  background: refreshingFeed
+                    ? 'rgba(0, 240, 255, 0.08)'
+                    : 'linear-gradient(135deg, rgba(0, 240, 255, 0.15), rgba(0, 149, 246, 0.15))',
+                  color: '#00F0FF',
+                  fontSize: '12px',
+                  fontWeight: 800,
+                  letterSpacing: '0.04em',
+                  cursor: refreshingFeed ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 2px 8px rgba(0, 240, 255, 0.15)',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                <RefreshCw
+                  size={14}
+                  style={{
+                    animation: refreshingFeed ? 'spin 1s linear infinite' : 'none',
+                    transformOrigin: 'center'
+                  }}
+                />
+                {refreshingFeed ? 'ATUALIZANDO...' : 'ATUALIZAR FEED'}
+              </button>
+
+              <button
+                onClick={handleRunMetaIngestion}
+                disabled={ingestingMeta}
+                title="Executar busca oficial de novos posts e métricas na Meta Graph API"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '7px 13px',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  background: ingestingMeta ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.08)',
+                  color: ingestingMeta ? '#8B949E' : '#E6EDF3',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: ingestingMeta ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s ease',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                <RefreshCw
+                  size={13}
+                  style={{
+                    animation: ingestingMeta ? 'spin 1s linear infinite' : 'none',
+                    transformOrigin: 'center'
+                  }}
+                />
+                {ingestingMeta ? 'SINCRONIZANDO META...' : '⚡ Sincronizar Meta'}
+              </button>
+
               <input
                 type="text"
                 placeholder="🔍 Buscar perfil..."
@@ -4569,84 +4772,10 @@ export default function Dashboard() {
                           {formatDateTime(post.data_postagem)}
                         </td>
                         <td>
-                          {(post.thumbnail_url || post.media_url) ? (
-                            <div
-                              onClick={() => setModalPostEvolucao(post)}
-                              title={`${post.formato} • Clique para ver evolução`}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '8px',
-                                cursor: 'pointer'
-                              }}
-                            >
-                              <div
-                                style={{
-                                  width: '36px',
-                                  height: '36px',
-                                  borderRadius: '6px',
-                                  overflow: 'hidden',
-                                  border: '1px solid #30363D',
-                                  backgroundColor: '#0D1117',
-                                  flexShrink: 0
-                                }}
-                              >
-                                <img
-                                  src={post.thumbnail_url || post.media_url}
-                                  alt={post.formato}
-                                  loading="lazy"
-                                  decoding="async"
-                                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                  onError={(e) => {
-                                    // URL é vídeo ou inválida — esconde imagem, mostra ícone
-                                    e.currentTarget.style.display = 'none';
-                                  }}
-                                />
-                              </div>
-                              <span
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  padding: '4px',
-                                  borderRadius: '6px',
-                                  backgroundColor: 'rgba(255, 255, 255, 0.05)'
-                                }}
-                                title={post.formato}
-                              >
-                                {post.formato === 'Reels' ? (
-                                  <VideoIcon size={14} style={{ color: 'var(--color-cyan)' }} />
-                                ) : post.formato === 'Carrossel' ? (
-                                  <LayersIcon size={14} style={{ color: 'var(--color-purple)' }} />
-                                ) : (
-                                  <ImageIcon size={14} style={{ color: 'var(--text-secondary)' }} />
-                                )}
-                              </span>
-                            </div>
-                          ) : (
-                            <span
-                              title={post.formato}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                width: '32px',
-                                height: '32px',
-                                borderRadius: '6px',
-                                backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                                cursor: 'pointer'
-                              }}
-                              onClick={() => setModalPostEvolucao(post)}
-                            >
-                              {post.formato === 'Reels' ? (
-                                <VideoIcon size={16} style={{ color: 'var(--color-cyan)' }} />
-                              ) : post.formato === 'Carrossel' ? (
-                                <LayersIcon size={16} style={{ color: 'var(--color-purple)' }} />
-                              ) : (
-                                <ImageIcon size={16} style={{ color: 'var(--text-secondary)' }} />
-                              )}
-                            </span>
-                          )}
+                          <FeedMediaThumbnail
+                            post={post}
+                            onClick={() => setModalPostEvolucao(post)}
+                          />
                         </td>
                         <td>{formatNumber(post.likes)}</td>
                         <td>{formatNumber(post.comentarios)}</td>
@@ -5579,8 +5708,12 @@ export default function Dashboard() {
           post={modalPostEvolucao}
           onClose={() => setModalPostEvolucao(null)}
           getInstagramPostUrl={getInstagramPostUrl}
+          onUpdatePostMetrics={handleUpdatePostMetrics}
         />
       )}
+
+      {/* Botão flutuante de Log no canto inferior esquerdo (exclusivo para senha 2802) */}
+      <FloatingLogButton />
     </div>
   );
 };

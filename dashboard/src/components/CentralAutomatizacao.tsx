@@ -552,6 +552,9 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
   const [formOpenMap, setFormOpenMap] = useState<{ [username: string]: boolean }>({});
   const [editingAgendamentoMap, setEditingAgendamentoMap] = useState<{ [username: string]: Agendamento | null }>({});
   const [selectedDateMap, setSelectedDateMap] = useState<{ [username: string]: Date }>({});
+  const [dragOverCardMap, setDragOverCardMap] = useState<{ [username: string]: boolean }>({});
+  const [pendingFilesMap, setPendingFilesMap] = useState<{ [username: string]: File[] }>({});
+  const dragCounterMap = useRef<{ [username: string]: number }>({});
 
   const [modalMetaApi, setModalMetaApi] = useState(false);
   const [savingMetaConfig, setSavingMetaConfig] = useState(false);
@@ -1710,23 +1713,112 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
             const isFormOpen = !!formOpenMap[perfil.username];
             const currentEditing = editingAgendamentoMap[perfil.username] || null;
             const posicaoAtual = profileIndex + 1;
+            const isDraggingOverCard = !!dragOverCardMap[perfil.username];
 
             return (
               <div
                 key={perfil.username}
+                onDragEnter={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  dragCounterMap.current[perfil.username] = (dragCounterMap.current[perfil.username] || 0) + 1;
+                  if (e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('Files')) {
+                    setDragOverCardMap(prev => ({ ...prev, [perfil.username]: true }));
+                  }
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  e.dataTransfer.dropEffect = 'copy';
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  dragCounterMap.current[perfil.username] = (dragCounterMap.current[perfil.username] || 1) - 1;
+                  if (dragCounterMap.current[perfil.username] <= 0) {
+                    dragCounterMap.current[perfil.username] = 0;
+                    setDragOverCardMap(prev => ({ ...prev, [perfil.username]: false }));
+                  }
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  dragCounterMap.current[perfil.username] = 0;
+                  setDragOverCardMap(prev => ({ ...prev, [perfil.username]: false }));
+
+                  const droppedFiles = e.dataTransfer.files ? Array.from(e.dataTransfer.files) : [];
+                  if (droppedFiles.length > 0) {
+                    setPendingFilesMap(prev => ({ ...prev, [perfil.username]: droppedFiles }));
+                    setEditingAgendamentoMap(prev => ({ ...prev, [perfil.username]: null }));
+                    setFormOpenMap(prev => ({ ...prev, [perfil.username]: true }));
+                  }
+                }}
                 style={{
                   background: '#0D1117',
-                  border: `1px solid ${isFormOpen ? '#388BFD' : '#21262D'}`,
+                  border: isDraggingOverCard
+                    ? '2px dashed #00F0FF'
+                    : `1px solid ${isFormOpen ? '#388BFD' : '#21262D'}`,
                   borderRadius: 14,
                   padding: 16,
                   display: 'flex',
                   flexDirection: 'column',
                   gap: 14,
-                  boxShadow: isFormOpen ? '0 8px 24px rgba(56, 139, 253, 0.15)' : '0 4px 12px rgba(0,0,0,0.3)',
+                  boxShadow: isDraggingOverCard
+                    ? '0 0 25px rgba(0, 240, 255, 0.45), inset 0 0 15px rgba(0, 240, 255, 0.15)'
+                    : isFormOpen
+                      ? '0 8px 24px rgba(56, 139, 253, 0.15)'
+                      : '0 4px 12px rgba(0,0,0,0.3)',
                   transition: 'all 0.2s ease',
-                  position: 'relative'
+                  position: 'relative',
+                  overflow: 'hidden'
                 }}
               >
+                {/* Overlay visual ao arrastar mídia diretamente para a janela da modelo */}
+                {isDraggingOverCard && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      zIndex: 80,
+                      background: 'rgba(13, 17, 23, 0.92)',
+                      backdropFilter: 'blur(4px)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 12,
+                      padding: 20,
+                      textAlign: 'center',
+                      pointerEvents: 'none',
+                      animation: 'fadeIn 0.15s ease'
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 54,
+                        height: 54,
+                        borderRadius: '50%',
+                        background: 'rgba(0, 240, 255, 0.15)',
+                        border: '2px dashed #00F0FF',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#00F0FF',
+                        boxShadow: '0 0 16px rgba(0, 240, 255, 0.4)'
+                      }}
+                    >
+                      <UploadCloud size={28} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: 'white', marginBottom: 2 }}>
+                        Solte a mídia para agendar
+                      </div>
+                      <div style={{ fontSize: 11, color: '#00F0FF', fontWeight: 600 }}>
+                        @{perfil.username}
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {/* 1. Header do Card: Foto de Perfil + Username + Posição + ID Numérico */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <a
@@ -2151,9 +2243,10 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                         fontSize: 12,
                         cursor: 'pointer',
                         display: 'flex',
+                        flexDirection: 'column',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        gap: 8,
+                        gap: 4,
                         transition: 'all 0.2s',
                         marginBottom: 4
                       }}
@@ -2166,8 +2259,13 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                         e.currentTarget.style.borderColor = '#3B82F6';
                       }}
                     >
-                      <Plus size={15} />
-                      AGENDAR POSTAGEM
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Plus size={15} />
+                        <span>AGENDAR POSTAGEM</span>
+                      </div>
+                      <span style={{ fontSize: 9, color: '#8B949E', fontWeight: 500 }}>
+                        (ou arraste a mídia direto nesta janela)
+                      </span>
                     </button>
                   )}
 
@@ -2393,6 +2491,14 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                       metaAccountId={cfg.metaAccountId || getPseudoMetaId(perfil.username)}
                       username={perfil.username}
                       initialData={currentEditing}
+                      initialFiles={pendingFilesMap[perfil.username] || null}
+                      onClearInitialFiles={() => {
+                        setPendingFilesMap(prev => {
+                          const copy = { ...prev };
+                          delete copy[perfil.username];
+                          return copy;
+                        });
+                      }}
                       onSave={handleSalvarAgendamento}
                       onSelectDate={(d) => {
                         setSelectedDateMap(prev => ({ ...prev, [perfil.username]: d }));
@@ -2400,6 +2506,11 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                       onCancel={() => {
                         setFormOpenMap(prev => ({ ...prev, [perfil.username]: false }));
                         setEditingAgendamentoMap(prev => ({ ...prev, [perfil.username]: null }));
+                        setPendingFilesMap(prev => {
+                          const copy = { ...prev };
+                          delete copy[perfil.username];
+                          return copy;
+                        });
                       }}
                     />
                   )}
@@ -3110,6 +3221,8 @@ interface FormularioAgendamentoProps {
   username: string;
   metaAccountId: string;
   initialData?: Agendamento | null;
+  initialFiles?: File[] | null;
+  onClearInitialFiles?: () => void;
   onSave: (data: Partial<Agendamento>) => Promise<void>;
   onCancel: () => void;
   onSelectDate?: (date: Date) => void;
@@ -3119,6 +3232,8 @@ function FormularioAgendamento({
   username,
   metaAccountId,
   initialData,
+  initialFiles,
+  onClearInitialFiles,
   onSave,
   onCancel,
   onSelectDate
@@ -3229,11 +3344,13 @@ function FormularioAgendamento({
     setTipoPostagem(novoTipo);
   };
 
-  const handleFileUpload = async (filesList: FileList | null) => {
+  const handleFileUpload = async (filesList: FileList | File[] | null) => {
     if (!filesList || filesList.length === 0) return;
 
+    const filesArray = Array.from(filesList);
+
     // 2. Como o Reels não aceita foto, se enviar foto muda automaticamente para POST (Feed)
-    const temFoto = Array.from(filesList).some(f => isImageFile(f));
+    const temFoto = filesArray.some(f => isImageFile(f));
     if (temFoto && tipoPostagem === 'REELS') {
       setTipoPostagem('FEED');
       setAvisoFoto('📸 Foto detectada: tipo alterado automaticamente para Post (Feed), pois Reels aceita exclusivamente vídeos.');
@@ -3246,8 +3363,8 @@ function FormularioAgendamento({
       const formData = new FormData();
       formData.append('metaAccountId', metaAccountId || username);
 
-      for (let i = 0; i < filesList.length; i++) {
-        formData.append('files', filesList[i]);
+      for (let i = 0; i < filesArray.length; i++) {
+        formData.append('files', filesArray[i]);
       }
 
       const res = await fetch('/api/automacao/upload', {
@@ -3267,6 +3384,14 @@ function FormularioAgendamento({
       setUploading(false);
     }
   };
+
+  // Carrega automaticamente arquivos arrastados diretamente para a janela da modelo
+  useEffect(() => {
+    if (initialFiles && initialFiles.length > 0) {
+      handleFileUpload(initialFiles);
+      if (onClearInitialFiles) onClearInitialFiles();
+    }
+  }, [initialFiles]);
 
   const handleRemoveArquivo = (index: number) => {
     setArquivos(prev => prev.filter((_, i) => i !== index));
@@ -3325,7 +3450,7 @@ function FormularioAgendamento({
         hora_janela_fim: horaJanelaFim,
         variacao_minutos: variacaoMinutos,
         recorrencia: payloadRecorrencia,
-        legenda: legenda,
+        legenda: tipoPostagem === 'STORIES' ? '' : legenda,
         status: 'AGENDADO'
       });
     } finally {
@@ -4107,28 +4232,30 @@ function FormularioAgendamento({
         )}
       </div>
 
-      {/* 4. LEGENDA (OPCIONAL) */}
-      <div>
-        <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', marginBottom: 4 }}>
-          4. Legenda do Post (Opcional)
-        </label>
-        <textarea
-          rows={2}
-          placeholder="Escreva a legenda e hashtags que serão publicadas..."
-          value={legenda}
-          onChange={e => setLegenda(e.target.value)}
-          style={{
-            width: '100%',
-            background: '#0D1117',
-            border: '1px solid #30363D',
-            borderRadius: 6,
-            color: 'white',
-            fontSize: 11,
-            padding: '6px 10px',
-            resize: 'vertical'
-          }}
-        />
-      </div>
+      {/* 4. LEGENDA (OPCIONAL) - Oculto quando for STORIES */}
+      {tipoPostagem !== 'STORIES' && (
+        <div>
+          <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', marginBottom: 4 }}>
+            4. Legenda do Post (Opcional)
+          </label>
+          <textarea
+            rows={2}
+            placeholder="Escreva a legenda e hashtags que serão publicadas..."
+            value={legenda}
+            onChange={e => setLegenda(e.target.value)}
+            style={{
+              width: '100%',
+              background: '#0D1117',
+              border: '1px solid #30363D',
+              borderRadius: 6,
+              color: 'white',
+              fontSize: 11,
+              padding: '6px 10px',
+              resize: 'vertical'
+            }}
+          />
+        </div>
+      )}
 
       {/* BOTÕES DE AÇÃO DO FORMULÁRIO */}
       <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
