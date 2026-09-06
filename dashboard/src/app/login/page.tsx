@@ -27,6 +27,9 @@ export default function LoginPage() {
 
       const data = await res.json();
       if (data.success) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('st_pin_role', pin.trim());
+        }
         setSuccess(true);
         // Aguarda 1.2 segundos mostrando a logo com o efeito de fade/zoom suave antes de redirecionar
         setTimeout(() => {

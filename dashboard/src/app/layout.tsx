@@ -13,6 +13,8 @@ export const metadata: Metadata = {
   description: "Análise avançada e cruzamento de performance de dados reais extraídos do Instagram com tema escuro SaaS.",
 };
 
+import FloatingLogButton from "@/components/FloatingLogButton";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -22,6 +24,7 @@ export default function RootLayout({
     <html lang="pt-BR" className={plusJakarta.variable}>
       <body>
         {children}
+        <FloatingLogButton />
       </body>
     </html>
   );

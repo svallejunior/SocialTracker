@@ -5711,9 +5711,6 @@ export default function Dashboard() {
           onUpdatePostMetrics={handleUpdatePostMetrics}
         />
       )}
-
-      {/* Botão flutuante de Log no canto inferior esquerdo (exclusivo para senha 2802) */}
-      <FloatingLogButton />
     </div>
   );
 };

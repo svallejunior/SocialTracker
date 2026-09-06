@@ -13,16 +13,37 @@ export default function FloatingLogButton() {
   const [copied, setCopied] = useState(false);
   const logContainerRef = useRef<HTMLPreElement>(null);
 
-  // 1. Verifica se a senha logada é a 2802
+  // 1. Verifica se a senha logada é a 2802 (via API ou localStorage)
   useEffect(() => {
-    fetch('/api/auth/session')
-      .then(res => res.json())
-      .then(data => {
-        if (data.isMaster || data.role === '2802') {
-          setIsMaster(true);
-        }
-      })
-      .catch(() => {});
+    // Checagem imediata via storage local
+    if (typeof window !== 'undefined') {
+      const storedRole = localStorage.getItem('st_pin_role');
+      if (storedRole === '2802') {
+        setIsMaster(true);
+      }
+    }
+
+    // Validação com o servidor
+    const checkSession = () => {
+      fetch('/api/auth/session')
+        .then(res => res.json())
+        .then(data => {
+          if (data.isMaster || data.role === '2802') {
+            setIsMaster(true);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('st_pin_role', '2802');
+            }
+          } else if (data.role === '1707') {
+            setIsMaster(false);
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem('st_pin_role');
+            }
+          }
+        })
+        .catch(() => {});
+    };
+
+    checkSession();
   }, []);
 
   // 2. Função de busca de logs
