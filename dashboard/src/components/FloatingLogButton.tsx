@@ -4,46 +4,19 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Terminal, X, RefreshCw, Copy, Check, Filter, ChevronDown, Download, AlertCircle } from 'lucide-react';
 
 export default function FloatingLogButton() {
-  const [isMaster, setIsMaster] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [logsData, setLogsData] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<string>('daemon');
   const [autoRefresh, setAutoRefresh] = useState<boolean>(false);
   const [copied, setCopied] = useState(false);
+  const [isLoginPage, setIsLoginPage] = useState(false);
   const logContainerRef = useRef<HTMLPreElement>(null);
 
-  // 1. Verifica se a senha logada é a 2802 (via API ou localStorage)
   useEffect(() => {
-    // Checagem imediata via storage local
     if (typeof window !== 'undefined') {
-      const storedRole = localStorage.getItem('st_pin_role');
-      if (storedRole === '2802') {
-        setIsMaster(true);
-      }
+      setIsLoginPage(window.location.pathname.startsWith('/login'));
     }
-
-    // Validação com o servidor
-    const checkSession = () => {
-      fetch('/api/auth/session')
-        .then(res => res.json())
-        .then(data => {
-          if (data.isMaster || data.role === '2802') {
-            setIsMaster(true);
-            if (typeof window !== 'undefined') {
-              localStorage.setItem('st_pin_role', '2802');
-            }
-          } else if (data.role === '1707') {
-            setIsMaster(false);
-            if (typeof window !== 'undefined') {
-              localStorage.removeItem('st_pin_role');
-            }
-          }
-        })
-        .catch(() => {});
-    };
-
-    checkSession();
   }, []);
 
   // 2. Função de busca de logs
@@ -68,7 +41,7 @@ export default function FloatingLogButton() {
     }
   }, [isOpen]);
 
-  // Auto-refresh a cada 5 segundos se ativado
+  // Auto-refresh a cada 4 segundos se ativado
   useEffect(() => {
     if (!isOpen || !autoRefresh) return;
     const interval = setInterval(() => {
@@ -84,8 +57,7 @@ export default function FloatingLogButton() {
     }
   }, [logsData, activeTab]);
 
-  // Se não for o usuário 2802, não renderiza absolutamente nada
-  if (!isMaster) return null;
+  if (isLoginPage) return null;
 
   // Extrai o conteúdo da aba selecionada
   const getLogContent = () => {
@@ -120,7 +92,7 @@ export default function FloatingLogButton() {
       {/* Ícone flutuante no canto inferior esquerdo (diagonal esquerda) */}
       <button
         onClick={() => setIsOpen(prev => !prev)}
-        title="Logs do Sistema (Exclusivo 2802)"
+        title="Logs do Sistema"
         style={{
           position: 'fixed',
           bottom: 22,

@@ -12,9 +12,15 @@ export const revalidate = 0;
 export async function GET(req: NextRequest) {
   try {
     const authCookie = req.cookies.get('st_auth');
-    const isMaster = Boolean(authCookie && authCookie.value.includes('2802'));
+    const isAuthenticated = Boolean(
+      authCookie && (
+        authCookie.value.includes('2802') ||
+        authCookie.value.includes('1707') ||
+        authCookie.value === 'authenticated'
+      )
+    );
 
-    if (!isMaster) {
+    if (!isAuthenticated) {
       return NextResponse.json({ success: false, error: 'Acesso negado' }, { status: 403 });
     }
 
