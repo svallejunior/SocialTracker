@@ -195,6 +195,7 @@ export async function GET(req: NextRequest) {
       return {
         username: p.username,
         nome: p.nome || p.username,
+        meta_account_id: p.meta_account_id || '',
         foto_url: foto,
         seguidores: seguidoresAtuais,
         total_posts: postsAtuais,

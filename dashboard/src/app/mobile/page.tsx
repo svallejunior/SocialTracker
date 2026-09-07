@@ -5,8 +5,10 @@ import Link from 'next/link';
 import {
   Clock, RefreshCw, Calendar, CheckCircle2, TrendingUp,
   TrendingDown, Users, Layers, ExternalLink,
-  AlertCircle, Sparkles, Image as ImageIcon, Film, PlayCircle
+  AlertCircle, Sparkles, Image as ImageIcon, Film, PlayCircle, Camera
 } from 'lucide-react';
+import LogoSplash from '@/components/LogoSplash';
+import AgendarMobileModal from '@/components/AgendarMobileModal';
 
 interface PostMobile {
   post_id: string;
@@ -23,6 +25,7 @@ interface PostMobile {
 interface PerfilMobile {
   username: string;
   nome: string;
+  meta_account_id?: string;
   foto_url: string | null;
   seguidores: number;
   total_posts: number;
@@ -49,6 +52,7 @@ export default function MobileDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTabAgendamento, setActiveTabAgendamento] = useState<'fazer' | 'feitos'>('fazer');
+  const [perfilAgendando, setPerfilAgendando] = useState<PerfilMobile | null>(null);
 
   const fetchData = async () => {
     try {
@@ -71,6 +75,7 @@ export default function MobileDashboard() {
           const perfisM: PerfilMobile[] = list.map((p: any) => ({
             username: p.username,
             nome: p.nome_controle || p.username,
+            meta_account_id: p.meta_account_id || '',
             foto_url: p.foto_url || p.foto_perfil || null,
             seguidores: Number(p.seguidores || 0),
             total_posts: Number(p.total_posts || 0),
@@ -227,28 +232,31 @@ export default function MobileDashboard() {
 
   if (loading && !data) {
     return (
-      <div style={{
-        minHeight: '100vh',
-        background: '#0D0F12',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: '12px',
-        color: '#8B949E',
-        fontFamily: 'var(--font-plus-jakarta, sans-serif)'
-      }}>
+      <>
+        <LogoSplash />
         <div style={{
-          width: '36px',
-          height: '36px',
-          border: '3px solid rgba(148, 148, 148, 0.25)',
-          borderTopColor: '#00F0FF',
-          borderRadius: '50%',
-          animation: 'spin 0.8s linear infinite'
-        }} />
-        <p style={{ fontSize: '13px', fontWeight: 600 }}>Carregando dados mobile...</p>
-        <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
-      </div>
+          minHeight: '100vh',
+          background: '#0D0F12',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '12px',
+          color: '#8B949E',
+          fontFamily: 'var(--font-plus-jakarta, sans-serif)'
+        }}>
+          <div style={{
+            width: '36px',
+            height: '36px',
+            border: '3px solid rgba(148, 148, 148, 0.25)',
+            borderTopColor: '#00F0FF',
+            borderRadius: '50%',
+            animation: 'spin 0.8s linear infinite'
+          }} />
+          <p style={{ fontSize: '13px', fontWeight: 600 }}>Carregando dados mobile...</p>
+          <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+        </div>
+      </>
     );
   }
 
@@ -450,6 +458,11 @@ export default function MobileDashboard() {
                     <div style={{ textAlign: 'right' }}>
                       <div style={{ fontSize: '17px', fontWeight: 800, color: '#0F172A' }}>
                         {formatNumero(p.seguidores)}
+                        {p.variacao_dia > 0 && (
+                          <span style={{ fontSize: '12px', fontWeight: 800, color: '#0F172A' }}>
+                            {' '}(<span style={{ color: '#10B981' }}>+{p.variacao_dia}</span>)
+                          </span>
+                        )}
                       </div>
                       <div style={{ fontSize: '10px', color: '#2D3748', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.04em' }}>
                         Seguidores
@@ -502,6 +515,29 @@ export default function MobileDashboard() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Botão de agendamento de foto direto pelo celular */}
+                  <button
+                    onClick={() => setPerfilAgendando(p)}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      background: 'rgba(15, 23, 42, 0.9)',
+                      color: '#00F0FF',
+                      border: 'none',
+                      borderRadius: '10px',
+                      padding: '10px',
+                      fontSize: '12px',
+                      fontWeight: 800,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Camera size={14} />
+                    Agendar foto
+                  </button>
 
                   {/* ── Linha Inferior: Últimas 5 Publicações da Modelo ── */}
                   <div style={{
@@ -859,6 +895,14 @@ export default function MobileDashboard() {
         </div>
 
       </main>
+
+      {perfilAgendando && (
+        <AgendarMobileModal
+          perfil={perfilAgendando}
+          onClose={() => setPerfilAgendando(null)}
+          onCreated={fetchData}
+        />
+      )}
     </div>
   );
 }

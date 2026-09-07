@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Lock, ArrowRight } from 'lucide-react';
+import LogoSplash from '@/components/LogoSplash';
 
 export default function LoginPage() {
   const [pin, setPin] = useState('');
@@ -64,86 +65,7 @@ export default function LoginPage() {
       overflow: 'hidden'
     }}>
       {/* 🌟 OVERLAY DE TRANSIÇÃO COM LOGO (FADE OUT DEVAGAR) 🌟 */}
-      {success && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          zIndex: 9999,
-          background: '#090A0F',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          animation: 'fadeInSplash 0.3s ease-out forwards'
-        }}>
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '16px',
-            animation: 'logoFadeZoom 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards'
-          }}>
-            <div style={{
-              width: '100px',
-              height: '100px',
-              borderRadius: '24px',
-              overflow: 'hidden',
-              boxShadow: '0 0 50px rgba(0, 240, 255, 0.4), 0 0 100px rgba(113, 0, 226, 0.3)',
-              border: '2px solid rgba(0, 240, 255, 0.5)',
-              background: '#161B22',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <img
-                src="/img/logo.jpeg"
-                alt="SocialTracker Logo"
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                onError={(e) => {
-                  // Fallback visual caso a imagem não exista
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
-            </div>
-            <span style={{
-              fontSize: '24px',
-              fontWeight: 800,
-              color: '#FFFFFF',
-              letterSpacing: '-0.02em',
-              background: 'linear-gradient(135deg, #FFFFFF 0%, #8B949E 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent'
-            }}>
-              SocialTracker
-            </span>
-          </div>
-        </div>
-      )}
-
-      <style>{`
-        @keyframes fadeInSplash {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes logoFadeZoom {
-          0% {
-            opacity: 0;
-            transform: scale(0.85);
-          }
-          30% {
-            opacity: 1;
-            transform: scale(1);
-          }
-          70% {
-            opacity: 0.8;
-            transform: scale(1.05);
-          }
-          100% {
-            opacity: 0;
-            transform: scale(1.15);
-          }
-        }
-      `}</style>
+      {success && <LogoSplash duration={1200} />}
 
       <div style={{
         width: '100%',

@@ -23,6 +23,7 @@ import ModalLancamento from "../components/ModalLancamento";
 import AvatarModelo from "../components/AvatarModelo";
 import ModalEvolucaoPost from "../components/ModalEvolucaoPost";
 import FloatingLogButton from "../components/FloatingLogButton";
+import LogoSplash from "../components/LogoSplash";
 
 const TabLoading = () => (
   <div className="loading-box"><div className="spinner"></div><p>Carregando...</p></div>
@@ -2403,10 +2404,13 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="loading-box">
-        <div className="spinner"></div>
-        <p>Carregando banco de dados SQLite do SocialTracker...</p>
-      </div>
+      <>
+        <LogoSplash />
+        <div className="loading-box">
+          <div className="spinner"></div>
+          <p>Carregando banco de dados SQLite do SocialTracker...</p>
+        </div>
+      </>
     );
   }
 
