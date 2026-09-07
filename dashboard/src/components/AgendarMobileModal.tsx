@@ -110,35 +110,23 @@ export default function AgendarMobileModal({ perfil, onClose, onCreated }: Props
     }
   };
 
+  // Igual ao formulário de agendamento do desktop (FormularioAgendamento): abre
+  // expandido dentro do próprio fluxo da página, não como overlay fixo — isso
+  // evita o bug de mobile onde `position: fixed` some da viewport visível
+  // quando a página está rolada (o usuário via a janela "no meio", fora da tela).
   return (
     <div
       style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 10000,
-        background: 'rgba(0, 0, 0, 0.65)',
-        display: 'flex',
-        alignItems: 'flex-end',
-        justifyContent: 'center'
+        width: '100%',
+        background: '#0D0F12',
+        borderRadius: '16px',
+        border: '1px solid rgba(255,255,255,0.08)',
+        padding: '16px',
+        marginTop: '2px',
+        fontFamily: 'var(--font-plus-jakarta, sans-serif)',
+        boxShadow: '0 10px 30px -4px rgba(0, 0, 0, 0.5)'
       }}
-      onClick={onClose}
     >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: '100%',
-          maxWidth: '480px',
-          maxHeight: '92vh',
-          overflowY: 'auto',
-          background: '#0D0F12',
-          borderTopLeftRadius: '20px',
-          borderTopRightRadius: '20px',
-          border: '1px solid rgba(255,255,255,0.08)',
-          borderBottom: 'none',
-          padding: '18px 18px 28px',
-          fontFamily: 'var(--font-plus-jakarta, sans-serif)'
-        }}
-      >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div style={{
@@ -335,7 +323,6 @@ export default function AgendarMobileModal({ perfil, onClose, onCreated }: Props
             <style>{`.spin-icon { animation: spin 0.8s linear infinite; } @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
           </>
         )}
-      </div>
     </div>
   );
 }

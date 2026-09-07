@@ -517,27 +517,39 @@ export default function MobileDashboard() {
                   </div>
 
                   {/* Botão de agendamento de foto direto pelo celular */}
-                  <button
-                    onClick={() => setPerfilAgendando(p)}
-                    style={{
-                      width: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px',
-                      background: 'rgba(15, 23, 42, 0.9)',
-                      color: '#00F0FF',
-                      border: 'none',
-                      borderRadius: '10px',
-                      padding: '10px',
-                      fontSize: '12px',
-                      fontWeight: 800,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <Camera size={14} />
-                    Agendar foto
-                  </button>
+                  {perfilAgendando?.username !== p.username && (
+                    <button
+                      onClick={() => setPerfilAgendando(p)}
+                      style={{
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        background: 'rgba(15, 23, 42, 0.9)',
+                        color: '#00F0FF',
+                        border: 'none',
+                        borderRadius: '10px',
+                        padding: '10px',
+                        fontSize: '12px',
+                        fontWeight: 800,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <Camera size={14} />
+                      Agendar foto
+                    </button>
+                  )}
+
+                  {/* Formulário de agendamento aberto DENTRO do card (mesmo padrão do
+                      desktop) — evita o bug de overlay "fixed" sumir da tela no mobile. */}
+                  {perfilAgendando?.username === p.username && (
+                    <AgendarMobileModal
+                      perfil={p}
+                      onClose={() => setPerfilAgendando(null)}
+                      onCreated={fetchData}
+                    />
+                  )}
 
                   {/* ── Linha Inferior: Últimas 5 Publicações da Modelo ── */}
                   <div style={{
@@ -895,14 +907,6 @@ export default function MobileDashboard() {
         </div>
 
       </main>
-
-      {perfilAgendando && (
-        <AgendarMobileModal
-          perfil={perfilAgendando}
-          onClose={() => setPerfilAgendando(null)}
-          onCreated={fetchData}
-        />
-      )}
     </div>
   );
 }
