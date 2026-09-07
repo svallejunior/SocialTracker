@@ -727,12 +727,20 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
   };
 
   const getConfigForUser = (username: string): AutomacaoConfig => {
-    if (configs[username]) {
-      return configs[username];
+    // O Meta ID salvo em localStorage é só cache local do navegador — some ao
+    // trocar de navegador/servidor. O banco (via /api/data, automacao_config)
+    // é a fonte real, a mesma que o publicador usa; sempre prevalece quando
+    // existe, mesmo que localStorage tenha algo (possivelmente desatualizado).
+    const perfilServidor = profiles.find(p => p.username === username);
+    const metaIdServidor = (perfilServidor?.meta_account_id || '').toString().trim();
+
+    const local = configs[username];
+    if (local) {
+      return metaIdServidor ? { ...local, metaAccountId: metaIdServidor } : local;
     }
     return {
       ...DEFAULT_CONFIG,
-      metaAccountId: getPseudoMetaId(username),
+      metaAccountId: metaIdServidor || getPseudoMetaId(username),
       displayName: username
     };
   };
