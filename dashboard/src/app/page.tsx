@@ -541,6 +541,7 @@ function ModalControleEditInline({ perfil, onClose, onSave }: { perfil: any; onC
     telegram: perfil.telegram || '',
     status: perfil.status || '⏳ Aguardando',
     foto_url: perfil.foto_url || '',
+    meta_account_id: perfil.meta_account_id || '',
     nova_obs: '',
   });
 
@@ -793,6 +794,7 @@ function ModalControleEditInline({ perfil, onClose, onSave }: { perfil: any; onC
               </div>
             </div>
             {field('Linktree', 'linktree', 'text', 'https://linktree.ee/usuario')}
+            {field('Meta Account ID', 'meta_account_id', 'text', 'ID da conta Meta/Instagram')}
 
             <div>
               <label style={{ fontSize: 11, color: '#8B949E', display: 'block', marginBottom: 6, fontWeight: 600, letterSpacing: '0.05em' }}>

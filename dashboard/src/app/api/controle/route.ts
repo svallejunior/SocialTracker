@@ -16,6 +16,41 @@ async function getDb() {
     if (!hasFotoUrl) {
       await db.exec(`ALTER TABLE controle_perfis ADD COLUMN foto_url TEXT`);
     }
+
+    // Meta Account ID precisa ficar arquivado junto com o resto do cadastro da
+    // modelo (não só em automacao_config, que é config de automação). Na
+    // primeira vez que a coluna é criada, faz backfill a partir do que já
+    // existe em automacao_config, pra não depender de re-digitar tudo.
+    const hasMetaAccountId = columns.some((c: any) => c.name === "meta_account_id");
+    if (!hasMetaAccountId) {
+      await db.exec(`ALTER TABLE controle_perfis ADD COLUMN meta_account_id TEXT`);
+
+      await db.exec(`
+        INSERT INTO controle_perfis (username, meta_account_id)
+        SELECT ac.username, ac.meta_account_id
+        FROM automacao_config ac
+        WHERE ac.meta_account_id IS NOT NULL AND ac.meta_account_id != ''
+        ON CONFLICT(username) DO UPDATE SET meta_account_id = excluded.meta_account_id
+      `);
+
+      // Contas cujo username no cadastro difere só em maiúsculas/minúsculas do
+      // usado em automacao_config (o ON CONFLICT acima é exato) — casa por
+      // LOWER() pra não deixar essas de fora do backfill.
+      await db.exec(`
+        UPDATE controle_perfis
+        SET meta_account_id = (
+          SELECT ac.meta_account_id FROM automacao_config ac
+          WHERE LOWER(ac.username) = LOWER(controle_perfis.username)
+            AND ac.meta_account_id IS NOT NULL AND ac.meta_account_id != ''
+        )
+        WHERE (meta_account_id IS NULL OR meta_account_id = '')
+          AND EXISTS (
+            SELECT 1 FROM automacao_config ac
+            WHERE LOWER(ac.username) = LOWER(controle_perfis.username)
+              AND ac.meta_account_id IS NOT NULL AND ac.meta_account_id != ''
+          )
+      `);
+    }
   } catch (err) {
     console.error("Migration error:", err);
   }
@@ -72,7 +107,8 @@ export async function GET() {
         cp.fotos_estoque,
         cp.status as status_controle,
         cp.obs,
-        cp.foto_url
+        cp.foto_url,
+        cp.meta_account_id
       FROM perfis_monitorados pm
       LEFT JOIN controle_perfis cp ON pm.username = cp.username
       LEFT JOIN (
@@ -205,6 +241,7 @@ export async function GET() {
         status: p.status_controle || '⏳ Aguardando',
         obs_historico: obsDoPerfil, // Histórico de observações
         foto_url: fotoEfetiva,
+        meta_account_id: p.meta_account_id || '',
         foto_perfil_meta: p.foto_perfil_meta || null,
         foto_local: p.foto_url || null,
         comentarios_pendentes: nCom,
@@ -292,6 +329,7 @@ export async function PUT(request: NextRequest) {
       fotos_estoque,
       status,
       foto_url,
+      meta_account_id,
       nova_obs
     } = body;
 
@@ -309,8 +347,8 @@ export async function PUT(request: NextRequest) {
 
     await db.run(`
       INSERT INTO controle_perfis
-        (username, nome, nascimento, email, reserva, linktree, inicio, telegram, fotos_estoque, status, foto_url, atualizado_em)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        (username, nome, nascimento, email, reserva, linktree, inicio, telegram, fotos_estoque, status, foto_url, meta_account_id, atualizado_em)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       ON CONFLICT(username) DO UPDATE SET
         nome           = excluded.nome,
         nascimento     = excluded.nascimento,
@@ -322,8 +360,9 @@ export async function PUT(request: NextRequest) {
         fotos_estoque  = excluded.fotos_estoque,
         status         = excluded.status,
         foto_url       = excluded.foto_url,
+        meta_account_id = excluded.meta_account_id,
         atualizado_em  = datetime('now')
-    `, [username, nome, nascimento, email, reserva, linktree, inicio, telegram, fotos_estoque, status, foto_url]);
+    `, [username, nome, nascimento, email, reserva, linktree, inicio, telegram, fotos_estoque, status, foto_url, meta_account_id ?? '']);
 
     if (status && (status.includes('Morreu') || status === 'MORREU')) {
       await db.run(`UPDATE perfis_monitorados SET status = 'MORREU' WHERE username = ?`, [username]);
