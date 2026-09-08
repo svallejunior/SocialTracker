@@ -379,6 +379,29 @@ const FeedMediaThumbnail = ({
   );
 };
 
+// Mini-gráfico de histórico de curtidas (branco) e comentários (rosa neon) por
+// post — usado no Feed Geral para Imagem/Carrossel, onde não há Views/Plays.
+const HistoricoSparkline = ({
+  data
+}: {
+  data: { likes: number; comentarios: number; data_carga: string }[];
+}) => {
+  if (!data || data.length < 2) {
+    return <span style={{ color: '#8B949E', opacity: 0.5, fontSize: '11px' }}>Sem histórico</span>;
+  }
+
+  return (
+    <div style={{ width: '90px', height: '28px' }} title="Histórico: curtidas (branco) e comentários (rosa neon)">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
+          <Line type="monotone" dataKey="likes" stroke="#FFFFFF" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+          <Line type="monotone" dataKey="comentarios" stroke="#FF007A" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+};
+
 // ============================================================
 // 🎯 PERFORMANCE SCORE — Cálculo dos 3 Pilares (0–100)
 // ============================================================
@@ -1398,6 +1421,8 @@ export default function Dashboard() {
   // Paginação da Tabela Feed Geral
   const [postsPage, setPostsPage] = useState<number>(1);
   const [postsPerPage, setPostsPerPage] = useState<number>(20);
+  // Histórico de curtidas/comentários por post (sparkline), buscado em lote por página
+  const [historicoSnapshots, setHistoricoSnapshots] = useState<Record<string, { likes: number; comentarios: number; data_carga: string }[]>>({});
   const [refreshingFeed, setRefreshingFeed] = useState<boolean>(false);
   const [modalPostEvolucao, setModalPostEvolucao] = useState<any | null>(null);
   const [searchAcompanhados, setSearchAcompanhados] = useState('');
@@ -2413,6 +2438,45 @@ export default function Dashboard() {
     if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
     return 0;
   }), [filteredPosts, sortField, sortDirection]);
+
+  // IDs dos posts Imagem/Carrossel da página atual do Feed Geral — usados para
+  // buscar em lote o histórico de curtidas/comentários (sparkline da tabela).
+  const idsHistoricoPaginaAtual = useMemo(() => {
+    const inicio = (postsPage - 1) * postsPerPage;
+    return sortedPosts
+      .slice(inicio, inicio + postsPerPage)
+      .filter(p => p.formato === 'Imagem' || p.formato === 'Carrossel')
+      .map(p => p.post_id);
+  }, [sortedPosts, postsPage, postsPerPage]);
+
+  useEffect(() => {
+    const idsFaltando = idsHistoricoPaginaAtual.filter(id => !(id in historicoSnapshots));
+    if (idsFaltando.length === 0) return;
+
+    let cancelado = false;
+    fetch(`/api/posts/snapshots-batch?ids=${idsFaltando.map(encodeURIComponent).join(',')}`)
+      .then(res => res.json())
+      .then(json => {
+        if (cancelado) return;
+        setHistoricoSnapshots(prev => {
+          const next = { ...prev };
+          for (const id of idsFaltando) {
+            next[id] = (json.success && json.snapshots && json.snapshots[id]) || [];
+          }
+          return next;
+        });
+      })
+      .catch(() => {
+        if (cancelado) return;
+        setHistoricoSnapshots(prev => {
+          const next = { ...prev };
+          for (const id of idsFaltando) next[id] = next[id] || [];
+          return next;
+        });
+      });
+
+    return () => { cancelado = true; };
+  }, [idsHistoricoPaginaAtual]);
 
   if (loading) {
     return (
@@ -4777,6 +4841,9 @@ export default function Dashboard() {
                     <th className={`sortable ${sortField === 'comentarios' ? 'active' : ''}`} onClick={() => handleSort('comentarios')} title="Comentários">
                       💬 {sortField === 'comentarios' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                     </th>
+                    <th title="Histórico de curtidas (branco) e comentários (rosa neon) — Imagem/Carrossel">
+                      Histórico
+                    </th>
                     <th
                       className={`sortable ${sortField === 'views' ? 'active' : ''}`}
                       onClick={() => handleSort('views')}
@@ -4846,6 +4913,13 @@ export default function Dashboard() {
                         </td>
                         <td>{formatNumber(post.likes)}</td>
                         <td>{formatNumber(post.comentarios)}</td>
+                        <td>
+                          {post.formato === 'Imagem' || post.formato === 'Carrossel' ? (
+                            <HistoricoSparkline data={historicoSnapshots[post.post_id] || []} />
+                          ) : (
+                            <span style={{ color: '#8B949E', opacity: 0.6 }}>-</span>
+                          )}
+                        </td>
                         <td>
                           {hasViewsData && viewsVal > 0 ? (
                             <span style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
