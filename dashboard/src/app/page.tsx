@@ -7,7 +7,7 @@ import {
   TrendingUp, ExternalLink, LogOut, Calendar, Search, Users, MessageSquare, Eye, EyeOff, Heart, Filter,
   BarChart3, Play, Hash, Hash as TagIcon, Image as ImageIcon, Film as VideoIcon, Layers as LayersIcon,
   HelpCircle, CheckCircle2, DollarSign, Wallet, FileText, X, Brain, AlertTriangle, BadgeCheck, History,
-  Smartphone, RefreshCw
+  Smartphone, RefreshCw, Clock
 } from "lucide-react";
 import {
   LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, AreaChart, Area, ReferenceLine, CartesianGrid,
@@ -1603,6 +1603,16 @@ export default function Dashboard() {
       setSortDirection('desc');
     }
   };
+
+  // Horário da coleta mais recente entre os posts carregados (data_carga da ingestão Meta)
+  const ultimaAtualizacaoFeed = useMemo(() => {
+    let maisRecente = '';
+    for (const p of posts) {
+      const ts = p.data_carga || p.data_atualizacao || '';
+      if (ts && ts > maisRecente) maisRecente = ts;
+    }
+    return maisRecente || null;
+  }, [posts]);
 
   // Atualização rápida do feed e dados na página
   const handleRefreshFeed = async () => {
@@ -4575,69 +4585,59 @@ export default function Dashboard() {
 
             {/* Filtros e Botões de Ação */}
             <div className="filters-group" style={{ alignItems: 'center' }}>
-              <button
-                onClick={handleRefreshFeed}
-                disabled={refreshingFeed}
-                title="Atualizar dados do feed na página com as leituras mais recentes da base"
+              {/* Card: horário da última atualização + botão de atualizar feed */}
+              <div
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '8px',
-                  padding: '7px 16px',
-                  borderRadius: '8px',
-                  border: '1px solid rgba(0, 240, 255, 0.4)',
-                  background: refreshingFeed
-                    ? 'rgba(0, 240, 255, 0.08)'
-                    : 'linear-gradient(135deg, rgba(0, 240, 255, 0.15), rgba(0, 149, 246, 0.15))',
-                  color: '#00F0FF',
-                  fontSize: '12px',
-                  fontWeight: 800,
-                  letterSpacing: '0.04em',
-                  cursor: refreshingFeed ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 2px 8px rgba(0, 240, 255, 0.15)',
-                  whiteSpace: 'nowrap'
+                  gap: '12px',
+                  padding: '6px 8px 6px 14px',
+                  borderRadius: '10px',
+                  background: 'var(--background-card)',
+                  border: '1px solid var(--border-color)'
                 }}
               >
-                <RefreshCw
-                  size={14}
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  color: 'var(--text-secondary)', fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap'
+                }}>
+                  <Clock size={13} />
+                  {ultimaAtualizacaoFeed ? `Última atualização: ${formatDateTime(ultimaAtualizacaoFeed)}` : 'Sem dados ainda'}
+                </div>
+                <button
+                  onClick={handleRefreshFeed}
+                  disabled={refreshingFeed}
+                  title="Atualizar dados do feed na página com as leituras mais recentes da base"
                   style={{
-                    animation: refreshingFeed ? 'spin 1s linear infinite' : 'none',
-                    transformOrigin: 'center'
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '7px 16px',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(0, 240, 255, 0.4)',
+                    background: refreshingFeed
+                      ? 'rgba(0, 240, 255, 0.08)'
+                      : 'linear-gradient(135deg, rgba(0, 240, 255, 0.15), rgba(0, 149, 246, 0.15))',
+                    color: '#00F0FF',
+                    fontSize: '12px',
+                    fontWeight: 800,
+                    letterSpacing: '0.04em',
+                    cursor: refreshingFeed ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s ease',
+                    boxShadow: '0 2px 8px rgba(0, 240, 255, 0.15)',
+                    whiteSpace: 'nowrap'
                   }}
-                />
-                {refreshingFeed ? 'ATUALIZANDO...' : 'ATUALIZAR FEED'}
-              </button>
-
-              <button
-                onClick={handleRunMetaIngestion}
-                disabled={ingestingMeta}
-                title="Executar busca oficial de novos posts e métricas na Meta Graph API"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '7px 13px',
-                  borderRadius: '8px',
-                  border: '1px solid rgba(255, 255, 255, 0.15)',
-                  background: ingestingMeta ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.08)',
-                  color: ingestingMeta ? '#8B949E' : '#E6EDF3',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  cursor: ingestingMeta ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.2s ease',
-                  whiteSpace: 'nowrap'
-                }}
-              >
-                <RefreshCw
-                  size={13}
-                  style={{
-                    animation: ingestingMeta ? 'spin 1s linear infinite' : 'none',
-                    transformOrigin: 'center'
-                  }}
-                />
-                {ingestingMeta ? 'SINCRONIZANDO META...' : '⚡ Sincronizar Meta'}
-              </button>
+                >
+                  <RefreshCw
+                    size={14}
+                    style={{
+                      animation: refreshingFeed ? 'spin 1s linear infinite' : 'none',
+                      transformOrigin: 'center'
+                    }}
+                  />
+                  {refreshingFeed ? 'ATUALIZANDO...' : 'ATUALIZAR FEED'}
+                </button>
+              </div>
 
               <input
                 type="text"
@@ -4668,16 +4668,40 @@ export default function Dashboard() {
                   ))}
               </select>
 
-              <select
-                className="filter-select"
-                value={selectedFormat}
-                onChange={(e) => { setSelectedFormat(e.target.value); setPostsPage(1); }}
-              >
-                <option value="Todos">Todos Formatos</option>
-                <option value="Reels">Reels</option>
-                <option value="Carrossel">Carrossel</option>
-                <option value="Imagem">Imagem</option>
-              </select>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                {([
+                  { formato: 'Imagem', Icon: ImageIcon, cor: '#8B949E', bg: 'rgba(139, 148, 158, 0.15)', borda: 'rgba(139, 148, 158, 0.4)' },
+                  { formato: 'Carrossel', Icon: LayersIcon, cor: '#7100E2', bg: 'rgba(113, 0, 226, 0.15)', borda: 'rgba(113, 0, 226, 0.5)' },
+                  { formato: 'Reels', Icon: VideoIcon, cor: '#00F0FF', bg: 'rgba(0, 240, 255, 0.12)', borda: 'rgba(0, 240, 255, 0.4)' }
+                ] as const).map(({ formato, Icon, cor, bg, borda }) => {
+                  const isActive = selectedFormat === formato;
+                  return (
+                    <button
+                      key={formato}
+                      onClick={() => { setSelectedFormat(isActive ? 'Todos' : formato); setPostsPage(1); }}
+                      title={formato}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '7px 12px',
+                        borderRadius: '8px',
+                        border: `1px solid ${isActive ? borda : 'var(--border-color)'}`,
+                        background: isActive ? bg : 'rgba(0, 0, 0, 0.2)',
+                        color: isActive ? cor : 'var(--text-secondary)',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      <Icon size={14} />
+                      {formato}
+                    </button>
+                  );
+                })}
+              </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <input
