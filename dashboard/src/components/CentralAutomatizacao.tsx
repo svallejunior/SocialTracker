@@ -2523,6 +2523,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                       username={perfil.username}
                       initialData={currentEditing}
                       initialFiles={pendingFilesMap[perfil.username] || null}
+                      suggestedDate={!currentEditing ? selectedDate : undefined}
                       onClearInitialFiles={() => {
                         setPendingFilesMap(prev => {
                           const copy = { ...prev };
@@ -3253,6 +3254,7 @@ interface FormularioAgendamentoProps {
   metaAccountId: string;
   initialData?: Agendamento | null;
   initialFiles?: File[] | null;
+  suggestedDate?: Date | null;
   onClearInitialFiles?: () => void;
   onSave: (data: Partial<Agendamento>) => Promise<void>;
   onCancel: () => void;
@@ -3264,6 +3266,7 @@ function FormularioAgendamento({
   metaAccountId,
   initialData,
   initialFiles,
+  suggestedDate,
   onClearInitialFiles,
   onSave,
   onCancel,
@@ -3292,6 +3295,13 @@ function FormularioAgendamento({
   const [dataEspecifica, setDataEspecifica] = useState<string>(() => {
     if (initialData?.data_especifica) return initialData.data_especifica;
     if (initialData?.dias_selecionados?.[0]?.includes('-')) return initialData.dias_selecionados[0];
+    // Se houver data sugerida (do calendário) e ela for hoje ou futura, usa-a; senão usa hoje
+    if (suggestedDate) {
+      const hoje = new Date();
+      const hojeIso = dataIsoLocal(hoje);
+      const sugeridaIso = dataIsoLocal(suggestedDate);
+      return sugeridaIso >= hojeIso ? sugeridaIso : hojeIso;
+    }
     return dataIsoLocal(new Date());
   });
 

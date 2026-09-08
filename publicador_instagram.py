@@ -426,11 +426,15 @@ def registrar_heartbeat(mensagem="Verificação executada", status="ATIVO"):
     _tocar_lock_daemon()
 
 
-def dormir_com_heartbeat(segundos, mensagem="Aguardando próximo agendamento"):
+def dormir_com_heartbeat(segundos, mensagem="Aguardando próximo agendamento", checar_novo=False):
     """Dorme em blocos curtos mantendo o heartbeat vivo.
 
     Sem isso o dashboard considera o daemon morto e dispara um novo processo — a origem
     das publicações duplicadas.
+
+    Se checar_novo=True, reavalia a agenda a cada passo: caso um agendamento mais
+    próximo tenha sido criado enquanto o daemon dormia, interrompe o sono mais cedo
+    (retorna True) para que o chamador recalcule ao invés de esperar o bloco inteiro.
     """
     restante = max(0.0, float(segundos))
     registrar_heartbeat(mensagem)
@@ -439,6 +443,14 @@ def dormir_com_heartbeat(segundos, mensagem="Aguardando próximo agendamento"):
         time.sleep(passo)
         restante -= passo
         registrar_heartbeat(mensagem)
+        if checar_novo:
+            try:
+                _, novos_segundos = calcular_proximo_agendamento()
+            except Exception:
+                novos_segundos = None
+            if novos_segundos is not None and novos_segundos < restante:
+                return True
+    return False
 
 
 try:
@@ -2109,7 +2121,7 @@ def run_daemon(interval_seconds=60):
 
                 if prox_dt is None:
                     logger.info(f"💤 Nenhum agendamento pendente. Próxima verificação em {MAX_IDLE_SLEEP//60} min.")
-                    dormir_com_heartbeat(MAX_IDLE_SLEEP, "Nenhum agendamento pendente")
+                    dormir_com_heartbeat(MAX_IDLE_SLEEP, "Nenhum agendamento pendente", checar_novo=True)
                     continue
 
                 # ── 2. Dorme até 30s antes do agendamento (em blocos, mantendo heartbeat)
@@ -2117,9 +2129,11 @@ def run_daemon(interval_seconds=60):
                     espera = min(segundos_ate_proximo, MAX_IDLE_SLEEP)
                     logger.info(f"⏰ Próximo agendamento em {prox_dt.strftime('%d/%m %H:%M')} "
                                 f"(~{int(segundos_ate_proximo//60)}min {int(segundos_ate_proximo%60)}s). Daemon em espera...")
-                    dormir_com_heartbeat(espera, f"Aguardando {prox_dt.strftime('%d/%m %H:%M')}")
-                    if espera < segundos_ate_proximo:
-                        continue  # ainda falta: recalcula (a agenda pode ter mudado)
+                    agenda_mudou = dormir_com_heartbeat(
+                        espera, f"Aguardando {prox_dt.strftime('%d/%m %H:%M')}", checar_novo=True
+                    )
+                    if agenda_mudou or espera < segundos_ate_proximo:
+                        continue  # agenda mudou ou ainda falta: recalcula
 
                 # ── 3. Janela de execução: verifica a cada 5s por até POLL_AFTER_DUE segundos
                 logger.info(f"🔔 Janela de publicação ativa para {prox_dt.strftime('%d/%m %H:%M')}. Verificando...")

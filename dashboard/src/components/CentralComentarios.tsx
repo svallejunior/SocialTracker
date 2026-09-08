@@ -12,6 +12,7 @@ interface PostComment {
   media_id: string;
   autor_username: string;
   autor_id?: string;
+  autor_foto?: string | null;
   texto: string;
   timestamp: string;
   like_count: number;
@@ -37,6 +38,7 @@ interface PostItem {
 interface CentralComentariosProps {
   selectedUsername: string;
   onRefreshStats?: () => void;
+  profiles?: any[];
 }
 
 const ATALHOS_RESPOSTAS_COMENTARIOS = [
@@ -47,7 +49,7 @@ const ATALHOS_RESPOSTAS_COMENTARIOS = [
   'Obrigada de coração! 💋'
 ];
 
-export default function CentralComentarios({ selectedUsername, onRefreshStats }: CentralComentariosProps) {
+export default function CentralComentarios({ selectedUsername, onRefreshStats, profiles = [] }: CentralComentariosProps) {
   const [posts, setPosts] = useState<PostItem[]>([]);
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
@@ -58,6 +60,14 @@ export default function CentralComentarios({ selectedUsername, onRefreshStats }:
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [authLink, setAuthLink] = useState<string | null>(null);
   const [successToast, setSuccessToast] = useState<string | null>(null);
+
+  // Busca foto da modelo/perfil cadastrado caso o autor do comentário seja um deles
+  const getAuthorPhoto = (autorUsername: string): string | null => {
+    if (!autorUsername) return null;
+    const clean = autorUsername.replace('@', '').toLowerCase().trim();
+    const found = profiles?.find(p => (p.username || '').replace('@', '').toLowerCase().trim() === clean);
+    return found?.foto_url || found?.foto_perfil || null;
+  };
 
   // Carrega posts e comentários da Meta API
   const carregarPostsComentarios = async (username: string) => {
@@ -732,14 +742,17 @@ export default function CentralComentarios({ selectedUsername, onRefreshStats }:
                     );
                     const currentReply = replyTextMap[com.id] || '';
 
+                    const isPendente = !isRespondido;
                     return (
                       <div
                         key={com.id}
                         style={{
-                          background: 'rgba(13, 17, 23, 0.6)',
+                          background: isRespondido
+                            ? 'rgba(13, 17, 23, 0.6)'
+                            : 'rgba(220, 38, 38, 0.07)',
                           border: isRespondido
                             ? (isDispensado ? '1px solid rgba(139, 148, 158, 0.2)' : '1px solid rgba(0, 255, 200, 0.2)')
-                            : '1px solid #30363D',
+                            : '1px solid rgba(220, 38, 38, 0.35)',
                           borderRadius: 14,
                           padding: '14px 16px',
                           display: 'flex',
@@ -750,92 +763,176 @@ export default function CentralComentarios({ selectedUsername, onRefreshStats }:
                         }}
                       >
                         {/* Header do Comentário */}
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <div style={{
-                              width: 32,
-                              height: 32,
-                              borderRadius: '50%',
-                              background: isDispensado
-                                ? 'linear-gradient(135deg, #484F58, #30363D)'
-                                : 'linear-gradient(135deg, #7100E2, #00F0FF)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontWeight: 800,
-                              fontSize: 12,
-                              color: 'white'
-                            }}>
-                              {com.autor_username.slice(0, 2).toUpperCase()}
-                            </div>
-                            <div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <span style={{ fontWeight: 700, fontSize: 13, color: 'white' }}>
-                                  @{com.autor_username}
-                                </span>
-                                {isRespondido && (
-                                  isDispensado ? (
-                                    <span style={{
-                                      background: 'rgba(139, 148, 158, 0.15)',
-                                      border: '1px solid rgba(139, 148, 158, 0.3)',
-                                      color: '#8B949E',
-                                      fontSize: 10,
-                                      fontWeight: 700,
-                                      padding: '1px 6px',
-                                      borderRadius: 10
-                                    }}>
-                                      ✓ Não respondido (Dispensado)
-                                    </span>
-                                  ) : (
-                                    <span style={{
-                                      background: 'rgba(0, 255, 200, 0.15)',
-                                      border: '1px solid rgba(0, 255, 200, 0.3)',
-                                      color: '#00FFC8',
-                                      fontSize: 10,
-                                      fontWeight: 700,
-                                      padding: '1px 6px',
-                                      borderRadius: 10
-                                    }}>
-                                      ✓ Respondido
-                                    </span>
-                                  )
-                                )}
-                              </div>
-                              <span style={{ fontSize: 10, color: '#8B949E' }}>
-                                {formatHoraRelativa(com.timestamp)}
-                              </span>
-                            </div>
-                          </div>
+                        {(() => {
+                          const cleanAuthor = (com.autor_username || 'usuario_instagram').replace('@', '').trim();
+                          const instagramProfileUrl = `https://www.instagram.com/${encodeURIComponent(cleanAuthor)}/`;
+                          const fotoAutor = com.autor_foto || getAuthorPhoto(cleanAuthor);
 
-                          {/* Botão de Curtir com 1 Clique */}
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              handleToggleLike(com);
-                            }}
-                            disabled={likingMap[com.id]}
-                            style={{
-                              background: isCurtido ? 'rgba(255, 0, 122, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-                              border: isCurtido ? '1px solid #FF007A' : '1px solid rgba(240, 246, 252, 0.1)',
-                              color: isCurtido ? '#FF007A' : '#8B949E',
-                              borderRadius: 20,
-                              padding: '5px 12px',
-                              fontSize: 12,
-                              fontWeight: 700,
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 6,
-                              transition: 'all 0.15s'
-                            }}
-                            title={isCurtido ? 'Você curtiu este comentário' : 'Curtir comentário com a conta da modelo'}
-                          >
-                            <Heart size={14} fill={isCurtido ? '#FF007A' : 'none'} />
-                            <span>{com.like_count > 0 ? com.like_count : (isCurtido ? 1 : 0)}</span>
-                          </button>
-                        </div>
+                          return (
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                {/* Avatar de quem comentou com link para o Instagram */}
+                                <a
+                                  href={instagramProfileUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  title={`Abrir perfil de @${cleanAuthor} no Instagram`}
+                                  style={{
+                                    textDecoration: 'none',
+                                    display: 'inline-flex',
+                                    borderRadius: '50%',
+                                    flexShrink: 0,
+                                    transition: 'all 0.2s ease',
+                                    cursor: 'pointer'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.transform = 'scale(1.12)';
+                                    e.currentTarget.style.boxShadow = '0 0 10px rgba(0, 240, 255, 0.45)';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.transform = 'scale(1)';
+                                    e.currentTarget.style.boxShadow = 'none';
+                                  }}
+                                >
+                                  {fotoAutor ? (
+                                    <img
+                                      src={fotoAutor}
+                                      alt={`@${cleanAuthor}`}
+                                      style={{
+                                        width: 32,
+                                        height: 32,
+                                        borderRadius: '50%',
+                                        objectFit: 'cover',
+                                        border: isDispensado ? '1px solid #484F58' : '1.5px solid #00F0FF',
+                                        display: 'block'
+                                      }}
+                                      onError={(e) => {
+                                        (e.target as HTMLElement).style.display = 'none';
+                                        const nextEl = (e.target as HTMLElement).nextElementSibling as HTMLElement;
+                                        if (nextEl) nextEl.style.display = 'flex';
+                                      }}
+                                    />
+                                  ) : null}
+                                  <div
+                                    style={{
+                                      width: 32,
+                                      height: 32,
+                                      borderRadius: '50%',
+                                      background: isDispensado
+                                        ? 'linear-gradient(135deg, #484F58, #30363D)'
+                                        : 'linear-gradient(135deg, #7100E2, #00F0FF)',
+                                      display: fotoAutor ? 'none' : 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      fontWeight: 800,
+                                      fontSize: 12,
+                                      color: 'white',
+                                      border: isDispensado ? '1px solid #484F58' : '1px solid rgba(0, 240, 255, 0.3)'
+                                    }}
+                                  >
+                                    {cleanAuthor.slice(0, 2).toUpperCase()}
+                                  </div>
+                                </a>
+
+                                <div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    {/* Nome do perfil com link para o Instagram */}
+                                    <a
+                                      href={instagramProfileUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={(e) => e.stopPropagation()}
+                                      title={`Abrir perfil de @${cleanAuthor} no Instagram`}
+                                      style={{
+                                        fontWeight: 700,
+                                        fontSize: 13,
+                                        color: 'white',
+                                        textDecoration: 'none',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: 4,
+                                        transition: 'color 0.15s ease',
+                                        cursor: 'pointer'
+                                      }}
+                                      onMouseEnter={(e) => {
+                                        e.currentTarget.style.color = '#00F0FF';
+                                        e.currentTarget.style.textDecoration = 'underline';
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        e.currentTarget.style.color = 'white';
+                                        e.currentTarget.style.textDecoration = 'none';
+                                      }}
+                                    >
+                                      <span>@{cleanAuthor}</span>
+                                      <ExternalLink size={11} style={{ opacity: 0.6 }} />
+                                    </a>
+
+                                    {isRespondido && (
+                                      isDispensado ? (
+                                        <span style={{
+                                          background: 'rgba(139, 148, 158, 0.15)',
+                                          border: '1px solid rgba(139, 148, 158, 0.3)',
+                                          color: '#8B949E',
+                                          fontSize: 10,
+                                          fontWeight: 700,
+                                          padding: '1px 6px',
+                                          borderRadius: 10
+                                        }}>
+                                          ✓ Não respondido (Dispensado)
+                                        </span>
+                                      ) : (
+                                        <span style={{
+                                          background: 'rgba(0, 255, 200, 0.15)',
+                                          border: '1px solid rgba(0, 255, 200, 0.3)',
+                                          color: '#00FFC8',
+                                          fontSize: 10,
+                                          fontWeight: 700,
+                                          padding: '1px 6px',
+                                          borderRadius: 10
+                                        }}>
+                                          ✓ Respondido
+                                        </span>
+                                      )
+                                    )}
+                                  </div>
+                                  <span style={{ fontSize: 10, color: '#8B949E' }}>
+                                    {formatHoraRelativa(com.timestamp)}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Botão de Curtir com 1 Clique */}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleToggleLike(com);
+                                }}
+                                disabled={likingMap[com.id]}
+                                style={{
+                                  background: isCurtido ? 'rgba(255, 0, 122, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                                  border: isCurtido ? '1px solid #FF007A' : '1px solid rgba(240, 246, 252, 0.1)',
+                                  color: isCurtido ? '#FF007A' : '#8B949E',
+                                  borderRadius: 20,
+                                  padding: '5px 12px',
+                                  fontSize: 12,
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 6,
+                                  transition: 'all 0.15s'
+                                }}
+                                title={isCurtido ? 'Você curtiu este comentário' : 'Curtir comentário com a conta da modelo'}
+                              >
+                                <Heart size={14} fill={isCurtido ? '#FF007A' : 'none'} />
+                                <span>{com.like_count > 0 ? com.like_count : (isCurtido ? 1 : 0)}</span>
+                              </button>
+                            </div>
+                          );
+                        })()}
 
                         {/* Texto do Comentário do Fã */}
                         <div style={{
@@ -859,7 +956,18 @@ export default function CentralComentarios({ selectedUsername, onRefreshStats }:
                             color: '#FFFFFF'
                           }}>
                             <div style={{ fontSize: 11, fontWeight: 700, color: '#00F0FF', marginBottom: 2 }}>
-                              Resposta de @{selectedUsername}:
+                              Resposta de{' '}
+                              <a
+                                href={`https://www.instagram.com/${encodeURIComponent(selectedUsername)}/`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ color: '#00F0FF', textDecoration: 'none' }}
+                                onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
+                                title={`Abrir perfil de @${selectedUsername} no Instagram`}
+                              >
+                                @{selectedUsername}
+                              </a>:
                             </div>
                             <div>{com.resposta_texto}</div>
                           </div>

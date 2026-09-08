@@ -120,11 +120,13 @@ export async function GET(request: NextRequest) {
       console.warn(`[comentarios] @${username}: usando token global — pode não ter permissão para esta conta.`);
     }
 
-    // Consulta a Meta Graph API para buscar as postagens e comentários recentes
-    const fields = 'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count,comments{id,text,from,timestamp,like_count,user_likes,replies{id,text,from,timestamp}}';
-    const url = `${GRAPH_API_BASE}/${creds.meta_account_id}/media?fields=${fields}&limit=12&access_token=${creds.access_token}`;
+    // Consulta a Meta Graph API para buscar as postagens (sem aninhar comentários —
+    // perfis com muito engajamento estouram o limite de complexidade da Graph API
+    // quando post+comments+replies vêm numa query só, mesmo com .limit() nos campos).
+    const mediaFields = 'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count';
+    const mediaUrl = `${GRAPH_API_BASE}/${creds.meta_account_id}/media?fields=${mediaFields}&limit=12&access_token=${creds.access_token}`;
 
-    const res = await fetch(url);
+    const res = await fetch(mediaUrl);
     const data = await res.json();
 
     if (!res.ok || data.error) {
@@ -143,7 +145,28 @@ export async function GET(request: NextRequest) {
       }, { status: 500 });
     }
 
-    const posts = data.data || [];
+    const mediaList = data.data || [];
+
+    // Busca os comentários (com respostas) de cada post em requisições separadas —
+    // fatia a consulta grande em uma menor por post, evitando o erro "reduce the
+    // amount of data" da Meta quando o perfil tem muitos comentários acumulados.
+    const commentFields = 'id,text,from,timestamp,like_count,user_likes,replies.limit(10){id,text,from,timestamp}';
+    const posts = await Promise.all(mediaList.map(async (p: any) => {
+      try {
+        const commentsUrl = `${GRAPH_API_BASE}/${p.id}/comments?fields=${commentFields}&limit=50&access_token=${creds.access_token}`;
+        const cRes = await fetch(commentsUrl);
+        const cData = await cRes.json();
+        if (!cRes.ok || cData.error) {
+          console.warn(`[comentarios] Falha ao buscar comentários do post ${p.id}: ${cData.error?.message}`);
+          return { ...p, comments: { data: [] } };
+        }
+        return { ...p, comments: { data: cData.data || [] } };
+      } catch (err) {
+        console.warn(`[comentarios] Erro de rede ao buscar comentários do post ${p.id}:`, err);
+        return { ...p, comments: { data: [] } };
+      }
+    }));
+
     let comentariosSalvos = 0;
 
     // Processa os posts e comentários, salvando no SQLite

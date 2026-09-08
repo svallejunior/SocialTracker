@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useState, useRef } from 'react';
-import { X, Camera, Image as ImageIcon, Clock, Calendar as CalendarIcon, CheckCircle2, Loader2 } from 'lucide-react';
+import { X, Camera, Image as ImageIcon, Clock, Calendar as CalendarIcon, CheckCircle2, Loader2, Plus } from 'lucide-react';
+
+const MAX_FOTOS_CARROSSEL = 10;
 
 interface PerfilAlvo {
   username: string;
@@ -33,8 +35,8 @@ function horaDaquiPoucoLocal(): string {
 
 export default function AgendarMobileModal({ perfil, onClose, onCreated }: Props) {
   const [tipo, setTipo] = useState<'FEED' | 'STORIES'>('FEED');
-  const [file, setFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [arquivos, setArquivos] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<string[]>([]);
   const [legenda, setLegenda] = useState('');
   const [data, setData] = useState(hojeIsoLocal());
   const [hora, setHora] = useState(horaDaquiPoucoLocal());
@@ -42,16 +44,29 @@ export default function AgendarMobileModal({ perfil, onClose, onCreated }: Props
   const [erro, setErro] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const escolherArquivo = (f: File | null) => {
-    setFile(f);
+  const escolherArquivos = (lista: FileList | null) => {
+    if (!lista || lista.length === 0) return;
     setErro('');
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setPreviewUrl(f ? URL.createObjectURL(f) : null);
+    const novos = Array.from(lista);
+
+    // Stories só publica a primeira foto — mantém seleção única para não
+    // enganar o usuário com fotos extras que seriam ignoradas.
+    const combinados = tipo === 'STORIES' ? novos.slice(0, 1) : [...arquivos, ...novos].slice(0, MAX_FOTOS_CARROSSEL);
+
+    previews.forEach((url) => URL.revokeObjectURL(url));
+    setArquivos(combinados);
+    setPreviews(combinados.map((f) => URL.createObjectURL(f)));
+  };
+
+  const removerArquivo = (idx: number) => {
+    URL.revokeObjectURL(previews[idx]);
+    setArquivos((prev) => prev.filter((_, i) => i !== idx));
+    setPreviews((prev) => prev.filter((_, i) => i !== idx));
   };
 
   const handleSubmit = async () => {
-    if (!file) {
-      setErro('Escolha uma foto antes de agendar.');
+    if (arquivos.length === 0) {
+      setErro('Escolha ao menos uma foto antes de agendar.');
       return;
     }
     if (!data || !hora) {
@@ -69,13 +84,13 @@ export default function AgendarMobileModal({ perfil, onClose, onCreated }: Props
     try {
       const formData = new FormData();
       formData.append('metaAccountId', perfil.meta_account_id);
-      formData.append('files', file);
+      arquivos.forEach((f) => formData.append('files', f));
 
       const resUpload = await fetch('/api/automacao/upload', { method: 'POST', body: formData });
       const dataUpload = await resUpload.json();
 
-      if (!dataUpload.success || !dataUpload.files?.[0]) {
-        throw new Error(dataUpload.error || 'Falha ao subir a foto.');
+      if (!dataUpload.success || !dataUpload.files?.length) {
+        throw new Error(dataUpload.error || 'Falha ao subir as fotos.');
       }
 
       const resAg = await fetch('/api/automacao/agendamentos', {
@@ -85,7 +100,7 @@ export default function AgendarMobileModal({ perfil, onClose, onCreated }: Props
           username: perfil.username,
           meta_account_id: perfil.meta_account_id,
           tipo_postagem: tipo,
-          arquivos: [dataUpload.files[0]],
+          arquivos: dataUpload.files,
           tipo_agendamento: 'DATA_ESPECIFICA',
           data_especifica: data,
           hora_fixa: hora,
@@ -168,7 +183,15 @@ export default function AgendarMobileModal({ perfil, onClose, onCreated }: Props
               {(['FEED', 'STORIES'] as const).map((t) => (
                 <button
                   key={t}
-                  onClick={() => setTipo(t)}
+                  onClick={() => {
+                    setTipo(t);
+                    // Stories só publica a primeira foto — trunca a seleção ao trocar.
+                    if (t === 'STORIES' && arquivos.length > 1) {
+                      previews.slice(1).forEach((url) => URL.revokeObjectURL(url));
+                      setArquivos((prev) => prev.slice(0, 1));
+                      setPreviews((prev) => prev.slice(0, 1));
+                    }
+                  }}
                   disabled={etapa === 'enviando'}
                   style={{
                     flex: 1,
@@ -187,48 +210,106 @@ export default function AgendarMobileModal({ perfil, onClose, onCreated }: Props
               ))}
             </div>
 
-            {/* Seletor de foto */}
+            {/* Seletor de foto(s) */}
             <input
               ref={inputRef}
               type="file"
               accept="image/*"
+              multiple={tipo === 'FEED'}
               style={{ display: 'none' }}
-              onChange={(e) => escolherArquivo(e.target.files?.[0] || null)}
-            />
-            <button
-              onClick={() => inputRef.current?.click()}
-              disabled={etapa === 'enviando'}
-              style={{
-                width: '100%',
-                borderRadius: '12px',
-                border: '1px dashed rgba(0, 240, 255, 0.4)',
-                background: 'rgba(0, 240, 255, 0.05)',
-                padding: previewUrl ? '0' : '24px 12px',
-                marginBottom: '14px',
-                cursor: 'pointer',
-                overflow: 'hidden'
+              onChange={(e) => {
+                escolherArquivos(e.target.files);
+                e.target.value = '';
               }}
-            >
-              {previewUrl ? (
-                <img src={previewUrl} alt="Preview" style={{ width: '100%', maxHeight: '260px', objectFit: 'cover', display: 'block', borderRadius: '11px' }} />
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', color: '#00F0FF' }}>
-                  <Camera size={26} />
-                  <span style={{ fontSize: '12px', fontWeight: 700 }}>Tirar foto ou escolher da galeria</span>
-                </div>
-              )}
-            </button>
-            {previewUrl && (
+            />
+
+            {previews.length === 0 ? (
               <button
                 onClick={() => inputRef.current?.click()}
                 disabled={etapa === 'enviando'}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: '5px', marginTop: '-8px', marginBottom: '14px',
-                  background: 'none', border: 'none', color: '#8B949E', fontSize: '11px', fontWeight: 600, cursor: 'pointer'
+                  width: '100%',
+                  borderRadius: '12px',
+                  border: '1px dashed rgba(0, 240, 255, 0.4)',
+                  background: 'rgba(0, 240, 255, 0.05)',
+                  padding: '24px 12px',
+                  marginBottom: '14px',
+                  cursor: 'pointer'
                 }}
               >
-                <ImageIcon size={12} /> Trocar foto
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', color: '#00F0FF' }}>
+                  <Camera size={26} />
+                  <span style={{ fontSize: '12px', fontWeight: 700 }}>
+                    {tipo === 'FEED' ? 'Tirar foto ou escolher da galeria (pode selecionar várias)' : 'Tirar foto ou escolher da galeria'}
+                  </span>
+                </div>
               </button>
+            ) : (
+              <>
+                <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', marginBottom: '8px', paddingBottom: '2px' }}>
+                  {previews.map((url, idx) => (
+                    <div key={url} style={{ position: 'relative', flexShrink: 0, width: '84px', height: '84px' }}>
+                      <img
+                        src={url}
+                        alt={`Foto ${idx + 1}`}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '10px', display: 'block' }}
+                      />
+                      {tipo === 'FEED' && (
+                        <span style={{
+                          position: 'absolute', top: '4px', left: '4px', background: 'rgba(0,0,0,0.6)',
+                          color: '#F3F4F6', fontSize: '10px', fontWeight: 800, borderRadius: '5px', padding: '1px 5px'
+                        }}>
+                          {idx + 1}
+                        </span>
+                      )}
+                      <button
+                        onClick={() => removerArquivo(idx)}
+                        disabled={etapa === 'enviando'}
+                        aria-label="Remover foto"
+                        style={{
+                          position: 'absolute', top: '4px', right: '4px', width: '20px', height: '20px',
+                          borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,0.65)', color: '#FFFFFF',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
+                        }}
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                  {tipo === 'FEED' && previews.length < MAX_FOTOS_CARROSSEL && (
+                    <button
+                      onClick={() => inputRef.current?.click()}
+                      disabled={etapa === 'enviando'}
+                      style={{
+                        flexShrink: 0, width: '84px', height: '84px', borderRadius: '10px',
+                        border: '1px dashed rgba(0, 240, 255, 0.4)', background: 'rgba(0, 240, 255, 0.05)',
+                        color: '#00F0FF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
+                      }}
+                    >
+                      <Plus size={22} />
+                    </button>
+                  )}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+                  <span style={{ fontSize: '11px', color: '#8B949E', fontWeight: 600 }}>
+                    {tipo === 'FEED'
+                      ? `${previews.length} ${previews.length === 1 ? 'foto selecionada' : 'fotos selecionadas (carrossel)'}`
+                      : '1 foto selecionada'}
+                  </span>
+                  {tipo === 'STORIES' && (
+                    <button
+                      onClick={() => inputRef.current?.click()}
+                      disabled={etapa === 'enviando'}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '5px',
+                        background: 'none', border: 'none', color: '#8B949E', fontSize: '11px', fontWeight: 600, cursor: 'pointer'
+                      }}
+                    >
+                      <ImageIcon size={12} /> Trocar foto
+                    </button>
+                  )}
+                </div>
+              </>
             )}
 
             {/* Legenda */}

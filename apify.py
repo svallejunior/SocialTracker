@@ -33,7 +33,7 @@ def consultar_perfil_instagram(username):
         run = client.actor("apify/instagram-scraper").call(run_input=run_input)
 
         # Pega o resultado do banco de dados temporário do Apify
-        for item in client.dataset(run["defaultDatasetId"]).iterate_items():
+        for item in client.dataset(run.default_dataset_id).iterate_items():
             # Aqui temos os dados do perfil
             dados_simplificados = {
                 "username": item.get("username"),

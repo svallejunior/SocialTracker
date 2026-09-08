@@ -232,7 +232,7 @@ def buscar_reels_apify(username, limit=5):
             timeout_secs=60
         )
 
-        dataset_items = list(client.dataset(run["defaultDatasetId"]).iterate_items())
+        dataset_items = list(client.dataset(run.default_dataset_id).iterate_items())
         reels_parsed = []
         for item in dataset_items:
             if item.get("error") or not (item.get("id") or item.get("shortCode") or item.get("code") or item.get("url")):
@@ -271,7 +271,7 @@ def buscar_posts_apify(username, limit=5):
             timeout_secs=60
         )
 
-        dataset_items = list(client.dataset(run["defaultDatasetId"]).iterate_items())
+        dataset_items = list(client.dataset(run.default_dataset_id).iterate_items())
         for item in dataset_items:
             latest_posts = item.get("latestPosts") or []
             if latest_posts:

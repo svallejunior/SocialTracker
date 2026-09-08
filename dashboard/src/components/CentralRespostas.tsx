@@ -654,6 +654,7 @@ export default function CentralRespostas({ profiles = [], onRefresh }: CentralRe
         <CentralComentarios
           selectedUsername={selectedUsername}
           onRefreshStats={onRefresh}
+          profiles={profiles}
         />
       ) : (
         /* ─── 2. SPLIT SCREEN: CONVERSAS À ESQUERDA + CHAT À DIREITA ─── */
@@ -767,8 +768,14 @@ export default function CentralRespostas({ profiles = [], onRefresh }: CentralRe
                     style={{
                       background: isSelected
                         ? 'linear-gradient(135deg, rgba(113, 0, 226, 0.25), rgba(0, 240, 255, 0.12))'
-                        : 'transparent',
-                      border: isSelected ? '1px solid rgba(0, 240, 255, 0.3)' : '1px solid transparent',
+                        : temPendencia
+                          ? 'rgba(220, 38, 38, 0.10)'
+                          : 'transparent',
+                      border: isSelected
+                        ? '1px solid rgba(0, 240, 255, 0.3)'
+                        : temPendencia
+                          ? '1px solid rgba(220, 38, 38, 0.30)'
+                          : '1px solid transparent',
                       borderRadius: 12,
                       padding: '12px 14px',
                       marginBottom: 4,
@@ -779,10 +786,14 @@ export default function CentralRespostas({ profiles = [], onRefresh }: CentralRe
                       transition: 'all 0.15s ease'
                     }}
                     onMouseEnter={e => {
-                      if (!isSelected) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+                      if (!isSelected) e.currentTarget.style.background = temPendencia
+                        ? 'rgba(220, 38, 38, 0.18)'
+                        : 'rgba(255, 255, 255, 0.04)';
                     }}
                     onMouseLeave={e => {
-                      if (!isSelected) e.currentTarget.style.background = 'transparent';
+                      if (!isSelected) e.currentTarget.style.background = temPendencia
+                        ? 'rgba(220, 38, 38, 0.10)'
+                        : 'transparent';
                     }}
                   >
                     {/* Avatar do Fã */}
@@ -876,21 +887,43 @@ export default function CentralRespostas({ profiles = [], onRefresh }: CentralRe
                 background: 'rgba(13, 17, 23, 0.4)'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #30363D, #161B22)',
-                    border: '1.5px solid #00F0FF',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontWeight: 800,
-                    fontSize: 14,
-                    color: '#00F0FF'
-                  }}>
-                    {selectedRemetente.slice(0, 2).toUpperCase()}
-                  </div>
+                  <a
+                    href={`https://instagram.com/${encodeURIComponent(selectedRemetente)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={`Abrir perfil de @${selectedRemetente} no Instagram`}
+                    style={{
+                      textDecoration: 'none',
+                      display: 'block',
+                      borderRadius: '50%',
+                      transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+                      cursor: 'pointer'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'scale(1.08)';
+                      e.currentTarget.style.boxShadow = '0 0 12px rgba(0, 240, 255, 0.4)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'scale(1)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                  >
+                    <div style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: '50%',
+                      background: 'linear-gradient(135deg, #30363D, #161B22)',
+                      border: '1.5px solid #00F0FF',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 800,
+                      fontSize: 14,
+                      color: '#00F0FF'
+                    }}>
+                      {selectedRemetente.slice(0, 2).toUpperCase()}
+                    </div>
+                  </a>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontWeight: 800, fontSize: 15, color: 'white' }}>

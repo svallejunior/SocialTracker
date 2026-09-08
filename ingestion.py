@@ -267,7 +267,7 @@ def consultar_apify(username):
             )
 
             itens = list(
-                client.dataset(run["defaultDatasetId"]).iterate_items()
+                client.dataset(run.default_dataset_id).iterate_items()
             )
 
             if not itens:
