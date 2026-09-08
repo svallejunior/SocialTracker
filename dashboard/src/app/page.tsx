@@ -4575,9 +4575,9 @@ export default function Dashboard() {
           ==================================================== */}
       {activeTab === 'posts' && (
         <div className="posts-table-box">
-          <div className="table-header-filters">
+          <div className="table-header-filters" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
 
-            {/* Box: Título + última atualização + botão Atualizar Feed */}
+            {/* Box: Título + última atualização + botão Atualizar Feed — ocupa a linha toda */}
             <div
               style={{
                 display: 'flex',
@@ -4645,8 +4645,45 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Filtros e Botões de Ação */}
+            {/* Filtros e Botões de Ação — ordem: data, busca perfil, lista perfil, tipo */}
             <div className="filters-group" style={{ alignItems: 'center' }}>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <input
+                  type="date"
+                  className="filter-input"
+                  title="Data Inicial"
+                  value={startDate}
+                  onChange={(e) => { setStartDate(e.target.value); setPostsPage(1); }}
+                  style={{ width: 'auto', fontSize: '12px' }}
+                />
+                <span style={{ color: '#8B949E', fontSize: '12px' }}>até</span>
+                <input
+                  type="date"
+                  className="filter-input"
+                  title="Data Final"
+                  value={endDate}
+                  onChange={(e) => { setEndDate(e.target.value); setPostsPage(1); }}
+                  style={{ width: 'auto', fontSize: '12px' }}
+                />
+                {(startDate || endDate) && (
+                  <button
+                    onClick={() => { setStartDate(''); setEndDate(''); setPostsPage(1); }}
+                    style={{
+                      background: 'transparent',
+                      border: '1px solid #30363D',
+                      color: '#8B949E',
+                      borderRadius: '6px',
+                      padding: '4px 8px',
+                      fontSize: '11px',
+                      cursor: 'pointer'
+                    }}
+                    title="Limpar filtro de data"
+                  >
+                    ✕ Limpar Datas
+                  </button>
+                )}
+              </div>
 
               <input
                 type="text"
@@ -4719,43 +4756,6 @@ export default function Dashboard() {
                     </button>
                   );
                 })}
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <input
-                  type="date"
-                  className="filter-input"
-                  title="Data Inicial"
-                  value={startDate}
-                  onChange={(e) => { setStartDate(e.target.value); setPostsPage(1); }}
-                  style={{ width: 'auto', fontSize: '12px' }}
-                />
-                <span style={{ color: '#8B949E', fontSize: '12px' }}>até</span>
-                <input
-                  type="date"
-                  className="filter-input"
-                  title="Data Final"
-                  value={endDate}
-                  onChange={(e) => { setEndDate(e.target.value); setPostsPage(1); }}
-                  style={{ width: 'auto', fontSize: '12px' }}
-                />
-                {(startDate || endDate) && (
-                  <button
-                    onClick={() => { setStartDate(''); setEndDate(''); setPostsPage(1); }}
-                    style={{
-                      background: 'transparent',
-                      border: '1px solid #30363D',
-                      color: '#8B949E',
-                      borderRadius: '6px',
-                      padding: '4px 8px',
-                      fontSize: '11px',
-                      cursor: 'pointer'
-                    }}
-                    title="Limpar filtro de data"
-                  >
-                    ✕ Limpar Datas
-                  </button>
-                )}
               </div>
             </div>
           </div>
