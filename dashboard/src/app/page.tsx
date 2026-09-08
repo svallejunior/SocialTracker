@@ -1389,7 +1389,7 @@ export default function Dashboard() {
   const [anomaliasCount, setAnomaliasCount] = useState<number>(0);
   const [selectedProfile, setSelectedProfile] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedFormat, setSelectedFormat] = useState('Todos');
+  const [selectedFormats, setSelectedFormats] = useState<Set<string>>(new Set(['Imagem', 'Carrossel', 'Reels']));
   const [selectedProfileFilter, setSelectedProfileFilter] = useState('Todos');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -2376,7 +2376,7 @@ export default function Dashboard() {
       (post.legenda && post.legenda.toLowerCase().includes(searchQuery.toLowerCase())) ||
       post.username.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesFormat = selectedFormat === 'Todos' || post.formato === selectedFormat;
+    const matchesFormat = selectedFormats.size === 0 || selectedFormats.has(post.formato);
 
     const matchesProfile = selectedProfileFilter === 'Todos' || post.username === selectedProfileFilter;
 
@@ -2385,7 +2385,7 @@ export default function Dashboard() {
     const matchesDate = (!startDate || dateLimit >= startDate) && (!endDate || dateLimit <= endDate);
 
     return matchesSearch && matchesFormat && matchesProfile && matchesDate;
-  }), [posts, searchQuery, selectedFormat, selectedProfileFilter, startDate, endDate]);
+  }), [posts, searchQuery, selectedFormats, selectedProfileFilter, startDate, endDate]);
 
   // Ordenar posts para a tabela
   const sortedPosts = useMemo(() => [...filteredPosts].sort((a, b) => {
@@ -4576,27 +4576,32 @@ export default function Dashboard() {
       {activeTab === 'posts' && (
         <div className="posts-table-box">
           <div className="table-header-filters">
-            <div>
-              <h2 style={{ fontSize: '20px', fontWeight: '800' }}>Tabela de Auditoria Social</h2>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginTop: '4px' }}>
-                Todos os posts coletados e calculados. Clique nos títulos para ordenar.
-              </p>
-            </div>
 
-            {/* Filtros e Botões de Ação */}
-            <div className="filters-group" style={{ alignItems: 'center' }}>
-              {/* Card: horário da última atualização + botão de atualizar feed */}
-              <div
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  padding: '6px 8px 6px 14px',
-                  borderRadius: '10px',
-                  background: 'var(--background-card)',
-                  border: '1px solid var(--border-color)'
-                }}
-              >
+            {/* Box: Título + última atualização + botão Atualizar Feed */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '16px',
+                padding: '10px 16px 10px 20px',
+                borderRadius: '12px',
+                background: 'var(--background-card)',
+                border: '1px solid var(--border-color)',
+                width: '100%',
+                boxSizing: 'border-box'
+              }}
+            >
+              {/* Título + subtítulo */}
+              <div>
+                <h2 style={{ fontSize: '18px', fontWeight: '800', margin: 0 }}>Tabela de Auditoria Social</h2>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginTop: '2px', marginBottom: 0 }}>
+                  Todos os posts coletados e calculados. Clique nos títulos para ordenar.
+                </p>
+              </div>
+
+              {/* Última atualização + botão */}
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: '6px',
                   color: 'var(--text-secondary)', fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap'
@@ -4638,6 +4643,10 @@ export default function Dashboard() {
                   {refreshingFeed ? 'ATUALIZANDO...' : 'ATUALIZAR FEED'}
                 </button>
               </div>
+            </div>
+
+            {/* Filtros e Botões de Ação */}
+            <div className="filters-group" style={{ alignItems: 'center' }}>
 
               <input
                 type="text"
@@ -4668,18 +4677,26 @@ export default function Dashboard() {
                   ))}
               </select>
 
+              {/* Botões de formato: multi-select, todos ativos por padrão */}
               <div style={{ display: 'flex', gap: '6px' }}>
                 {([
                   { formato: 'Imagem', Icon: ImageIcon, cor: '#8B949E', bg: 'rgba(139, 148, 158, 0.15)', borda: 'rgba(139, 148, 158, 0.4)' },
                   { formato: 'Carrossel', Icon: LayersIcon, cor: '#7100E2', bg: 'rgba(113, 0, 226, 0.15)', borda: 'rgba(113, 0, 226, 0.5)' },
                   { formato: 'Reels', Icon: VideoIcon, cor: '#00F0FF', bg: 'rgba(0, 240, 255, 0.12)', borda: 'rgba(0, 240, 255, 0.4)' }
                 ] as const).map(({ formato, Icon, cor, bg, borda }) => {
-                  const isActive = selectedFormat === formato;
+                  const isActive = selectedFormats.has(formato);
                   return (
                     <button
                       key={formato}
-                      onClick={() => { setSelectedFormat(isActive ? 'Todos' : formato); setPostsPage(1); }}
-                      title={formato}
+                      onClick={() => {
+                        setSelectedFormats(prev => {
+                          const next = new Set(prev);
+                          if (next.has(formato)) { next.delete(formato); } else { next.add(formato); }
+                          return next;
+                        });
+                        setPostsPage(1);
+                      }}
+                      title={isActive ? `Ocultar ${formato}` : `Mostrar ${formato}`}
                       style={{
                         display: 'inline-flex',
                         alignItems: 'center',
@@ -4693,7 +4710,8 @@ export default function Dashboard() {
                         fontWeight: 700,
                         cursor: 'pointer',
                         transition: 'all 0.15s ease',
-                        whiteSpace: 'nowrap'
+                        whiteSpace: 'nowrap',
+                        opacity: isActive ? 1 : 0.45
                       }}
                     >
                       <Icon size={14} />
