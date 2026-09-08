@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
         SUM(CASE WHEN h.tipo_janela = 'ADS' THEN 1 ELSE 0 END) as ads_count,
         SUM(CASE WHEN h.tipo_janela IN ('ORGANICO', 'VIRAL_ORGANICO') OR h.tipo_janela IS NULL THEN 1 ELSE 0 END) as organicos_count,
         COALESCE(pm.primeira_postagem, cp.inicio) as primeira_postagem,
-        COALESCE(cp.foto_url, '') as foto_url,
+        COALESCE(NULLIF(pm.foto_perfil_meta, ''), NULLIF(cp.foto_url, ''), '') as foto_url,
         COALESCE(pm.meu_perfil, 0) as meu_perfil,
         MAX(h.data_coleta) as ultima_coleta,
         COALESCE(com.total_comentarios, 0) as comentarios_pendentes,
@@ -131,7 +131,7 @@ export async function GET(request: NextRequest) {
         h.data_coleta_anterior,
         COALESCE(h.tipo_janela, 'ORGANICO') AS tipo_janela,
         COALESCE(h.revisado_manualmente, 0) AS revisado_manualmente,
-        COALESCE(cp.foto_url, '') as foto_url,
+        COALESCE(NULLIF(pm.foto_perfil_meta, ''), NULLIF(cp.foto_url, ''), '') as foto_url,
         COALESCE(pm.primeira_postagem, cp.inicio) as primeira_postagem,
         COALESCE(pm.meu_perfil, 0) as meu_perfil
       FROM historico_com_anterior h
