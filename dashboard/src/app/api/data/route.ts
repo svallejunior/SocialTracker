@@ -388,13 +388,20 @@ export async function PUT(request: NextRequest) {
     // Gravação manual de seguidores no histórico
     if (seguidores !== undefined && seguidores !== null) {
       const dataColeta = formatToBrazilDateTime(new Date());
+      const hojePrefix = dataColeta.split(' ')[0]; // YYYY-MM-DD
 
       const inativoVal = inativo !== undefined && inativo !== null ? (inativo ? 1 : 0) : 0;
 
-      // Busca últimos valores de seguindo, total_posts e seguidores para calcular variação
+      // Checa se já existia registro no mesmo dia antes de gravar
+      const regHoje = await db.get(
+        `SELECT id, tipo_janela, revisado_manualmente FROM perfis_historico WHERE LOWER(username) = ? AND (data_coleta LIKE ? OR data_coleta = ?) ORDER BY data_coleta DESC, id DESC LIMIT 1`,
+        [cleanUsername, `${hojePrefix}%`, hojePrefix]
+      );
+
+      // Busca último valor anterior ao dia de hoje para calcular variação real da janela
       const lastRow = await db.get(
-        `SELECT seguindo, total_posts, seguidores FROM perfis_historico WHERE LOWER(username) = ? AND inativo = 0 ORDER BY data_coleta DESC LIMIT 1`,
-        [cleanUsername]
+        `SELECT seguindo, total_posts, seguidores, tipo_janela, revisado_manualmente FROM perfis_historico WHERE LOWER(username) = ? AND inativo = 0 AND data_coleta NOT LIKE ? ORDER BY data_coleta DESC LIMIT 1`,
+        [cleanUsername, `${hojePrefix}%`]
       );
       const seguindoVal = lastRow ? (lastRow.seguindo || 0) : 0;
       const postsVal = lastRow ? (lastRow.total_posts || 0) : 0;
@@ -406,15 +413,35 @@ export async function PUT(request: NextRequest) {
       const pctDeltaS = segAnterior > 0 ? (deltaS / segAnterior) * 100 : 0;
       const precisaAnalise = segAnterior > 0 && pctDeltaS > 2.0 && deltaS > 10;
 
-      // Se fora dos parâmetros: pendente de revisão (ADS ou viral ainda desconhecido)
-      // Se dentro dos parâmetros (ou primeira coleta): auto-validado como ORGÂNICO
-      const tipoJanelaInicial = precisaAnalise ? 'ADS' : 'ORGANICO';
-      const revisadoInicial = precisaAnalise ? 0 : 1;
+      let tipoJanelaInicial = 'ORGANICO';
+      let revisadoInicial = 1;
 
-      await db.run(
-        `INSERT INTO perfis_historico (username, data_coleta, seguidores, seguindo, total_posts, inativo, tipo_janela, revisado_manualmente) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [cleanUsername, dataColeta, Number(seguidores), seguindoVal, postsVal, inativoVal, tipoJanelaInicial, revisadoInicial]
-      );
+      // 1. Se já havia registro no dia de análise e já estava validado/classificado, preserva!
+      if (regHoje && (regHoje.revisado_manualmente === 1 || ['VIRAL_ORGANICO', 'ADS', 'IGNORAR'].includes(regHoje.tipo_janela))) {
+        tipoJanelaInicial = regHoje.tipo_janela;
+        revisadoInicial = 1;
+      } else if (precisaAnalise) {
+        // 2. Se a conta já estava em viralização confirmada na leitura anterior, herda VIRAL_ORGANICO e valida automaticamente
+        if (lastRow?.tipo_janela === 'VIRAL_ORGANICO' && lastRow?.revisado_manualmente === 1) {
+          tipoJanelaInicial = 'VIRAL_ORGANICO';
+          revisadoInicial = 1;
+        } else {
+          tipoJanelaInicial = 'ADS';
+          revisadoInicial = 0;
+        }
+      }
+
+      if (regHoje) {
+        await db.run(
+          `UPDATE perfis_historico SET data_coleta = ?, seguidores = ?, tipo_janela = ?, revisado_manualmente = ? WHERE id = ?`,
+          [dataColeta, Number(seguidores), tipoJanelaInicial, revisadoInicial, regHoje.id]
+        );
+      } else {
+        await db.run(
+          `INSERT INTO perfis_historico (username, data_coleta, seguidores, seguindo, total_posts, inativo, tipo_janela, revisado_manualmente) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [cleanUsername, dataColeta, Number(seguidores), seguindoVal, postsVal, inativoVal, tipoJanelaInicial, revisadoInicial]
+        );
+      }
     }
 
     // Atualização de propriedades do perfil

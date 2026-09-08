@@ -67,16 +67,21 @@ LIMIAR_DELTA_S_MINIMO = 10         # ΔS mínimo para acionar análise
 LIMIAR_PERCENTUAL_MINIMO = 2.0     # %ΔS mínimo para acionar análise (> 2%)
 
 
-def avaliar_anomalia(cursor, registro_id, username, seguidores_atual, posts_atual):
+def avaliar_anomalia(cursor, registro_id, username, seguidores_atual, posts_atual, ja_validado_hoje=False):
     """
     Avalia se a coleta recém-inserida requer análise manual:
+    - Se já validado/classificado no mesmo dia de análise, mantém a classificação e validação prévias.
+    - Se a leitura anterior válida já era VIRAL_ORGANICO e validada, mantém VIRAL_ORGANICO e valida automaticamente.
     - Variação de seguidores > 2% E > 10 seguidores: marcada como 'ADS' e revisado_manualmente = 0 (pendente de análise).
     - Dentro do parâmetro normal (<= 2% ou <= 10 seg): marcada como 'ORGANICO' e revisado_manualmente = 1 (validado automaticamente).
     """
+    if ja_validado_hoje:
+        return
+
     # Busca o registro anterior mais recente (excluindo o recém-inserido e inativos)
     cursor.execute("""
-        SELECT seguidores, total_posts FROM perfis_historico
-        WHERE username = ? AND id < ? AND inativo = 0
+        SELECT seguidores, total_posts, tipo_janela, revisado_manualmente FROM perfis_historico
+        WHERE LOWER(username) = LOWER(?) AND id < ? AND inativo = 0
         ORDER BY data_coleta DESC, id DESC
         LIMIT 1
     """, (username, registro_id))
@@ -91,9 +96,10 @@ def avaliar_anomalia(cursor, registro_id, username, seguidores_atual, posts_atua
         """, (registro_id,))
         return
 
-    seg_anterior, posts_anterior = anterior
-    seg_anterior = seg_anterior or 0
-    posts_anterior = posts_anterior or 0
+    seg_anterior = anterior[0] or 0
+    posts_anterior = anterior[1] or 0
+    tipo_janela_ant = anterior[2] if len(anterior) > 2 else None
+    revisado_ant = anterior[3] if len(anterior) > 3 else None
 
     delta_s = seguidores_atual - seg_anterior
     delta_posts = posts_atual - posts_anterior
@@ -102,12 +108,21 @@ def avaliar_anomalia(cursor, registro_id, username, seguidores_atual, posts_atua
     precisa_analise = (pct_delta_s > LIMIAR_PERCENTUAL_MINIMO) and (delta_s > LIMIAR_DELTA_S_MINIMO)
 
     if precisa_analise:
-        cursor.execute("""
-            UPDATE perfis_historico
-            SET tipo_janela = 'ADS', revisado_manualmente = 0
-            WHERE id = ?
-        """, (registro_id,))
-        print(f"  🔴 Registro #{registro_id} (@{username}) com variação > 2% e > 10 seg (ΔS={delta_s:+d}, %ΔS={pct_delta_s:.1f}%) → enviado para análise/validação.")
+        # Se a conta já estava em viralização confirmada na leitura anterior, herda VIRAL_ORGANICO e valida automaticamente
+        if tipo_janela_ant == 'VIRAL_ORGANICO' and revisado_ant == 1:
+            cursor.execute("""
+                UPDATE perfis_historico
+                SET tipo_janela = 'VIRAL_ORGANICO', revisado_manualmente = 1
+                WHERE id = ?
+            """, (registro_id,))
+            print(f"  🔥 Registro #{registro_id} (@{username}): conta em viralização ativa (anterior VIRAL_ORGANICO) → validado como VIRAL_ORGANICO.")
+        else:
+            cursor.execute("""
+                UPDATE perfis_historico
+                SET tipo_janela = 'ADS', revisado_manualmente = 0
+                WHERE id = ?
+            """, (registro_id,))
+            print(f"  🔴 Registro #{registro_id} (@{username}) com variação > 2% e > 10 seg (ΔS={delta_s:+d}, %ΔS={pct_delta_s:.1f}%) → enviado para análise/validação.")
     else:
         cursor.execute("""
             UPDATE perfis_historico
@@ -140,6 +155,30 @@ def salvar_no_banco(username, dados, inativo=0):
     following = dados.get('following', 0) if dados else 0
     posts = dados.get('posts', 0) if dados else 0
 
+    hoje_prefix = agora_brasil().strftime('%Y-%m-%d')
+    # Checa se já havia registro no mesmo dia para substituir e preservar validação
+    cursor.execute("""
+        SELECT id, tipo_janela, revisado_manualmente
+        FROM perfis_historico
+        WHERE LOWER(username) = LOWER(?) AND (data_coleta LIKE ? OR data_coleta = ?)
+        ORDER BY data_coleta DESC, id DESC LIMIT 1
+    """, (username, f"{hoje_prefix}%", hoje_prefix))
+    reg_hoje = cursor.fetchone()
+
+    tipo_janela_inicial = 'ORGANICO'
+    revisado_inicial = 1
+    ja_validado_hoje = False
+
+    if reg_hoje:
+        tipo_janela_ant = reg_hoje[1]
+        revisado_ant = reg_hoje[2]
+        if revisado_ant == 1 or tipo_janela_ant in ('VIRAL_ORGANICO', 'ADS', 'IGNORAR'):
+            tipo_janela_inicial = tipo_janela_ant
+            revisado_inicial = 1
+            ja_validado_hoje = True
+        # Remove o registro anterior do mesmo dia para manter apenas o dado mais recente
+        cursor.execute("DELETE FROM perfis_historico WHERE id = ?", (reg_hoje[0],))
+
     cursor.execute("""
         INSERT INTO perfis_historico (
             username,
@@ -147,23 +186,27 @@ def salvar_no_banco(username, dados, inativo=0):
             seguidores,
             seguindo,
             total_posts,
-            inativo
+            inativo,
+            tipo_janela,
+            revisado_manualmente
         )
-        VALUES (?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         username,
         agora_brasil().strftime('%Y-%m-%d %H:%M:%S'),
         followers,
         following,
         posts,
-        inativo
+        inativo,
+        tipo_janela_inicial,
+        revisado_inicial
     ))
 
     registro_id = cursor.lastrowid
 
     # Avalia anomalia apenas para leituras ativas com dados válidos
     if inativo == 0 and dados and followers > 0:
-        avaliar_anomalia(cursor, registro_id, username, followers, posts)
+        avaliar_anomalia(cursor, registro_id, username, followers, posts, ja_validado_hoje=ja_validado_hoje)
         cursor.execute("UPDATE perfis_monitorados SET status = 'ATIVO' WHERE username = ?", (username,))
 
     conn.commit()

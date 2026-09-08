@@ -356,14 +356,17 @@ LIMIAR_DELTA_S_MINIMO = 10
 LIMIAR_PERCENTUAL_MINIMO = 2.0
 
 
-def classificar_variacao_seguidores(c, registro_id, username, seguidores_atual):
+def classificar_variacao_seguidores(c, registro_id, username, seguidores_atual, ja_validado_hoje=False):
     """Classifica o registro recém-inserido como ORGANICO (validado) ou ADS
-    (pendente de curadoria), comparando com a leitura válida anterior — mesma
-    regra de ingestion.py:avaliar_anomalia(). O INSERT em salvar_dados_no_banco
-    já grava como ORGANICO/validado por padrão; aqui só sobrescreve para ADS
-    quando a variação estourar os limiares."""
+    (pendente de curadoria), comparando com a leitura válida anterior.
+    Se já validado no dia de análise (mesmo dia), não altera a classificação/revisão.
+    Se a leitura anterior válida já era VIRAL_ORGANICO validada, herda VIRAL_ORGANICO
+    e valida automaticamente (conta em processo de viralização contínua)."""
+    if ja_validado_hoje:
+        return
+
     c.execute("""
-        SELECT seguidores FROM perfis_historico
+        SELECT seguidores, tipo_janela, revisado_manualmente FROM perfis_historico
         WHERE LOWER(username) = LOWER(?) AND id < ? AND inativo = 0
         ORDER BY data_coleta DESC, id DESC
         LIMIT 1
@@ -375,14 +378,24 @@ def classificar_variacao_seguidores(c, registro_id, username, seguidores_atual):
         return
 
     seg_anterior = anterior[0] or 0
+    tipo_janela_ant = anterior[1] if len(anterior) > 1 else None
+    revisado_ant = anterior[2] if len(anterior) > 2 else None
+
     delta_s = seguidores_atual - seg_anterior
     pct_delta_s = (delta_s / seg_anterior * 100) if seg_anterior > 0 else 0
 
     if pct_delta_s > LIMIAR_PERCENTUAL_MINIMO and delta_s > LIMIAR_DELTA_S_MINIMO:
-        c.execute("""
-            UPDATE perfis_historico SET tipo_janela = 'ADS', revisado_manualmente = 0 WHERE id = ?
-        """, (registro_id,))
-        print(f"  🔴 @{username}: variação > 2% e > 10 seg (ΔS={delta_s:+d}, %ΔS={pct_delta_s:.1f}%) → enviado para curadoria.")
+        # Se a conta já estava em viralização confirmada na leitura anterior, herda VIRAL_ORGANICO e valida automaticamente
+        if tipo_janela_ant == 'VIRAL_ORGANICO' and revisado_ant == 1:
+            c.execute("""
+                UPDATE perfis_historico SET tipo_janela = 'VIRAL_ORGANICO', revisado_manualmente = 1 WHERE id = ?
+            """, (registro_id,))
+            print(f"  🔥 @{username}: conta em viralização ativa (anterior VIRAL_ORGANICO) → mantido VIRAL_ORGANICO e validado automaticamente.")
+        else:
+            c.execute("""
+                UPDATE perfis_historico SET tipo_janela = 'ADS', revisado_manualmente = 0 WHERE id = ?
+            """, (registro_id,))
+            print(f"  🔴 @{username}: variação > 2% e > 10 seg (ΔS={delta_s:+d}, %ΔS={pct_delta_s:.1f}%) → enviado para curadoria.")
 
 
 def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str):
@@ -398,6 +411,27 @@ def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str):
         total_posts = int(dados_perfil.get("media_count", 0))
         hoje_prefix = data_carga_str.split(" ")[0]
 
+        # 1. Antes de remover ou atualizar, checa se já existia registro para o mesmo dia e se já foi revisado/classificado
+        c.execute("""
+            SELECT tipo_janela, revisado_manualmente
+            FROM perfis_historico 
+            WHERE LOWER(username) = LOWER(?) AND (data_coleta LIKE ? OR data_coleta = ?)
+            ORDER BY data_coleta DESC, id DESC LIMIT 1
+        """, (username, f"{hoje_prefix}%", hoje_prefix))
+        reg_hoje = c.fetchone()
+
+        tipo_janela_inicial = 'ORGANICO'
+        revisado_inicial = 1
+        ja_validado_hoje = False
+
+        if reg_hoje:
+            tipo_janela_ant = reg_hoje[0]
+            revisado_ant = reg_hoje[1]
+            if revisado_ant == 1 or tipo_janela_ant in ('VIRAL_ORGANICO', 'ADS', 'IGNORAR'):
+                tipo_janela_inicial = tipo_janela_ant
+                revisado_inicial = 1
+                ja_validado_hoje = True
+
         # Remove registros anteriores do mesmo dia para manter o dado oficial mais recente
         c.execute("""
             DELETE FROM perfis_historico 
@@ -407,9 +441,9 @@ def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str):
         c.execute("""
             INSERT INTO perfis_historico (
                 username, data_coleta, seguidores, seguindo, total_posts, inativo, tipo_janela, revisado_manualmente, data_carga
-            ) VALUES (?, ?, ?, ?, ?, 0, 'ORGANICO', 1, ?)
-        """, (username, data_carga_str, seguidores, seguindo, total_posts, data_carga_str))
-        classificar_variacao_seguidores(c, c.lastrowid, username, seguidores)
+            ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)
+        """, (username, data_carga_str, seguidores, seguindo, total_posts, tipo_janela_inicial, revisado_inicial, data_carga_str))
+        classificar_variacao_seguidores(c, c.lastrowid, username, seguidores, ja_validado_hoje=ja_validado_hoje)
 
         # Atualiza também seguidores_historico para gráficos legados
         c.execute("""

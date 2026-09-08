@@ -50,7 +50,7 @@ def escanear_historico():
             continue
 
         if uname in ultimo_por_perfil:
-            seg_ant, posts_ant = ultimo_por_perfil[uname]
+            seg_ant, posts_ant, tipo_ant, rev_ant = ultimo_por_perfil[uname]
             delta_s = segs - seg_ant
             delta_posts = (posts or 0) - (posts_ant or 0)
             pct_delta_s = ((segs - seg_ant) / seg_ant * 100) if seg_ant > 0 else 0
@@ -60,12 +60,24 @@ def escanear_historico():
             if precisa_analise:
                 if revisado == 1:
                     ignorados_ja_revisados += 1
+                elif tipo_ant == 'VIRAL_ORGANICO' and rev_ant == 1:
+                    cursor.execute("""
+                        UPDATE perfis_historico
+                        SET tipo_janela = 'VIRAL_ORGANICO', revisado_manualmente = 1
+                        WHERE id = ?
+                    """, (rid,))
+                    tipo_janela = 'VIRAL_ORGANICO'
+                    revisado = 1
+                    auto_validados_organico += 1
+                    print(f"  🔥 Registro #{rid} | @{uname} | {data_coleta} | ΔS={int(delta_s):+d} | %ΔS={pct_delta_s:.1f}% → mantido VIRAL_ORGANICO (viralização ativa)")
                 else:
                     cursor.execute("""
                         UPDATE perfis_historico
                         SET tipo_janela = 'ADS', revisado_manualmente = 0
                         WHERE id = ?
                     """, (rid,))
+                    tipo_janela = 'ADS'
+                    revisado = 0
                     marcados_analise += 1
                     print(f"  🔴 Registro #{rid} | @{uname} | {data_coleta} | ΔS={int(delta_s):+d} | %ΔS={pct_delta_s:.1f}% → enviado para análise/validação")
             else:
@@ -74,6 +86,8 @@ def escanear_historico():
                     SET tipo_janela = 'ORGANICO', revisado_manualmente = 1
                     WHERE id = ?
                 """, (rid,))
+                tipo_janela = 'ORGANICO'
+                revisado = 1
                 auto_validados_organico += 1
         else:
             # Primeira coleta
@@ -82,9 +96,11 @@ def escanear_historico():
                 SET tipo_janela = 'ORGANICO', revisado_manualmente = 1
                 WHERE id = ?
             """, (rid,))
+            tipo_janela = 'ORGANICO'
+            revisado = 1
             auto_validados_organico += 1
 
-        ultimo_por_perfil[uname] = (segs, posts or 0)
+        ultimo_por_perfil[uname] = (segs, posts or 0, tipo_janela, revisado)
 
     conn.commit()
     conn.close()

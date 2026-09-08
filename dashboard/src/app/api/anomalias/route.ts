@@ -254,7 +254,7 @@ export async function POST() {
       ORDER BY username, datetime(data_coleta) ASC, id ASC
     `);
 
-    const ultimoPorPerfil: { [u: string]: { seguidores: number; total_posts: number } } = {};
+    const ultimoPorPerfil: { [u: string]: { seguidores: number; total_posts: number; tipo_janela?: string; revisado?: number } } = {};
     let marcadosAnalise = 0;
     let autoValidados = 0;
 
@@ -275,11 +275,25 @@ export async function POST() {
         if (precisaAnalise) {
           // Se ainda não foi revisado manualmente pelo usuário nem classificado como VIRAL/ADS manual
           if (Number(r.revisado_manualmente || 0) === 0 && r.tipo_janela !== 'VIRAL_ORGANICO') {
-            await db.run(
-              `UPDATE perfis_historico SET tipo_janela = 'ADS', revisado_manualmente = 0 WHERE id = ?`,
-              [r.id]
-            );
-            marcadosAnalise++;
+            const ant = ultimoPorPerfil[r.username];
+            // Se a leitura imediatamente anterior já estava validada como VIRAL_ORGANICO, a conta está em viralização ativa contínua
+            if (ant?.tipo_janela === 'VIRAL_ORGANICO' && ant?.revisado === 1) {
+              await db.run(
+                `UPDATE perfis_historico SET tipo_janela = 'VIRAL_ORGANICO', revisado_manualmente = 1 WHERE id = ?`,
+                [r.id]
+              );
+              r.tipo_janela = 'VIRAL_ORGANICO';
+              r.revisado_manualmente = 1;
+              autoValidados++;
+            } else {
+              await db.run(
+                `UPDATE perfis_historico SET tipo_janela = 'ADS', revisado_manualmente = 0 WHERE id = ?`,
+                [r.id]
+              );
+              r.tipo_janela = 'ADS';
+              r.revisado_manualmente = 0;
+              marcadosAnalise++;
+            }
           }
         } else {
           // Dentro do parâmetro normal: se não foi manualmente marcado como ADS/VIRAL, valida como ORGANICO
@@ -288,6 +302,8 @@ export async function POST() {
               `UPDATE perfis_historico SET tipo_janela = 'ORGANICO', revisado_manualmente = 1 WHERE id = ?`,
               [r.id]
             );
+            r.tipo_janela = 'ORGANICO';
+            r.revisado_manualmente = 1;
             autoValidados++;
           }
         }
@@ -298,11 +314,18 @@ export async function POST() {
             `UPDATE perfis_historico SET tipo_janela = 'ORGANICO', revisado_manualmente = 1 WHERE id = ?`,
             [r.id]
           );
+          r.tipo_janela = 'ORGANICO';
+          r.revisado_manualmente = 1;
           autoValidados++;
         }
       }
 
-      ultimoPorPerfil[r.username] = { seguidores: r.seguidores, total_posts: r.total_posts || 0 };
+      ultimoPorPerfil[r.username] = {
+        seguidores: r.seguidores,
+        total_posts: r.total_posts || 0,
+        tipo_janela: r.tipo_janela,
+        revisado: r.revisado_manualmente
+      };
     }
 
     const countRow = await db.get(`
