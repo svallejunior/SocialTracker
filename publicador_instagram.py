@@ -15,6 +15,7 @@ import sys
 import json
 import time
 import uuid
+import random
 import sqlite3
 import argparse
 import logging
@@ -1749,6 +1750,50 @@ def _limite_inferior_rotina(ag):
     return max(limites) if limites else None
 
 
+def _hora_alvo_do_agendamento(ag, referencia=None):
+    """Resolve o horário-alvo (hora, minuto) de um agendamento conforme modo_hora:
+    FIXA usa hora_fixa diretamente; ALEATORIA sorteia um horário dentro da janela
+    [hora_janela_inicio, hora_janela_fim]; VARIAR_MINUTOS aplica um desvio de até
+    variacao_minutos sobre hora_fixa. O sorteio é determinístico — semeado pelo id
+    do agendamento + a data de referência — para não mudar a cada recálculo do
+    daemon (senão o horário-alvo "flutuaria" a cada verificação)."""
+    hora_fixa = ag.get("hora_fixa") or "18:00"
+    modo = (ag.get("modo_hora") or "FIXA").upper()
+
+    try:
+        hora_h, hora_m = map(int, hora_fixa.split(":"))
+    except Exception:
+        hora_h, hora_m = 18, 0
+
+    data_ref = (referencia or datetime.now()).strftime("%Y-%m-%d")
+    seed = f"{ag.get('id')}-{data_ref}"
+
+    if modo == "ALEATORIA":
+        inicio = ag.get("hora_janela_inicio") or ""
+        fim = ag.get("hora_janela_fim") or ""
+        try:
+            ih, im = map(int, inicio.split(":"))
+            fh, fm = map(int, fim.split(":"))
+            minutos_inicio = ih * 60 + im
+            minutos_fim = fh * 60 + fm
+            if minutos_fim > minutos_inicio:
+                offset = random.Random(seed).randint(minutos_inicio, minutos_fim)
+                hora_h, hora_m = divmod(offset, 60)
+        except Exception:
+            pass
+    elif modo == "VARIAR_MINUTOS":
+        try:
+            variacao = int(ag.get("variacao_minutos") or 0)
+            if variacao > 0:
+                delta = random.Random(seed).randint(-variacao, variacao)
+                base_minutos = max(0, min(23 * 60 + 59, hora_h * 60 + hora_m + delta))
+                hora_h, hora_m = divmod(base_minutos, 60)
+        except Exception:
+            pass
+
+    return hora_h, hora_m
+
+
 def is_agendamento_no_horario(ag, agora=None, conn=None):
     """Verifica se o agendamento atingiu o horário para ser postado"""
     if agora is None:
@@ -1758,19 +1803,15 @@ def is_agendamento_no_horario(ag, agora=None, conn=None):
         return False
 
     tipo_agendamento = ag.get("tipo_agendamento") or ("DATA_ESPECIFICA" if ag.get("recorrencia") == "UNICA" else "RECORRENTE")
-    hora_fixa = ag.get("hora_fixa") or "18:00"
-
-    try:
-        hora_alvo, min_alvo = map(int, hora_fixa.split(":"))
-    except Exception:
-        hora_alvo, min_alvo = 18, 0
 
     if tipo_agendamento == "DATA_ESPECIFICA":
         data_especifica = ag.get("data_especifica") or ""
         if not data_especifica:
             return False
         try:
-            dt_alvo = datetime.strptime(f"{data_especifica} {hora_fixa}", "%Y-%m-%d %H:%M")
+            data_dt = datetime.strptime(data_especifica, "%Y-%m-%d")
+            hora_alvo, min_alvo = _hora_alvo_do_agendamento(ag, data_dt)
+            dt_alvo = data_dt.replace(hour=hora_alvo, minute=min_alvo)
             return agora >= dt_alvo
         except Exception:
             return False
@@ -1791,6 +1832,8 @@ def is_agendamento_no_horario(ag, agora=None, conn=None):
         if dias_norm:
             if DIA_MAP[agora.weekday()] not in dias_norm and hoje_str not in dias_norm:
                 return False
+
+        hora_alvo, min_alvo = _hora_alvo_do_agendamento(ag, agora)
 
         # A ocorrência é sempre a de HOJE: publicação atrasada no mesmo dia é permitida,
         # de dias anteriores nunca.
@@ -1815,18 +1858,13 @@ def is_agendamento_no_horario(ag, agora=None, conn=None):
 
 def _proxima_ocorrencia_recorrente(ag, agora, limite_dias=400):
     """Próxima data/hora futura de uma rotina, respeitando dias da semana e período."""
-    hora_fixa = ag.get("hora_fixa") or "18:00"
-    try:
-        hora_h, hora_m = map(int, hora_fixa.split(":"))
-    except Exception:
-        hora_h, hora_m = 18, 0
-
     dias_norm = _dias_selecionados(ag)
     data_fim = ag.get("data_fim") or ""
     limite = _limite_inferior_rotina(ag)
 
     for offset in range(0, limite_dias):
         dia = agora + timedelta(days=offset)
+        hora_h, hora_m = _hora_alvo_do_agendamento(ag, dia)
         dt_alvo = datetime(dia.year, dia.month, dia.day, hora_h, hora_m)
         if dt_alvo < agora:
             continue
@@ -2056,14 +2094,15 @@ def calcular_proximo_agendamento():
         for row in rows:
             ag = dict(row)
             tipo = ag.get("tipo_agendamento") or ("DATA_ESPECIFICA" if ag.get("recorrencia") == "UNICA" else "RECORRENTE")
-            hora_fixa = ag.get("hora_fixa") or "18:00"
 
             if tipo == "DATA_ESPECIFICA":
                 data_esp = ag.get("data_especifica") or ""
                 if not data_esp:
                     continue
                 try:
-                    dt_alvo = datetime.strptime(f"{data_esp} {hora_fixa}", "%Y-%m-%d %H:%M")
+                    data_dt = datetime.strptime(data_esp, "%Y-%m-%d")
+                    hora_h, hora_m = _hora_alvo_do_agendamento(ag, data_dt)
+                    dt_alvo = data_dt.replace(hour=hora_h, minute=hora_m)
                 except Exception:
                     continue
 
