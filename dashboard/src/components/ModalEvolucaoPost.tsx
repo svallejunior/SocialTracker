@@ -1091,7 +1091,9 @@ export default function ModalEvolucaoPost({
                       />
                     )}
 
-                    {/* Linha tracejada branca: comportamento esperado baseado no histórico da conta */}
+                    {/* Linha tracejada branca: comportamento esperado baseado no histórico da conta.
+                        Em "Todas", usa Views como referência quando o formato tem views (Reels);
+                        Imagem/Carrossel não têm views, então usa Curtidas como referência principal. */}
                     {benchmark.length >= 2 && (
                       <Line
                         key={`expected-${metricFoco}`}
@@ -1099,7 +1101,8 @@ export default function ModalEvolucaoPost({
                         dataKey={
                           metricFoco === 'likes' ? 'expectedLikes'
                           : metricFoco === 'comentarios' ? 'expectedComentarios'
-                          : 'expectedViews'
+                          : metricFoco === 'views' ? 'expectedViews'
+                          : (temViews ? 'expectedViews' : 'expectedLikes')
                         }
                         name="Esperado"
                         stroke="rgba(255,255,255,0.65)"
