@@ -32,6 +32,7 @@ interface PerfilMobile {
   variacao_ultima: number;
   variacao_dia: number;
   posts_dia: number;
+  views_dia?: number;
   ultimas_publicacoes?: PostMobile[];
   posts_hoje?: PostMobile[];
   meu_perfil?: boolean;
@@ -481,13 +482,13 @@ export default function MobileDashboard() {
                     border: '1px solid rgba(0, 0, 0, 0.25)',
                     boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
                   }}>
-                    {/* 1. Evolução na Última Atualização */}
+                    {/* 1. Views ganhas no dia (soma das novas views dos posts) */}
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ fontSize: '9px', color: '#9CA3AF', textTransform: 'uppercase', marginBottom: '4px', fontWeight: 700 }}>
-                        Última Coleta
+                        👁 Views Hoje
                       </div>
-                      <div>
-                        {renderBadgeVariacao(p.variacao_ultima)}
+                      <div style={{ fontSize: '13px', fontWeight: 800, color: p.views_dia && p.views_dia > 0 ? '#00F0FF' : '#8B949E' }}>
+                        {p.views_dia && p.views_dia > 0 ? `+${formatNumero(p.views_dia)}` : '—'}
                       </div>
                     </div>
 

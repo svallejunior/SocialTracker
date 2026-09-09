@@ -57,6 +57,40 @@ export async function GET(req: NextRequest) {
       ORDER BY data_postagem DESC
     `);
 
+    // 4b. Calcular Views Ganhas no Dia via posts_metricas_snapshots
+    // Máximo de views hoje por post
+    const snapHoje = await db.all(`
+      SELECT username, post_id, MAX(views) as max_hoje, MIN(views) as min_hoje
+      FROM posts_metricas_snapshots
+      WHERE date(data_carga) = date('now', 'localtime')
+      GROUP BY username, post_id
+    `).catch(() => [] as any[]);
+
+    // Última views antes de hoje por post (base de comparação)
+    const snapAntes = await db.all(`
+      SELECT post_id, MAX(views) as views_antes
+      FROM posts_metricas_snapshots
+      WHERE date(data_carga) < date('now', 'localtime')
+      GROUP BY post_id
+    `).catch(() => [] as any[]);
+
+    const viewsAntesByPost: Record<string, number> = {};
+    for (const s of snapAntes) {
+      viewsAntesByPost[s.post_id] = Number(s.views_antes) || 0;
+    }
+
+    const viewsDiaByUser: Record<string, number> = {};
+    for (const s of snapHoje) {
+      const u = (s.username || '').toLowerCase();
+      const maxHoje = Number(s.max_hoje) || 0;
+      const minHoje = Number(s.min_hoje) || 0;
+      const antes = viewsAntesByPost[s.post_id] !== undefined ? viewsAntesByPost[s.post_id] : minHoje;
+      const delta = maxHoje - antes;
+      if (delta > 0) {
+        viewsDiaByUser[u] = (viewsDiaByUser[u] || 0) + delta;
+      }
+    }
+
     // Calcula médias de visualizações/engajamento por (username, formato)
     const mediasFormato: Record<string, number[]> = {};
     const postsByUser: Record<string, any[]> = {};
@@ -202,6 +236,7 @@ export async function GET(req: NextRequest) {
         variacao_ultima: variacaoUltima,
         variacao_dia: variacaoDia,
         posts_dia: postsDia,
+        views_dia: viewsDiaByUser[u] || 0,
         ultimas_publicacoes: ultimasPublicacoes,
         posts_hoje: ultimasPublicacoes,
         meu_perfil: true,
@@ -220,7 +255,10 @@ export async function GET(req: NextRequest) {
           hora_janela_inicio, hora_janela_fim, legenda, status, criado_em, arquivos
         FROM automacao_agendamentos
         WHERE status IN ('AGENDADO', 'PUBLICANDO')
-        ORDER BY criado_em DESC
+        ORDER BY
+          CASE WHEN tipo_agendamento = 'DATA_ESPECIFICA' THEN data_especifica ELSE '9999-99-99' END ASC,
+          COALESCE(hora_fixa, hora_janela_inicio, '99:99') ASC,
+          criado_em ASC
       `);
 
       aFazer = rowsAFazer.map((item: any) => ({
