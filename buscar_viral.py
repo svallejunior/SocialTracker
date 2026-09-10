@@ -183,8 +183,9 @@ def salvar_posts_no_banco(username, posts_data):
             cursor.execute("""
                 INSERT INTO posts_historico (
                     post_id, username, data_postagem, formato, legenda,
-                    likes, comentarios, views, taxa_engajamento, data_atualizacao, shortcode
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    likes, comentarios, views, taxa_engajamento, data_atualizacao, shortcode,
+                    media_url, thumbnail_url, permalink
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(post_id) DO UPDATE SET
                     likes = excluded.likes,
                     comentarios = excluded.comentarios,
@@ -192,7 +193,10 @@ def salvar_posts_no_banco(username, posts_data):
                     taxa_engajamento = excluded.taxa_engajamento,
                     data_atualizacao = excluded.data_atualizacao,
                     shortcode = COALESCE(excluded.shortcode, posts_historico.shortcode),
-                    legenda = COALESCE(excluded.legenda, posts_historico.legenda)
+                    legenda = COALESCE(excluded.legenda, posts_historico.legenda),
+                    media_url = COALESCE(excluded.media_url, posts_historico.media_url),
+                    thumbnail_url = COALESCE(excluded.thumbnail_url, posts_historico.thumbnail_url),
+                    permalink = COALESCE(excluded.permalink, posts_historico.permalink)
             """, (
                 p["post_id"],
                 username,
@@ -204,7 +208,10 @@ def salvar_posts_no_banco(username, posts_data):
                 p.get("views", 0),
                 p.get("taxa_engajamento", 0.0),
                 agora,
-                p.get("shortcode")
+                p.get("shortcode"),
+                p.get("media_url", ""),
+                p.get("thumbnail_url", ""),
+                p.get("url", "")
             ))
             salvos += 1
         except Exception:
@@ -334,6 +341,10 @@ def extrair_dados_post(raw, default_username):
     # URL
     url = raw.get("url") or (f"https://www.instagram.com/p/{shortcode}/" if shortcode else f"https://www.instagram.com/p/{post_id}/")
 
+    # Mídia / Thumbnail
+    media_url = raw.get("videoUrl") or raw.get("displayUrl") or raw.get("display_url") or ""
+    thumbnail_url = raw.get("displayUrl") or raw.get("thumbnailUrl") or raw.get("display_url") or media_url or ""
+
     return {
         "post_id": post_id,
         "username": default_username,
@@ -346,7 +357,9 @@ def extrair_dados_post(raw, default_username):
         "likes": likes,
         "comentarios": comments,
         "views": views,
-        "taxa_engajamento": 0.0
+        "taxa_engajamento": 0.0,
+        "media_url": media_url,
+        "thumbnail_url": thumbnail_url
     }
 
 

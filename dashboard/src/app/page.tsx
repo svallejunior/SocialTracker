@@ -380,6 +380,172 @@ const FeedMediaThumbnail = ({
 };
 
 // ============================================================
+// 🔥 COMPONENTE DE THUMBNAIL PARA CARD DE POST VIRAL
+// ============================================================
+const ViralCardThumbnail = ({
+  topPost,
+  postUrl
+}: {
+  topPost: any;
+  postUrl: string;
+}) => {
+  const [imgError, setImgError] = useState(false);
+  const mediaSrc = topPost?.thumbnail_url || topPost?.media_url;
+  const isDirectVideo = typeof mediaSrc === 'string' && (mediaSrc.endsWith('.mp4') || mediaSrc.endsWith('.webm'));
+  const hasValidMedia = Boolean(mediaSrc) && !imgError && !isDirectVideo;
+
+  const isReels = topPost && (topPost.formato === 'Reels' || (topPost.media_product_type || '').toUpperCase() === 'REELS');
+  const isCarrossel = topPost && topPost.formato === 'Carrossel';
+
+  const handleClick = () => {
+    if (postUrl && postUrl !== '#') {
+      window.open(postUrl, '_blank', 'noopener,noreferrer');
+    }
+  };
+
+  if (!hasValidMedia) {
+    return (
+      <div
+        className="thumbnail-area"
+        onClick={handleClick}
+        style={{ cursor: postUrl && postUrl !== '#' ? 'pointer' : 'default' }}
+        title={postUrl && postUrl !== '#' ? 'Clique para abrir no Instagram' : undefined}
+      >
+        {isReels ? (
+          <>
+            <VideoIcon />
+            <span>{topPost?.formato || 'Reels'}</span>
+          </>
+        ) : isCarrossel ? (
+          <>
+            <LayersIcon />
+            <span>{topPost?.formato || 'Carrossel'}</span>
+          </>
+        ) : (
+          <>
+            <ImageIcon />
+            <span>Imagem</span>
+          </>
+        )}
+        <span style={{ opacity: 0.5 }}>Post {topPost ? (topPost.shortcode || topPost.post_id || '') : 'nulo'}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="thumbnail-area"
+      onClick={handleClick}
+      style={{
+        position: 'relative',
+        overflow: 'hidden',
+        border: '1px solid rgba(255, 255, 255, 0.15)',
+        borderRadius: '8px',
+        padding: 0,
+        backgroundColor: '#0D1117',
+        cursor: postUrl && postUrl !== '#' ? 'pointer' : 'default'
+      }}
+      title={postUrl && postUrl !== '#' ? 'Clique para abrir publicação no Instagram' : undefined}
+    >
+      <img
+        src={mediaSrc}
+        alt={topPost?.legenda || 'Mídia do Post Viral'}
+        referrerPolicy="no-referrer"
+        crossOrigin="anonymous"
+        onError={() => setImgError(true)}
+        style={{
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          display: 'block',
+          transition: 'transform 0.25s ease'
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = 'scale(1.06)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = 'scale(1)';
+        }}
+      />
+      {/* Badge de formato flutuante */}
+      <div style={{
+        position: 'absolute',
+        top: 6,
+        left: 6,
+        background: 'rgba(0, 0, 0, 0.75)',
+        backdropFilter: 'blur(4px)',
+        color: '#fff',
+        padding: '2px 6px',
+        borderRadius: 4,
+        fontSize: '9px',
+        fontWeight: 700,
+        display: 'flex',
+        alignItems: 'center',
+        gap: '4px',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.5)',
+        pointerEvents: 'none'
+      }}>
+        {isReels ? (
+          <>
+            <VideoIcon size={10} style={{ color: '#00F0FF' }} />
+            <span>Reels</span>
+          </>
+        ) : isCarrossel ? (
+          <>
+            <LayersIcon size={10} style={{ color: '#F59E0B' }} />
+            <span>Carrossel</span>
+          </>
+        ) : (
+          <>
+            <ImageIcon size={10} style={{ color: '#10B981' }} />
+            <span>Imagem</span>
+          </>
+        )}
+      </div>
+
+      {/* Tarja inferior com link */}
+      {postUrl && postUrl !== '#' && (
+        <div style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          background: 'linear-gradient(transparent, rgba(0,0,0,0.88))',
+          padding: '8px 4px 4px',
+          textAlign: 'center',
+          fontSize: '9px',
+          fontWeight: 700,
+          color: '#00F0FF',
+          letterSpacing: '0.3px',
+          pointerEvents: 'none'
+        }}>
+          VER NO IG ↗
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Formatação do horário para cabeçalho verde neon
+const formatarHorarioNeon = (dateStr: string) => {
+  if (!dateStr) return '';
+  try {
+    const parts = dateStr.trim().split(' ');
+    const dataPart = parts[0].split('T')[0];
+    const timePart = parts[1] || (dateStr.includes('T') ? dateStr.split('T')[1] : '');
+    const horaMin = timePart ? timePart.substring(0, 5) : '';
+    const datePieces = dataPart.split('-');
+    if (datePieces.length === 3) {
+      const [ano, mes, dia] = datePieces;
+      return horaMin ? `${horaMin} (${dia}/${mes})` : `${dia}/${mes}/${ano}`;
+    }
+    return timePart ? timePart.substring(0, 5) : dateStr;
+  } catch {
+    return dateStr;
+  }
+};
+
+// ============================================================
 // 🎯 PERFORMANCE SCORE — Cálculo dos 3 Pilares (0–100)
 // ============================================================
 
@@ -1383,6 +1549,7 @@ export default function Dashboard() {
   const [profiles, setProfiles] = useState<any[]>([]);
   const [posts, setPosts] = useState<any[]>([]);
   const [followersHistory, setFollowersHistory] = useState<any>({});
+  const [ultimaAtualizacaoGeral, setUltimaAtualizacaoGeral] = useState<string>('');
 
   // Estados de Navegação e Filtros
   const [activeTab, setActiveTab] = useState<'acompanhados' | 'cards' | 'followers' | 'posts' | 'controle' | 'anomalias' | 'automatizacao' | 'respostas'>('controle');
@@ -1656,6 +1823,9 @@ export default function Dashboard() {
       const json = await response.json();
 
       if (json.success) {
+        if (json.ultimaAtualizacao) {
+          setUltimaAtualizacaoGeral(json.ultimaAtualizacao);
+        }
         const rawPosts = json.posts || [];
         const rawProfiles = json.profiles || [];
 
@@ -1743,13 +1913,21 @@ export default function Dashboard() {
           const profPosts = enrichedPosts.filter((p: any) => (p.username || '').toLowerCase() === u);
           const uFHist = fHistory[u] || [];
 
-          // Cálculo de novos seguidores nas últimas 24h / coleta anterior
-          let novosSeguidores24h = 0;
-          if (uFHist.length >= 2) {
+          // Cálculo de novos seguidores: diferença real entre a última coleta e a anterior, e acumulado no dia
+          const novosSeguidoresColeta = prof.novos_seguidores_coleta !== undefined
+            ? Number(prof.novos_seguidores_coleta)
+            : (prof.variacao_ultima !== undefined ? Number(prof.variacao_ultima) : 0);
+
+          let novosSeguidoresDia = prof.novos_seguidores_dia !== undefined
+            ? Number(prof.novos_seguidores_dia)
+            : (prof.variacao_dia !== undefined ? Number(prof.variacao_dia) : 0);
+
+          if (novosSeguidoresDia === 0 && uFHist.length >= 2) {
             const lastSeg = Number(uFHist[uFHist.length - 1]?.total_seguidores) || 0;
             const prevSeg = Number(uFHist[uFHist.length - 2]?.total_seguidores) || 0;
-            novosSeguidores24h = lastSeg - prevSeg;
+            novosSeguidoresDia = lastSeg - prevSeg;
           }
+          const novosSeguidores24h = novosSeguidoresDia;
 
           // Cálculo real de dias de base
           const dataInicioStr = prof.primeira_postagem || prof.inicio_monitoramento || prof.criado_em;
@@ -1816,6 +1994,8 @@ export default function Dashboard() {
             mediaHistoricaConta,
             latestViralTimestamp,
             diaMonitoramento,
+            novosSeguidoresColeta,
+            novosSeguidoresDia,
             novosSeguidores24h,
             confiancaTexto,
             confiancaCor
@@ -1825,6 +2005,11 @@ export default function Dashboard() {
         setProfiles(enrichedProfiles);
         setPosts(enrichedPosts);
         setFollowersHistory(fHistory);
+
+        if (!json.ultimaAtualizacao && enrichedProfiles.length > 0) {
+          const maxDate = enrichedProfiles.reduce((max: string, p: any) => (p.data_coleta && p.data_coleta > max ? p.data_coleta : max), '');
+          if (maxDate) setUltimaAtualizacaoGeral(maxDate);
+        }
 
         if (enrichedProfiles.length > 0) {
           const firstActive = enrichedProfiles.find((p: any) => p.exibir !== 0);
@@ -3746,9 +3931,36 @@ export default function Dashboard() {
         <div>
           <div style={{ marginBottom: '20px' }}>
             <h1 style={{ fontSize: '24px', fontWeight: '800', marginBottom: '6px' }}>Posts com Crescimento Acelerado</h1>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '6px' }}>
               Identificação algorítmica de perfis e postagens que estão apresentando tração acima da média histórica de engajamento do perfil.
             </p>
+            {ultimaAtualizacaoGeral && (
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                marginTop: '6px',
+                padding: '4px 10px',
+                background: 'rgba(0, 255, 102, 0.08)',
+                border: '1px solid rgba(0, 255, 102, 0.3)',
+                borderRadius: '8px',
+                color: '#00FF66',
+                textShadow: '0 0 10px rgba(0, 255, 102, 0.5)',
+                fontSize: '13px',
+                fontWeight: 700,
+                letterSpacing: '0.2px'
+              }}>
+                <span style={{
+                  display: 'inline-block',
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  backgroundColor: '#00FF66',
+                  boxShadow: '0 0 8px #00FF66, 0 0 16px rgba(0, 255, 102, 0.6)'
+                }} />
+                ùltima atualização em: {formatarHorarioNeon(ultimaAtualizacaoGeral)}
+              </div>
+            )}
           </div>
 
           <div className="cards-grid">
@@ -3851,10 +4063,17 @@ export default function Dashboard() {
                     <div className="metrics-row">
                       <div className="metric-box">
                         <span className="metric-lbl">👥 Novos Seguidores</span>
-                        <span className="metric-val" style={{ color: perfil.novosSeguidores24h > 0 ? '#10B981' : perfil.novosSeguidores24h < 0 ? '#F85149' : undefined }}>
-                          {perfil.novosSeguidores24h > 0 ? '+' : ''}{perfil.novosSeguidores24h !== 0 ? formatNumber(perfil.novosSeguidores24h) : '0'}
+                        <span className="metric-val" style={{ color: (perfil.novosSeguidoresColeta || 0) > 0 ? '#10B981' : (perfil.novosSeguidoresColeta || 0) < 0 ? '#F85149' : undefined }}>
+                          {(perfil.novosSeguidoresColeta || 0) > 0 ? '+' : ''}{(perfil.novosSeguidoresColeta || 0) !== 0 ? formatNumber(perfil.novosSeguidoresColeta) : '0'}
                         </span>
-                        <span className="metric-sub green">vs. coleta anterior</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <span className="metric-sub green">vs. coleta anterior</span>
+                          <span className="metric-sub" style={{ color: 'var(--text-secondary)', fontSize: '10px' }}>
+                            No dia: <strong style={{ color: (perfil.novosSeguidoresDia || 0) > 0 ? '#10B981' : (perfil.novosSeguidoresDia || 0) < 0 ? '#F85149' : 'var(--text-secondary)' }}>
+                              {(perfil.novosSeguidoresDia || 0) > 0 ? '+' : ''}{formatNumber(perfil.novosSeguidoresDia || 0)}
+                            </strong>
+                          </span>
+                        </div>
                       </div>
                       <div className="metric-box">
                         <span className="metric-lbl">🔥 Média Posts Virais</span>
@@ -3878,26 +4097,11 @@ export default function Dashboard() {
 
                     {/* Thumbnail e Mini-Gráficos */}
                     <div className="card-content-body">
-                      {/* Thumbnail placeholder elegante */}
-                      <div className="thumbnail-area">
-                        {topPost && topPost.formato === 'Reels' ? (
-                          <>
-                            <VideoIcon />
-                            <span>{topPost.formato}</span>
-                          </>
-                        ) : topPost && topPost.formato === 'Carrossel' ? (
-                          <>
-                            <LayersIcon />
-                            <span>{topPost.formato}</span>
-                          </>
-                        ) : (
-                          <>
-                            <ImageIcon />
-                            <span>Imagem</span>
-                          </>
-                        )}
-                        <span style={{ opacity: 0.5 }}>Post {topPost ? topPost.post_id : 'nulo'}</span>
-                      </div>
+                      {/* Thumbnail com mídia real ou placeholder elegante */}
+                      <ViralCardThumbnail
+                        topPost={topPost}
+                        postUrl={getInstagramPostUrl(topPost)}
+                      />
 
                       {/* Área lateral com os 2 mini-gráficos */}
                       <div className="mini-charts-area">

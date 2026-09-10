@@ -261,7 +261,7 @@ export async function GET() {
     const msgMap: Record<string, number> = {};
     for (const m of mensagensPendentes) msgMap[m.uname] = Number(m.total || 0);
 
-    // Enriquece cada perfil com as colunas de primeira coleta, última coleta, seguidores mais recentes válidos e notificações
+    // Enriquece cada perfil com as colunas de primeira coleta, última coleta, seguidores mais recentes válidos, variações e notificações
     const profilesEnriquecidos = profiles.map((p: any) => {
       const u = (p.username || '').toLowerCase();
       const c = coletasMap[u];
@@ -273,6 +273,45 @@ export async function GET() {
       const nMsg = msgMap[u] || 0;
       const totalPend = nCom + nMsg;
 
+      const userRawHistory = historyByUser[u] || [];
+      const validHistory = userRawHistory.filter((h: any) => {
+        const seg = Number(h.seguidores) || 0;
+        return seg > 0;
+      });
+
+      const totalColetas = validHistory.length;
+      const atual = totalColetas > 0 ? validHistory[totalColetas - 1] : null;
+      const penultimo = totalColetas > 1 ? validHistory[totalColetas - 2] : null;
+      const seguidoresAtuais = atual ? Number(atual.seguidores) : (c ? c.ultimosSeguidores : 0);
+
+      // 1) Variação na Última Coleta (diferença entre a última leitura e a leitura imediatamente anterior)
+      let variacaoUltima = 0;
+      if (atual && penultimo) {
+        variacaoUltima = seguidoresAtuais - Number(penultimo.seguidores);
+      }
+
+      // 2) Variação no Dia (crescimento acumulado desde a zero hora / 00:00 do dia da última leitura)
+      let variacaoDia = 0;
+      if (atual && atual.data_coleta) {
+        const diaRef = String(atual.data_coleta).substring(0, 10);
+        const limiteZeroHora = `${diaRef} 00:00:00`;
+        const leiturasAntes00h = validHistory.filter((h: any) => String(h.data_coleta) < limiteZeroHora);
+        const leiturasDeHoje = validHistory.filter((h: any) => String(h.data_coleta) >= limiteZeroHora);
+
+        let baseDia: any = null;
+        if (leiturasAntes00h.length > 0) {
+          baseDia = leiturasAntes00h[leiturasAntes00h.length - 1];
+        } else if (leiturasDeHoje.length > 0) {
+          baseDia = leiturasDeHoje[0];
+        } else {
+          baseDia = atual;
+        }
+
+        if (baseDia) {
+          variacaoDia = seguidoresAtuais - Number(baseDia.seguidores);
+        }
+      }
+
       return {
         ...p,
         foto_url: fotoEfetiva,
@@ -281,9 +320,13 @@ export async function GET() {
         foto_local: p.foto_url || null,
         inicio_monitoramento: c ? c.inicio_monitoramento : null,
         data_coleta: c ? c.data_coleta : null,
-        seguidores: c ? c.ultimosSeguidores : 0,
+        seguidores: seguidoresAtuais,
         total_posts: c ? c.ultimosPosts : 0,
         seguindo: c ? c.ultimosSeguindo : 0,
+        novos_seguidores_coleta: variacaoUltima,
+        novos_seguidores_dia: variacaoDia,
+        variacao_ultima: variacaoUltima,
+        variacao_dia: variacaoDia,
         comentarios_pendentes: nCom,
         mensagens_pendentes: nMsg,
         total_pendencias: totalPend,
@@ -293,8 +336,14 @@ export async function GET() {
       };
     });
 
+    const lastUpdateRow = await db.get(`
+      SELECT MAX(data_coleta) as ultima_coleta FROM perfis_historico
+    `).catch(() => null);
+    const ultimaAtualizacao = lastUpdateRow?.ultima_coleta || null;
+
     return NextResponse.json({
       success: true,
+      ultimaAtualizacao: ultimaAtualizacao,
       profiles: profilesEnriquecidos,
       history: history || [],
       followersHistory: followersHistory,
