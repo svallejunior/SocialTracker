@@ -193,7 +193,7 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
     if (!silent) setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/anomalias');
+      const res = await fetch(`/api/anomalias?_t=${Date.now()}`, { cache: 'no-store' });
       const json = await res.json();
       if (json.success) {
         if (json.stats) setStats(json.stats);
@@ -225,8 +225,8 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
     if (!username) return;
     setItemsLoading(true);
     try {
-      const url = `/api/anomalias?username=${encodeURIComponent(username)}`;
-      const res = await fetch(url);
+      const url = `/api/anomalias?username=${encodeURIComponent(username)}&_t=${Date.now()}`;
+      const res = await fetch(url, { cache: 'no-store' });
       const json = await res.json();
       if (json.success) {
         setItems(json.items || []);

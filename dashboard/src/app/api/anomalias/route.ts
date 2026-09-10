@@ -34,16 +34,29 @@ export async function GET(request: NextRequest) {
 
     const db = await getDb();
 
-    // 1. Cards Score Globais
+    // 1. Cards Score Globais (baseado em 1 registro diário consolidado)
     const statsQuery = await db.get(`
+      WITH ultimas_coletas_dia AS (
+        SELECT *,
+          ROW_NUMBER() OVER (
+            PARTITION BY username, SUBSTR(data_coleta, 1, 10)
+            ORDER BY data_coleta DESC, id DESC
+          ) as rn_dia
+        FROM perfis_historico
+        WHERE inativo = 0
+      ),
+      historico_diario AS (
+        SELECT *
+        FROM ultimas_coletas_dia
+        WHERE rn_dia = 1
+      )
       SELECT 
         COUNT(DISTINCT SUBSTR(data_coleta, 1, 10)) as dias_coletados,
         COUNT(DISTINCT username) as contas_coletadas,
         SUM(CASE WHEN COALESCE(revisado_manualmente, 0) = 0 THEN 1 ELSE 0 END) as pendentes_validacao,
         SUM(CASE WHEN tipo_janela IN ('ORGANICO', 'VIRAL_ORGANICO') OR tipo_janela IS NULL THEN 1 ELSE 0 END) as dias_organicos,
         SUM(CASE WHEN tipo_janela = 'ADS' THEN 1 ELSE 0 END) as dias_ads
-      FROM perfis_historico
-      WHERE inativo = 0
+      FROM historico_diario
     `);
 
     const stats = {
@@ -54,8 +67,22 @@ export async function GET(request: NextRequest) {
       dias_ads: Number(statsQuery?.dias_ads || 0)
     };
 
-    // 2. Lista Sumarizada de Perfis (para barra de navegação/seleção)
+    // 2. Lista Sumarizada de Perfis (contabilizando apenas a última coleta de cada dia)
     const perfisSumarioRows = await db.all(`
+      WITH ultimas_coletas_dia AS (
+        SELECT *,
+          ROW_NUMBER() OVER (
+            PARTITION BY username, SUBSTR(data_coleta, 1, 10)
+            ORDER BY data_coleta DESC, id DESC
+          ) as rn_dia
+        FROM perfis_historico
+        WHERE inativo = 0
+      ),
+      historico_diario AS (
+        SELECT *
+        FROM ultimas_coletas_dia
+        WHERE rn_dia = 1
+      )
       SELECT 
         h.username,
         COUNT(h.id) as total_coletas,
@@ -69,7 +96,7 @@ export async function GET(request: NextRequest) {
         COALESCE(com.total_comentarios, 0) as comentarios_pendentes,
         COALESCE(msg.total_mensagens, 0) as mensagens_pendentes,
         CASE WHEN (COALESCE(com.total_comentarios, 0) + COALESCE(msg.total_mensagens, 0)) > 0 THEN 1 ELSE 0 END as tem_pendencias
-      FROM perfis_historico h
+      FROM historico_diario h
       LEFT JOIN perfis_monitorados pm ON LOWER(pm.username) = LOWER(h.username)
       LEFT JOIN controle_perfis cp ON LOWER(cp.username) = LOWER(h.username)
       LEFT JOIN (
@@ -84,7 +111,6 @@ export async function GET(request: NextRequest) {
         WHERE COALESCE(respondida, 0) = 0
         GROUP BY LOWER(modelo_username)
       ) msg ON msg.uname = LOWER(h.username)
-      WHERE h.inativo = 0
       GROUP BY h.username
       ORDER BY pendentes DESC, meu_perfil DESC, total_coletas DESC, h.username COLLATE NOCASE ASC
     `);
