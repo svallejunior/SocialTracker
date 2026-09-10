@@ -3263,13 +3263,13 @@ function CalendarioAgendamentos({ agendamentos, publicacoes = [], selectedDate, 
                   cursor: 'pointer',
                   opacity: c.isOutroMes ? 0.25 : 1,
                   background: isSelected
-                    ? 'rgba(248, 81, 73, 0.22)'
+                    ? '#161B22'
                     : isPassado && temPublicacaoReal
                       ? 'rgba(46, 160, 67, 0.18)'
                       : isPassado && temAgendamento
                         ? '#828385'
                         : temAgendamento
-                          ? 'rgba(56, 139, 253, 0.14)'
+                          ? '#161B22'
                           : 'transparent',
                   border: isSelected
                     ? '2px solid #F85149'
@@ -3280,13 +3280,13 @@ function CalendarioAgendamentos({ agendamentos, publicacoes = [], selectedDate, 
                         : isPassado && temAgendamento
                           ? '1px solid #828385'
                           : temAgendamento
-                            ? '1px solid rgba(56, 139, 253, 0.3)'
+                            ? '1px solid #30363D'
                             : '1px solid transparent',
                   boxShadow: isSelected
                     ? '0 0 10px rgba(248, 81, 73, 0.65)'
                     : 'none',
                   color: isSelected
-                    ? '#FF7B72'
+                    ? '#FFFFFF'
                     : isHoje
                       ? '#58A6FF'
                       : isPassado && temPublicacaoReal

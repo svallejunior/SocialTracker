@@ -2912,8 +2912,8 @@ export default function Dashboard() {
               className={`tab-btn ${activeTab === 'automatizacao' ? 'active' : ''}`}
               onClick={() => setActiveTab('automatizacao')}
             >
-              <span style={{ fontSize: 16 }}>🤖</span>
-              Automatização
+              <Calendar size={16} />
+              Agendamentos
             </button>
             <button
               className={`tab-btn ${activeTab === 'respostas' ? 'active' : ''}`}
