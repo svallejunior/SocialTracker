@@ -95,6 +95,17 @@ export async function GET() {
       "SELECT * FROM perfis_historico ORDER BY data_coleta ASC, id ASC"
     );
 
+    const seguidoresHistorico = await db.all(
+      "SELECT username, data_coleta, total_seguidores FROM seguidores_historico ORDER BY data_coleta ASC, id ASC"
+    ).catch(() => []);
+
+    const segHistByUser: Record<string, any[]> = {};
+    for (const sh of seguidoresHistorico) {
+      const u = (sh.username || '').toLowerCase();
+      if (!segHistByUser[u]) segHistByUser[u] = [];
+      segHistByUser[u].push(sh);
+    }
+
     const rawPosts = await db.all(
       "SELECT * FROM posts_historico ORDER BY data_postagem DESC"
     );
@@ -274,17 +285,33 @@ export async function GET() {
       const totalPend = nCom + nMsg;
 
       const userRawHistory = historyByUser[u] || [];
-      const validHistory = userRawHistory.filter((h: any) => {
-        const seg = Number(h.seguidores) || 0;
-        return seg > 0;
-      });
+      const userSegHistory = segHistByUser[u] || [];
 
-      const totalColetas = validHistory.length;
-      const atual = totalColetas > 0 ? validHistory[totalColetas - 1] : null;
-      const penultimo = totalColetas > 1 ? validHistory[totalColetas - 2] : null;
+      // Mescla coletas cronológicas de perfis_historico e seguidores_historico para capturar todos os ciclos (ex: 15 em 15 min)
+      const coletasMapUser: Record<string, number> = {};
+      for (const h of userRawHistory) {
+        const seg = Number(h.seguidores) || 0;
+        if (seg > 0 && h.data_coleta) {
+          coletasMapUser[h.data_coleta] = seg;
+        }
+      }
+      for (const sh of userSegHistory) {
+        const seg = Number(sh.total_seguidores) || 0;
+        if (seg > 0 && sh.data_coleta) {
+          coletasMapUser[sh.data_coleta] = seg;
+        }
+      }
+
+      const mergedColetas = Object.entries(coletasMapUser)
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([dt, seg]) => ({ data_coleta: dt, seguidores: seg }));
+
+      const totalColetas = mergedColetas.length;
+      const atual = totalColetas > 0 ? mergedColetas[totalColetas - 1] : null;
+      const penultimo = totalColetas > 1 ? mergedColetas[totalColetas - 2] : null;
       const seguidoresAtuais = atual ? Number(atual.seguidores) : (c ? c.ultimosSeguidores : 0);
 
-      // 1) Variação na Última Coleta (diferença entre a última leitura e a leitura imediatamente anterior)
+      // 1) Variação no Último Ciclo (diferença real da penúltima para a última coleta, ex: ciclo de 15 min)
       let variacaoUltima = 0;
       if (atual && penultimo) {
         variacaoUltima = seguidoresAtuais - Number(penultimo.seguidores);
@@ -295,8 +322,8 @@ export async function GET() {
       if (atual && atual.data_coleta) {
         const diaRef = String(atual.data_coleta).substring(0, 10);
         const limiteZeroHora = `${diaRef} 00:00:00`;
-        const leiturasAntes00h = validHistory.filter((h: any) => String(h.data_coleta) < limiteZeroHora);
-        const leiturasDeHoje = validHistory.filter((h: any) => String(h.data_coleta) >= limiteZeroHora);
+        const leiturasAntes00h = mergedColetas.filter((h) => String(h.data_coleta) < limiteZeroHora);
+        const leiturasDeHoje = mergedColetas.filter((h) => String(h.data_coleta) >= limiteZeroHora);
 
         let baseDia: any = null;
         if (leiturasAntes00h.length > 0) {

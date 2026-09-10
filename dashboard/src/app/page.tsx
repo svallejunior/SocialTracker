@@ -4067,7 +4067,7 @@ export default function Dashboard() {
                           {(perfil.novosSeguidoresColeta || 0) > 0 ? '+' : ''}{(perfil.novosSeguidoresColeta || 0) !== 0 ? formatNumber(perfil.novosSeguidoresColeta) : '0'}
                         </span>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <span className="metric-sub green">vs. coleta anterior</span>
+                          <span className="metric-sub green" title="Diferença da penúltima para a última coleta">no último ciclo</span>
                           <span className="metric-sub" style={{ color: 'var(--text-secondary)', fontSize: '10px' }}>
                             No dia: <strong style={{ color: (perfil.novosSeguidoresDia || 0) > 0 ? '#10B981' : (perfil.novosSeguidoresDia || 0) < 0 ? '#F85149' : 'var(--text-secondary)' }}>
                               {(perfil.novosSeguidoresDia || 0) > 0 ? '+' : ''}{formatNumber(perfil.novosSeguidoresDia || 0)}

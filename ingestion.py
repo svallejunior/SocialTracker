@@ -176,8 +176,6 @@ def salvar_no_banco(username, dados, inativo=0):
             tipo_janela_inicial = tipo_janela_ant
             revisado_inicial = 1
             ja_validado_hoje = True
-        # Remove o registro anterior do mesmo dia para manter apenas o dado mais recente
-        cursor.execute("DELETE FROM perfis_historico WHERE id = ?", (reg_hoje[0],))
 
     cursor.execute("""
         INSERT INTO perfis_historico (

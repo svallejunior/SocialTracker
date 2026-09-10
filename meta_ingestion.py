@@ -432,12 +432,6 @@ def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str):
                 revisado_inicial = 1
                 ja_validado_hoje = True
 
-        # Remove registros anteriores do mesmo dia para manter o dado oficial mais recente
-        c.execute("""
-            DELETE FROM perfis_historico 
-            WHERE LOWER(username) = LOWER(?) AND (data_coleta LIKE ? OR data_coleta = ?)
-        """, (username, f"{hoje_prefix}%", hoje_prefix))
-
         c.execute("""
             INSERT INTO perfis_historico (
                 username, data_coleta, seguidores, seguindo, total_posts, inativo, tipo_janela, revisado_manualmente, data_carga
