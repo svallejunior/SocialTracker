@@ -64,6 +64,16 @@ DB_PATH = _raw_db if os.path.isabs(_raw_db) else os.path.join(BASE_DIR, _raw_db)
 GRAPH_API_VERSION = "v20.0"
 GRAPH_API_BASE = f"https://graph.facebook.com/{GRAPH_API_VERSION}"
 
+# Tokens obtidos via login direto do Instagram (Instagram API with Instagram
+# Login, sem Facebook) começam com "IGAA" e só funcionam em graph.instagram.com
+# — graph.facebook.com nem consegue parsear esse formato ("Cannot parse access
+# token"). Tokens do fluxo antigo (Facebook Login for Business / Page-linked)
+# continuam indo por graph.facebook.com normalmente.
+def graph_api_base(access_token):
+    if (access_token or "").startswith("IGAA"):
+        return f"https://graph.instagram.com/{GRAPH_API_VERSION}"
+    return GRAPH_API_BASE
+
 
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH, timeout=30)
@@ -248,7 +258,7 @@ def obter_contas_meta_configuradas(username_filtro=None):
 
 def extrair_dados_perfil(account_id, token):
     """Obtém dados básicos da conta via Meta Graph API."""
-    url = f"{GRAPH_API_BASE}/{account_id}"
+    url = f"{graph_api_base(token)}/{account_id}"
     params = {
         "fields": "id,username,name,biography,followers_count,follows_count,media_count,profile_picture_url,website",
         "access_token": token
@@ -269,7 +279,7 @@ def extrair_insights_post(media_id, media_type, media_product_type, token):
     """
     Tenta obter métricas avançadas (insights) de uma postagem específica.
     """
-    url = f"{GRAPH_API_BASE}/{media_id}/insights"
+    url = f"{graph_api_base(token)}/{media_id}/insights"
     
     # Define as métricas apropriadas para cada tipo de mídia
     metrics = ["reach", "saved", "total_interactions"]
@@ -310,7 +320,7 @@ def extrair_insights_post(media_id, media_type, media_product_type, token):
 
 def extrair_posts_perfil(account_id, token, limite=50):
     """Obtém as publicações recentes da conta com métricas e paginação."""
-    url = f"{GRAPH_API_BASE}/{account_id}/media"
+    url = f"{graph_api_base(token)}/{account_id}/media"
     params = {
         "fields": "id,caption,media_type,media_product_type,permalink,timestamp,like_count,comments_count,shortcode,media_url,thumbnail_url",
         "limit": min(limite, 50),
