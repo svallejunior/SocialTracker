@@ -1,6 +1,6 @@
 "use client";
 export const dynamic = 'force-dynamic';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import nextDynamic from 'next/dynamic';
 import {
@@ -1631,6 +1631,7 @@ export default function Dashboard() {
   const [tipoGrafico, setTipoGrafico] = useState<'linha' | 'barra'>('linha');
 
   // Dados brutos da API
+  const lastValidProfilesRef = useRef<any[]>([]);
   const [profiles, setProfiles] = useState<any[]>([]);
   const [posts, setPosts] = useState<any[]>([]);
   const [followersHistory, setFollowersHistory] = useState<any>({});
@@ -1870,7 +1871,7 @@ export default function Dashboard() {
   const handleRefreshFeed = async () => {
     setRefreshingFeed(true);
     try {
-      await fetchData();
+      await fetchData(true);
       await fetchControle(true);
     } catch (err) {
       console.error('Erro ao atualizar feed:', err);
@@ -1898,10 +1899,12 @@ export default function Dashboard() {
       return p;
     }));
   };
-  // Carregar dados da API
-  const fetchData = async () => {
+  // Carregar dados da API (silent=true preserva a tela atual sem spinner nem zerar dados)
+  const fetchData = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent && profiles.length === 0 && lastValidProfilesRef.current.length === 0) {
+        setLoading(true);
+      }
       const response = await fetch('/api/data', {
         cache: 'no-store'
       });
@@ -2111,9 +2114,16 @@ export default function Dashboard() {
           };
         });
 
-        setProfiles(enrichedProfiles);
-        setPosts(enrichedPosts);
-        setFollowersHistory(fHistory);
+        if (enrichedProfiles.length > 0) {
+          lastValidProfilesRef.current = enrichedProfiles;
+          setProfiles(enrichedProfiles);
+        }
+        if (enrichedPosts.length > 0) {
+          setPosts(enrichedPosts);
+        }
+        if (fHistory && Object.keys(fHistory).length > 0) {
+          setFollowersHistory(fHistory);
+        }
 
         if (!json.ultimaAtualizacao && enrichedProfiles.length > 0) {
           const maxDate = enrichedProfiles.reduce((max: string, p: any) => (p.data_coleta && p.data_coleta > max ? p.data_coleta : max), '');
@@ -2181,10 +2191,10 @@ export default function Dashboard() {
           // Se foi para um perfil específico e deu warning/sem dados, abre modal de resolução sem alterar ou recarregar nada previamente
           setModalPerfilSemDados({ username });
         } else if (json.warning) {
-          fetchData(); // Recarrega os dados
+          fetchData(true); // Recarrega os dados em background sem desmontar nem zerar a tela
           alert("⚠️ A ingestão foi concluída, mas alguns perfis não retornaram dados (privados ou indisponíveis).");
         } else {
-          fetchData(); // Recarrega os dados
+          fetchData(true); // Recarrega os dados em background sem desmontar nem zerar a tela
           alert(username ? `✅ Ingestão concluída com sucesso para @${username}!` : "✅ Ingestão concluída para todos os perfis ativos!");
         }
       } else {
@@ -2211,8 +2221,8 @@ export default function Dashboard() {
       });
       const json = await res.json();
       if (json.success) {
-        fetchControle();
-        fetchData();
+        fetchControle(true);
+        fetchData(true);
         alert('✅ Atualização via Meta API concluída com sucesso!');
       } else if (json.warning) {
         alert(`⚠️ ${json.message || 'Nenhuma conta Meta configurada encontrada.'}`);
@@ -3004,7 +3014,8 @@ export default function Dashboard() {
                 };
 
                 const mapaControle = new Map((controleData || []).map((c: any) => [(c.username || '').toLowerCase(), c]));
-                let modelos = profiles
+                const perfisOrigem = (profiles && profiles.length > 0) ? profiles : lastValidProfilesRef.current;
+                let modelos = perfisOrigem
                   .filter((p: any) => {
                     const u = (p.username || '').toLowerCase();
                     const c = mapaControle.get(u) || {};
@@ -3013,14 +3024,14 @@ export default function Dashboard() {
                   })
                   .sort((a: any, b: any) => (Number(b.seguidores) || 0) - (Number(a.seguidores) || 0));
 
-                if (modelos.length === 0 && controleData.length > 0) {
+                if (modelos.length === 0 && perfisOrigem.length === 0 && controleData.length > 0) {
                   modelos = controleData.filter((c: any) => !isMorreu(c));
                 }
 
                 return modelos.map((m: any) => {
                   const u = (m.username || '').toLowerCase();
                   const pCtrl = mapaControle.get(u) || m;
-                  const pProf = profiles.find((p: any) => (p.username || '').toLowerCase() === u) || m;
+                  const pProf = perfisOrigem.find((p: any) => (p.username || '').toLowerCase() === u) || m;
 
                   const nome = pCtrl.nome || pProf.nome_controle || pProf.nome || m.nome || m.username;
                   const foto = pProf.foto_url || pCtrl.foto_url || pProf.foto_perfil_meta || m.foto_url || null;

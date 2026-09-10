@@ -150,42 +150,79 @@ export async function GET() {
       const hojeStr = new Date().toISOString().substring(0, 10);
       const limiteHoje = `${hojeStr} 00:00:00`;
 
-      // 1) Duas últimas cargas de snapshots para delta do último ciclo
-      const ultimasCargas = await db.all(`
-        SELECT DISTINCT data_carga
+      // 1) Duas últimas cargas de snapshots para delta do último ciclo calculadas por perfil individualmente
+      // (Isso impede que o delta zere enquanto a ingestão está em andamento gravando outro perfil primeiro)
+      const userCargasRows = await db.all(`
+        SELECT LOWER(username) as uname, data_carga
         FROM posts_metricas_snapshots
-        WHERE data_carga IS NOT NULL
-        ORDER BY data_carga DESC
-        LIMIT 2
+        GROUP BY LOWER(username), data_carga
+        ORDER BY LOWER(username), data_carga DESC
       `).catch(() => []);
 
-      if (ultimasCargas.length >= 2) {
-        const uCarga = ultimasCargas[0].data_carga;
-        const pCarga = ultimasCargas[1].data_carga;
+      const userCargasPair: Record<string, { uCarga: string; pCarga?: string }> = {};
+      for (const row of userCargasRows) {
+        const u = row.uname;
+        if (!userCargasPair[u]) {
+          userCargasPair[u] = { uCarga: row.data_carga };
+        } else if (!userCargasPair[u].pCarga) {
+          userCargasPair[u].pCarga = row.data_carga;
+        }
+      }
 
-        // Query blindada contra glitches de views zeradas ou posts antigos que oscilaram na API da Meta
-        const postDiffRows = await db.all(`
+      const distinctCargas = Array.from(new Set(
+        Object.values(userCargasPair).flatMap(p => [p.uCarga, p.pCarga].filter(Boolean) as string[])
+      ));
+
+      if (distinctCargas.length > 0) {
+        const placeholders = distinctCargas.map(() => '?').join(',');
+        const recentSnaps = await db.all(`
           SELECT 
-            su.post_id,
-            LOWER(su.username) as uname,
-            su.views as v_u,
-            sp.views as v_p,
-            p.data_postagem,
-            CASE 
-              WHEN sp.views IS NOT NULL AND sp.views > 0 THEN MAX(0, su.views - sp.views)
-              WHEN p.data_postagem >= ? THEN su.views
-              ELSE 0 
-            END as delta_real
-          FROM posts_metricas_snapshots su
-          JOIN posts_historico p ON p.post_id = su.post_id
-          LEFT JOIN posts_metricas_snapshots sp ON sp.post_id = su.post_id AND sp.data_carga = ?
-          WHERE su.data_carga = ?
-        `, [limiteHoje, pCarga, uCarga]).catch(() => []);
+            s.post_id,
+            LOWER(s.username) as uname,
+            s.views,
+            s.data_carga,
+            p.data_postagem
+          FROM posts_metricas_snapshots s
+          JOIN posts_historico p ON p.post_id = s.post_id
+          WHERE s.data_carga IN (${placeholders})
+        `, distinctCargas).catch(() => []);
 
-        for (const row of postDiffRows) {
-          const delta = Math.max(0, Number(row.delta_real) || 0);
-          postViewsDeltaMap[row.post_id] = delta;
-          viewsDeltaMap[row.uname] = (viewsDeltaMap[row.uname] || 0) + delta;
+        const snapViewsMap: Record<string, Record<string, Record<string, number>>> = {};
+        const postDateMap: Record<string, string> = {};
+
+        for (const s of recentSnaps) {
+          const u = s.uname;
+          const pid = s.post_id;
+          if (!snapViewsMap[u]) snapViewsMap[u] = {};
+          if (!snapViewsMap[u][pid]) snapViewsMap[u][pid] = {};
+          snapViewsMap[u][pid][s.data_carga] = Number(s.views) || 0;
+          postDateMap[pid] = s.data_postagem || '';
+        }
+
+        for (const [u, pair] of Object.entries(userCargasPair)) {
+          const uC = pair.uCarga;
+          const pC = pair.pCarga;
+          const userPosts = snapViewsMap[u] || {};
+
+          let userDeltaSum = 0;
+          for (const [pid, cargasObj] of Object.entries(userPosts)) {
+            const vU = cargasObj[uC];
+            if (vU === undefined) continue;
+
+            const vP = pC ? cargasObj[pC] : undefined;
+            const postDate = postDateMap[pid] || '';
+
+            let deltaReal = 0;
+            if (vP !== undefined && vP > 0) {
+              deltaReal = Math.max(0, vU - vP);
+            } else if (postDate >= limiteHoje) {
+              deltaReal = vU;
+            }
+
+            postViewsDeltaMap[pid] = deltaReal;
+            userDeltaSum += deltaReal;
+          }
+          viewsDeltaMap[u] = userDeltaSum;
         }
       }
 
