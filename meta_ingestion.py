@@ -508,6 +508,17 @@ def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str):
         shares = int(insights.get("shares", 0))
         total_interactions = int(insights.get("total_interactions", (likes + comentarios + saved + shares)))
 
+        # Proteção contra oscilação transitória da Meta API (quando insights vem temporariamente vazio/zero)
+        if views == 0:
+            c.execute("SELECT views, reach FROM posts_historico WHERE post_id = ?", (post_id,))
+            row_prev = c.fetchone()
+            if row_prev:
+                prev_v, prev_r = row_prev
+                if prev_v and prev_v > 0:
+                    views = prev_v
+                if reach == 0 and prev_r and prev_r > 0:
+                    reach = prev_r
+
         # Taxa de engajamento baseada em seguidores
         taxa_engajamento = 0.0
         if dados_perfil and dados_perfil.get("followers_count", 0) > 0:

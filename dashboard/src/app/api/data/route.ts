@@ -162,33 +162,29 @@ export async function GET() {
         const uCarga = ultimasCargas[0].data_carga;
         const pCarga = ultimasCargas[1].data_carga;
 
-        const diffRows = await db.all(`
-          SELECT 
-            LOWER(username) as uname,
-            SUM(CASE WHEN data_carga = ? THEN views ELSE 0 END) -
-            SUM(CASE WHEN data_carga = ? THEN views ELSE 0 END) as diff
-          FROM posts_metricas_snapshots
-          WHERE data_carga IN (?, ?)
-          GROUP BY LOWER(username)
-        `, [uCarga, pCarga, uCarga, pCarga]).catch(() => []);
-
-        for (const row of diffRows) {
-          viewsDeltaMap[row.uname] = Math.max(0, Number(row.diff) || 0);
-        }
-
-        // Delta individual de visualizações por post entre a última e a penúltima carga
+        // Query blindada contra glitches de views zeradas ou posts antigos que oscilaram na API da Meta
         const postDiffRows = await db.all(`
           SELECT 
-            post_id,
-            MAX(CASE WHEN data_carga = ? THEN views ELSE 0 END) -
-            MAX(CASE WHEN data_carga = ? THEN views ELSE 0 END) as diff
-          FROM posts_metricas_snapshots
-          WHERE data_carga IN (?, ?)
-          GROUP BY post_id
-        `, [uCarga, pCarga, uCarga, pCarga]).catch(() => []);
+            su.post_id,
+            LOWER(su.username) as uname,
+            su.views as v_u,
+            sp.views as v_p,
+            p.data_postagem,
+            CASE 
+              WHEN sp.views IS NOT NULL AND sp.views > 0 THEN MAX(0, su.views - sp.views)
+              WHEN p.data_postagem >= ? THEN su.views
+              ELSE 0 
+            END as delta_real
+          FROM posts_metricas_snapshots su
+          JOIN posts_historico p ON p.post_id = su.post_id
+          LEFT JOIN posts_metricas_snapshots sp ON sp.post_id = su.post_id AND sp.data_carga = ?
+          WHERE su.data_carga = ?
+        `, [limiteHoje, pCarga, uCarga]).catch(() => []);
 
         for (const row of postDiffRows) {
-          postViewsDeltaMap[row.post_id] = Math.max(0, Number(row.diff) || 0);
+          const delta = Math.max(0, Number(row.delta_real) || 0);
+          postViewsDeltaMap[row.post_id] = delta;
+          viewsDeltaMap[row.uname] = (viewsDeltaMap[row.uname] || 0) + delta;
         }
       }
 
