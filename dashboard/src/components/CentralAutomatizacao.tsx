@@ -3614,11 +3614,16 @@ function FormularioAgendamento({
           onClick={() => fileInputRef.current?.click()}
           onDragOver={e => {
             e.preventDefault();
+            e.stopPropagation();
             setIsDragOver(true);
           }}
-          onDragLeave={() => setIsDragOver(false)}
+          onDragLeave={e => {
+            e.stopPropagation();
+            setIsDragOver(false);
+          }}
           onDrop={e => {
             e.preventDefault();
+            e.stopPropagation();
             setIsDragOver(false);
             handleFileUpload(e.dataTransfer.files);
           }}
