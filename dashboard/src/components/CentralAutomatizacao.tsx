@@ -1764,11 +1764,16 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                   dragCounterMap.current[perfil.username] = 0;
                   setDragOverCardMap(prev => ({ ...prev, [perfil.username]: false }));
 
-                  const droppedFiles = e.dataTransfer.files ? Array.from(e.dataTransfer.files) : [];
-                  if (droppedFiles.length > 0) {
-                    setPendingFilesMap(prev => ({ ...prev, [perfil.username]: droppedFiles }));
-                    setEditingAgendamentoMap(prev => ({ ...prev, [perfil.username]: null }));
-                    setFormOpenMap(prev => ({ ...prev, [perfil.username]: true }));
+                  // Só processa arquivos via card se o formulário NÃO estiver aberto.
+                  // Quando o usuário solta no dropzone interno (dentro do form já aberto),
+                  // o evento borbulha até aqui — sem esse guard causaria agendamento duplicado.
+                  if (!isFormOpen) {
+                    const droppedFiles = e.dataTransfer.files ? Array.from(e.dataTransfer.files) : [];
+                    if (droppedFiles.length > 0) {
+                      setPendingFilesMap(prev => ({ ...prev, [perfil.username]: droppedFiles }));
+                      setEditingAgendamentoMap(prev => ({ ...prev, [perfil.username]: null }));
+                      setFormOpenMap(prev => ({ ...prev, [perfil.username]: true }));
+                    }
                   }
                 }}
                 style={{
@@ -3617,13 +3622,9 @@ function FormularioAgendamento({
             e.stopPropagation();
             setIsDragOver(true);
           }}
-          onDragLeave={e => {
-            e.stopPropagation();
-            setIsDragOver(false);
-          }}
+          onDragLeave={() => setIsDragOver(false)}
           onDrop={e => {
             e.preventDefault();
-            e.stopPropagation();
             setIsDragOver(false);
             handleFileUpload(e.dataTransfer.files);
           }}
