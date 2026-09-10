@@ -3053,8 +3053,14 @@ export default function Dashboard() {
                     <div key={m.username} className="modelo-card-mockup">
                       {/* COLUNA ESQUERDA: FOTO, NOME, USERNAME E BOTÃO GERENCIAR */}
                       <div className="modelo-col-left">
-                        {/* Foto da Modelo (Sem badge 'Online') */}
-                        <div className="modelo-photo-frame">
+                        {/* Foto da Modelo (Ao clicar abre o Instagram em nova aba) */}
+                        <a
+                          href={`https://instagram.com/${m.username.replace('@', '')}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="modelo-photo-frame"
+                          title={`Abrir perfil de @${m.username} no Instagram`}
+                        >
                           {foto ? (
                             <img
                               src={foto}
@@ -3072,7 +3078,7 @@ export default function Dashboard() {
                               <span style={{ fontSize: '11px' }}>Sem foto</span>
                             </div>
                           )}
-                        </div>
+                        </a>
 
                         {/* Nome da Modelo e Handle (Sem frase 'boas vibrações') */}
                         <div className="modelo-info-box">
