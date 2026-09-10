@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
   }
 
   const appId = process.env.INSTAGRAM_APP_ID || process.env.META_APP_ID || '';
-  const appSecret = process.env.META_APP_SECRET || '';
+  const appSecret = process.env.INSTAGRAM_APP_SECRET || process.env.META_APP_SECRET || '';
   const redirectUri = process.env.INSTAGRAM_REDIRECT_URI
     ?? 'http://localhost:3000/api/auth/instagram-login/callback';
 
