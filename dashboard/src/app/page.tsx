@@ -509,34 +509,6 @@ const ViralCardThumbnail = ({
           </>
         )}
       </div>
-      {/* Badge de tração/views recentes no momento */}
-      {topPost && (Number(topPost.delta_views_coleta) > 0 || Number(topPost.views_dia) > 0) && (
-        <div style={{
-          position: 'absolute',
-          top: 6,
-          right: 6,
-          background: 'rgba(0, 0, 0, 0.85)',
-          border: '1px solid #00FF66',
-          color: '#00FF66',
-          padding: '2px 7px',
-          borderRadius: 4,
-          fontSize: '9px',
-          fontWeight: 800,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '3px',
-          boxShadow: '0 0 8px rgba(0, 255, 102, 0.4)',
-          pointerEvents: 'none',
-          letterSpacing: '0.2px'
-        }}>
-          <span>🔥</span>
-          <span>
-            {Number(topPost.delta_views_coleta) > 0
-              ? `+${formatNumber(topPost.delta_views_coleta)} views`
-              : `+${formatNumber(topPost.views_dia)} hoje`}
-          </span>
-        </div>
-      )}
 
       {/* Tarja inferior com link */}
       {postUrl && postUrl !== '#' && (
@@ -4300,18 +4272,13 @@ export default function Dashboard() {
                     {/* Grid de 3 Métricas */}
                     <div className="metrics-row">
                       <div className="metric-box">
-                        <span className="metric-lbl">👥 Seguidores HOJE</span>
-                        <span className="metric-val" style={{ color: (perfil.novosSeguidoresColeta || 0) > 0 ? '#10B981' : (perfil.novosSeguidoresColeta || 0) < 0 ? '#F85149' : undefined }}>
-                          {(perfil.novosSeguidoresColeta || 0) > 0 ? '+' : ''}{(perfil.novosSeguidoresColeta || 0) !== 0 ? formatNumber(perfil.novosSeguidoresColeta) : '0'}
-                        </span>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <span className="metric-sub green" title="Diferença da penúltima para a última coleta">no último ciclo</span>
-                          <span className="metric-sub" style={{ color: 'var(--text-secondary)', fontSize: '10px' }}>
-                            No dia: <strong style={{ color: (perfil.novosSeguidoresDia || 0) > 0 ? '#10B981' : (perfil.novosSeguidoresDia || 0) < 0 ? '#F85149' : 'var(--text-secondary)' }}>
-                              {(perfil.novosSeguidoresDia || 0) > 0 ? '+' : ''}{formatNumber(perfil.novosSeguidoresDia || 0)}
-                            </strong>
+                        <span className="metric-lbl">👥 Seguidores</span>
+                        <span className="metric-val" style={{ color: '#FFFFFF' }}>
+                          {formatNumber(perfil.novosSeguidoresDia || 0)}
+                          <span style={{ color: '#00FF66', fontSize: '15px', fontWeight: 700, marginLeft: '6px' }}>
+                            ({(perfil.novosSeguidoresColeta || 0) >= 0 ? `+${formatNumber(perfil.novosSeguidoresColeta || 0)}` : formatNumber(perfil.novosSeguidoresColeta || 0)})
                           </span>
-                        </div>
+                        </span>
                       </div>
                       <div className="metric-box">
                         <span className="metric-lbl">🔥 Média Posts Virais</span>
@@ -4323,26 +4290,15 @@ export default function Dashboard() {
                         </span>
                       </div>
                       <div className="metric-box">
-                        <span className="metric-lbl">👁️ Visualizações POST</span>
-                        <span className="metric-val">
+                        <span className="metric-lbl">👁️ Visualizações</span>
+                        <span className="metric-val" style={{ color: '#FFFFFF' }}>
                           {topPost && topPost.views > 0 ? formatNumber(topPost.views) : '—'}
+                          {topPost && (topPost.delta_views_coleta || 0) > 0 && (
+                            <span style={{ color: '#00FF66', fontSize: '15px', fontWeight: 700, marginLeft: '6px' }}>
+                              (+{formatNumber(topPost.delta_views_coleta)})
+                            </span>
+                          )}
                         </span>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          {(topPost && (topPost.delta_views_coleta || 0) > 0) ? (
-                            <span className="metric-sub" style={{ color: '#00FF66', fontWeight: 700 }} title="Diferença da penúltima para a última leitura">
-                              +{formatNumber(topPost.delta_views_coleta)} no momento
-                            </span>
-                          ) : (
-                            <span className="metric-sub">
-                              {topPost && topPost.views > 0 ? 'Reels plays' : 'Post estático'}
-                            </span>
-                          )}
-                          {topPost && (topPost.views_dia || 0) > 0 && (
-                            <span className="metric-sub" style={{ color: 'var(--text-secondary)', fontSize: '10px' }}>
-                              No dia: <strong style={{ color: '#00FF66' }}>+{formatNumber(topPost.views_dia)}</strong>
-                            </span>
-                          )}
-                        </div>
                       </div>
                     </div>
 
