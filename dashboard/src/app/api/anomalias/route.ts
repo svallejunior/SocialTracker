@@ -105,20 +105,31 @@ export async function GET(request: NextRequest) {
     }));
 
     // 3. Registros de Coleta Detalhados (para o perfil selecionado ou modo especificado)
-    // A coleta anterior de cada perfil vem via LAG() na própria query (partição por
-    // username, ordenada por data_coleta/id) — evita o N+1 de um db.get por linha.
-    // O ingestor sempre grava username em minúsculas (meta_ingestion.py), então a
-    // partição usa a coluna crua e aproveita o índice idx_perfis_historico_user_data
-    // sem sort extra (LOWER(username) forçaria um "USE TEMP B-TREE FOR ORDER BY").
+    // Nesta aba, exibe APENAS o maior registro do dia (maior datetime).
+    // O ganho diário (seguidores, posts) e gatilhos são calculados comparando
+    // o último registro do dia com o último registro do dia anterior via LAG().
     let query = `
-      WITH historico_com_anterior AS (
+      WITH ultimas_coletas_dia AS (
+        SELECT *,
+          ROW_NUMBER() OVER (
+            PARTITION BY username, SUBSTR(data_coleta, 1, 10)
+            ORDER BY data_coleta DESC, id DESC
+          ) as rn_dia
+        FROM perfis_historico
+        WHERE inativo = 0
+      ),
+      historico_diario AS (
+        SELECT *
+        FROM ultimas_coletas_dia
+        WHERE rn_dia = 1
+      ),
+      historico_com_anterior AS (
         SELECT
           h.*,
           LAG(h.seguidores) OVER (PARTITION BY h.username ORDER BY h.data_coleta, h.id) AS seguidores_anterior,
           LAG(h.total_posts) OVER (PARTITION BY h.username ORDER BY h.data_coleta, h.id) AS total_posts_anterior,
           LAG(h.data_coleta) OVER (PARTITION BY h.username ORDER BY h.data_coleta, h.id) AS data_coleta_anterior
-        FROM perfis_historico h
-        WHERE h.inativo = 0
+        FROM historico_diario h
       )
       SELECT
         h.id,
@@ -248,9 +259,20 @@ export async function POST() {
   try {
     const db = await getDb();
 
+    // Seleciona apenas a última coleta de cada dia por perfil para avaliação de variações diárias
     const allRows = await db.all(`
+      WITH ultimas_coletas_dia AS (
+        SELECT *,
+          ROW_NUMBER() OVER (
+            PARTITION BY username, SUBSTR(data_coleta, 1, 10)
+            ORDER BY data_coleta DESC, id DESC
+          ) as rn_dia
+        FROM perfis_historico
+        WHERE inativo = 0
+      )
       SELECT id, username, data_coleta, seguidores, total_posts, inativo, tipo_janela, revisado_manualmente
-      FROM perfis_historico
+      FROM ultimas_coletas_dia
+      WHERE rn_dia = 1
       ORDER BY username, datetime(data_coleta) ASC, id ASC
     `);
 
