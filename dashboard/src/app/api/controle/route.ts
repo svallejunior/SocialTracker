@@ -193,6 +193,123 @@ export async function GET() {
       console.warn("Aviso ao buscar última execução Meta:", err);
     }
 
+    // 4.3 Métricas de visualizações dos posts e variação de seguidores por modelo
+    const viewsDiaMap: Record<string, number> = {};
+    const viewsDeltaMap: Record<string, number> = {};
+    const segDeltaColetaMap: Record<string, number> = {};
+    const segDeltaDiaMap: Record<string, number> = {};
+
+    try {
+      const hojeStr = new Date().toISOString().substring(0, 10);
+      const limiteHoje = `${hojeStr} 00:00:00`;
+
+      // 1) Duas últimas cargas de snapshots para delta do último ciclo
+      const ultimasCargas = await db.all(`
+        SELECT DISTINCT data_carga
+        FROM posts_metricas_snapshots
+        WHERE data_carga IS NOT NULL
+        ORDER BY data_carga DESC
+        LIMIT 2
+      `).catch(() => []);
+
+      if (ultimasCargas.length >= 2) {
+        const uCarga = ultimasCargas[0].data_carga;
+        const pCarga = ultimasCargas[1].data_carga;
+
+        const diffRows = await db.all(`
+          SELECT 
+            LOWER(username) as uname,
+            SUM(CASE WHEN data_carga = ? THEN views ELSE 0 END) -
+            SUM(CASE WHEN data_carga = ? THEN views ELSE 0 END) as diff
+          FROM posts_metricas_snapshots
+          WHERE data_carga IN (?, ?)
+          GROUP BY LOWER(username)
+        `, [uCarga, pCarga, uCarga, pCarga]).catch(() => []);
+
+        for (const row of diffRows) {
+          viewsDeltaMap[row.uname] = Math.max(0, Number(row.diff) || 0);
+        }
+      }
+
+      // 2) Views ganhas hoje
+      const snapHoje = await db.all(`
+        SELECT 
+          LOWER(username) as uname,
+          post_id,
+          MAX(views) as max_views,
+          MIN(views) as min_views
+        FROM posts_metricas_snapshots
+        WHERE data_carga >= ?
+        GROUP BY LOWER(username), post_id
+      `, [limiteHoje]).catch(() => []);
+
+      const snapAntes = await db.all(`
+        SELECT post_id, views
+        FROM posts_metricas_snapshots
+        WHERE data_carga < ?
+        ORDER BY data_carga DESC
+      `, [limiteHoje]).catch(() => []);
+
+      const antesMap: Record<string, number> = {};
+      for (const s of snapAntes) {
+        if (antesMap[s.post_id] === undefined) {
+          antesMap[s.post_id] = Number(s.views) || 0;
+        }
+      }
+
+      for (const s of snapHoje) {
+        const u = s.uname;
+        const maxV = Number(s.max_views) || 0;
+        const baseV = antesMap[s.post_id] !== undefined ? antesMap[s.post_id] : (Number(s.min_views) || 0);
+        const delta = maxV - baseV;
+        if (delta > 0) {
+          viewsDiaMap[u] = (viewsDiaMap[u] || 0) + delta;
+        }
+      }
+
+      // 3) Histórico de seguidores para variação da última coleta e no dia
+      const phRows = await db.all(`
+        SELECT LOWER(username) as uname, data_coleta, seguidores
+        FROM perfis_historico
+        WHERE seguidores > 0
+        ORDER BY data_coleta ASC, id ASC
+      `).catch(() => []);
+
+      const shRows = await db.all(`
+        SELECT LOWER(username) as uname, data_coleta, total_seguidores as seguidores
+        FROM seguidores_historico
+        WHERE total_seguidores > 0
+        ORDER BY data_coleta ASC, id ASC
+      `).catch(() => []);
+
+      const coletasByUser: Record<string, Record<string, number>> = {};
+      for (const r of phRows) {
+        (coletasByUser[r.uname] ??= {})[r.data_coleta] = Number(r.seguidores);
+      }
+      for (const r of shRows) {
+        (coletasByUser[r.uname] ??= {})[r.data_coleta] = Number(r.seguidores);
+      }
+
+      for (const [u, mapDt] of Object.entries(coletasByUser)) {
+        const arr = Object.entries(mapDt).sort((a, b) => a[0].localeCompare(b[0])).map(([dt, seg]) => ({ dt, seg }));
+        if (arr.length > 0) {
+          const atual = arr[arr.length - 1];
+          if (arr.length > 1) {
+            segDeltaColetaMap[u] = atual.seg - arr[arr.length - 2].seg;
+          }
+          const limite00 = `${atual.dt.substring(0, 10)} 00:00:00`;
+          const antes00 = arr.filter(x => x.dt < limite00);
+          const deHoje = arr.filter(x => x.dt >= limite00);
+          const base = antes00.length > 0 ? antes00[antes00.length - 1] : (deHoje.length > 0 ? deHoje[0] : atual);
+          if (base) {
+            segDeltaDiaMap[u] = atual.seg - base.seg;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Aviso ao calcular métricas de controle:", err);
+    }
+
     // 5. Tratamento de Dados: Transforma 'null' em valores seguros que o React aceita
 
     // Agrupa lançamentos e observações por username uma única vez (O(n)) em vez de
@@ -248,6 +365,10 @@ export async function GET() {
         mensagens_pendentes: nMsg,
         total_pendencias: totalPend,
         tem_pendencias: totalPend > 0,
+        views_dia: viewsDiaMap[u] || 0,
+        views_delta_ultima_carga: viewsDeltaMap[u] || 0,
+        novos_seguidores_coleta: segDeltaColetaMap[u] || 0,
+        novos_seguidores_dia: segDeltaDiaMap[u] || 0,
         lancamentos: lancamentosDoPerfil // Injeta obrigatoriamente um array []
       };
     });

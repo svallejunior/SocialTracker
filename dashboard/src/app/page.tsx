@@ -7,7 +7,7 @@ import {
   TrendingUp, ExternalLink, LogOut, Calendar, Search, Users, MessageSquare, Eye, EyeOff, Heart, Filter,
   BarChart3, Play, Hash, Hash as TagIcon, Image as ImageIcon, Film as VideoIcon, Layers as LayersIcon,
   HelpCircle, CheckCircle2, DollarSign, Wallet, FileText, X, Brain, AlertTriangle, BadgeCheck, History,
-  Smartphone, RefreshCw, Clock
+  Smartphone, RefreshCw, Clock, Sliders
 } from "lucide-react";
 import {
   LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, AreaChart, Area, ReferenceLine, CartesianGrid,
@@ -1552,7 +1552,7 @@ export default function Dashboard() {
   const [ultimaAtualizacaoGeral, setUltimaAtualizacaoGeral] = useState<string>('');
 
   // Estados de Navegação e Filtros
-  const [activeTab, setActiveTab] = useState<'acompanhados' | 'cards' | 'followers' | 'posts' | 'controle' | 'anomalias' | 'automatizacao' | 'respostas'>('controle');
+  const [activeTab, setActiveTab] = useState<'perfis' | 'cards' | 'graficos' | 'posts' | 'anomalias' | 'automatizacao' | 'respostas'>('perfis');
   const [anomaliasCount, setAnomaliasCount] = useState<number>(0);
   const [selectedProfile, setSelectedProfile] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -2168,7 +2168,7 @@ export default function Dashboard() {
     }
   }
   useEffect(() => {
-    if (activeTab === 'controle') fetchControle();
+    if (activeTab === 'perfis' || activeTab === 'graficos') fetchControle();
   }, [activeTab]);
 
   // A ingestão oficial da Meta API roda sozinha no servidor a cada 30min
@@ -2716,8 +2716,8 @@ export default function Dashboard() {
       });
       if (res.ok) {
         setShowAdd(false);
-        // Navega para a aba Acompanhando
-        setActiveTab('acompanhados');
+        // Navega para a aba Perfis
+        setActiveTab('perfis');
         // Recarrega lista de perfis
         await fetchData();
         // Dispara ingestão inicial automaticamente
@@ -2757,24 +2757,18 @@ export default function Dashboard() {
           {/* Navegação principal por Abas */}
           <div className="nav-tabs">
             <button
-              className={`tab-btn ${activeTab === 'controle' ? 'active' : ''}`}
-              onClick={() => setActiveTab('controle')}
-            >
-              🎛️ Controle
-            </button>
-            <button
-              className={`tab-btn ${activeTab === 'acompanhados' ? 'active' : ''}`}
-              onClick={() => setActiveTab('acompanhados')}
-            >
-              <Heart size={16} />
-              Acompanhando
-            </button>
-            <button
-              className={`tab-btn ${activeTab === 'followers' ? 'active' : ''}`}
-              onClick={() => setActiveTab('followers')}
+              className={`tab-btn ${activeTab === 'perfis' ? 'active' : ''}`}
+              onClick={() => setActiveTab('perfis')}
             >
               <Users size={16} />
-              Seguidores
+              PERFIS
+            </button>
+            <button
+              className={`tab-btn ${activeTab === 'graficos' ? 'active' : ''}`}
+              onClick={() => setActiveTab('graficos')}
+            >
+              <BarChart3 size={16} />
+              GRÁFICOS
             </button>
             <button
               className={`tab-btn ${activeTab === 'cards' ? 'active' : ''}`}
@@ -2859,10 +2853,144 @@ export default function Dashboard() {
         </div>
       </header>
       {/* ====================================================
-        ABA 0: ACOMPANHADOS
+        ABA 0: PERFIS (MINHAS MODELOS + PERFIS ACOMPANHADOS)
       ==================================================== */}
-      {activeTab === 'acompanhados' && (
+      {activeTab === 'perfis' && (
         <div>
+          {/* ====================================================
+              SEÇÃO: CARDS DE MINHAS MODELOS (3 POR LINHA)
+              ==================================================== */}
+          <div className="modelos-section">
+            <div className="modelos-cards-grid">
+              {(() => {
+                const mapaControle = new Map((controleData || []).map((c: any) => [(c.username || '').toLowerCase(), c]));
+                let modelos = profiles
+                  .filter((p: any) => Number(p.meu_perfil) === 1 || mapaControle.has((p.username || '').toLowerCase()))
+                  .sort((a: any, b: any) => (Number(b.seguidores) || 0) - (Number(a.seguidores) || 0));
+
+                if (modelos.length === 0 && controleData.length > 0) {
+                  modelos = controleData;
+                }
+
+                return modelos.map((m: any) => {
+                  const u = (m.username || '').toLowerCase();
+                  const pCtrl = mapaControle.get(u) || m;
+                  const pProf = profiles.find((p: any) => (p.username || '').toLowerCase() === u) || m;
+
+                  const nome = pCtrl.nome || pProf.nome_controle || pProf.nome || m.nome || m.username;
+                  const foto = pProf.foto_url || pCtrl.foto_url || pProf.foto_perfil_meta || m.foto_url || null;
+                  const seguidores = Number(pProf.seguidores || pCtrl.seguidores || m.seguidores || 0);
+
+                  const deltaSeg = pProf.novosSeguidoresColeta !== undefined
+                    ? Number(pProf.novosSeguidoresColeta)
+                    : (pCtrl.novos_seguidores_coleta !== undefined
+                      ? Number(pCtrl.novos_seguidores_coleta)
+                      : (pProf.novosSeguidoresDia !== undefined ? Number(pProf.novosSeguidoresDia) : 0));
+
+                  const viewsDia = pProf.views_dia !== undefined
+                    ? Number(pProf.views_dia)
+                    : (pCtrl.views_dia !== undefined ? Number(pCtrl.views_dia) : 0);
+
+                  const viewsDeltaCarga = pProf.views_delta_ultima_carga !== undefined
+                    ? Number(pProf.views_delta_ultima_carga)
+                    : (pCtrl.views_delta_ultima_carga !== undefined ? Number(pCtrl.views_delta_ultima_carga) : 0);
+
+                  return (
+                    <div key={m.username} className="modelo-card">
+                      {/* Coluna da Foto, Nome e Botão */}
+                      <div className="modelo-card-media-col">
+                        <div className="modelo-card-photo-box">
+                          {foto ? (
+                            <img
+                              src={foto}
+                              alt={nome}
+                              className="modelo-card-photo"
+                              referrerPolicy="no-referrer"
+                              crossOrigin="anonymous"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLElement).style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#8B949E', gap: 4 }}>
+                              <Users size={28} />
+                              <span style={{ fontSize: '10px' }}>Sem foto</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Abaixo da foto: Nome da modelo */}
+                        <div className="modelo-card-name-box">
+                          <span className="modelo-card-name" title={nome}>
+                            {nome}
+                          </span>
+                          {m.username && (
+                            <span className="modelo-card-handle" title={`@${m.username}`}>
+                              @{m.username}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Abaixo da foto: Botão para abrir o modal */}
+                        <button
+                          type="button"
+                          className="modelo-card-btn"
+                          onClick={() => setModalControleEdit(pCtrl)}
+                          title={`Abrir modal de controle de ${nome}`}
+                        >
+                          <Sliders size={12} />
+                          Gerenciar
+                        </button>
+                      </div>
+
+                      {/* Janela ao lado da foto */}
+                      <div className="modelo-card-window">
+                        {/* Seguidores */}
+                        <div className="modelo-metric-row">
+                          <span className="modelo-metric-label">
+                            <Users size={12} /> Seguidores
+                          </span>
+                          <div className="modelo-metric-val-wrap">
+                            <span className="modelo-metric-val">
+                              {formatNumber(seguidores)}
+                            </span>
+                            <span className="neon-green-badge" title="Diferença na última coleta">
+                              ({deltaSeg >= 0 ? `+${formatNumber(deltaSeg)}` : formatNumber(deltaSeg)})
+                            </span>
+                          </div>
+                        </div>
+
+                        <div style={{ height: '1px', background: 'rgba(255, 255, 255, 0.06)', width: '100%' }} />
+
+                        {/* Visualizações no Dia */}
+                        <div className="modelo-metric-row">
+                          <span className="modelo-metric-label">
+                            <Eye size={12} /> Views no Dia
+                          </span>
+                          <div className="modelo-metric-val-wrap">
+                            <span className="modelo-metric-val">
+                              {viewsDia > 0 ? formatNumber(viewsDia) : '—'}
+                            </span>
+                            <span
+                              className="neon-green-badge"
+                              style={{
+                                color: viewsDeltaCarga > 0 ? '#39FF14' : '#8B949E',
+                                textShadow: viewsDeltaCarga > 0 ? '0 0 8px rgba(57, 255, 20, 0.45)' : 'none'
+                              }}
+                              title="Diferença no último carregamento de dados"
+                            >
+                              ({viewsDeltaCarga > 0 ? `+${formatNumber(viewsDeltaCarga)}` : '0'})
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          </div>
+
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: 12 }}>
             <div>
               <h1 style={{ fontSize: '24px', fontWeight: '800', marginBottom: '6px' }}>👥 Perfis Acompanhados</h1>
@@ -4206,9 +4334,9 @@ export default function Dashboard() {
       )}
 
       {/* ====================================================
-          ABA 2: BASE DE SEGUIDORES (GRÁFICO COMPLETO)
+          ABA: GRÁFICOS (SEGUIDORES + FINANCEIRO + CORRELAÇÃO)
           ==================================================== */}
-      {activeTab === 'followers' && (
+      {activeTab === 'graficos' && (
         <div className="followers-history-box">
           <div className="chart-title-area">
             <div>
@@ -4771,6 +4899,305 @@ export default function Dashboard() {
             );
           })()}
 
+          {/* === BLOCO DOS GRÁFICOS: COMPARATIVO OPERACIONAL (FINANCEIRO / SEGUIDORES / CORRELAÇÃO) === */}
+          {(() => {
+            const CORES_GRAFICO = [
+              '#39FF14', '#00F0FF', '#FF007A', '#FF9F00', '#9E00FF', '#FF6B6B',
+              '#4ECDC4', '#7100E2', '#FFD700', '#FF4500', '#10B981', '#EC4899',
+              '#3B82F6', '#8B5CF6', '#F59E0B', '#EF4444', '#06B6D4', '#84CC16',
+              '#D946EF', '#F97316', '#6366F1', '#14B8A6', '#FBBF24', '#E11D48', '#22C55E'
+            ];
+            const todosUsuarios = financeiro.usuarios;
+            const usuariosVisiveis = todosUsuarios.filter((u: string) => !perfisOcultos.has(u));
+
+            const togglePerfil = (username: string) => {
+              setPerfisOcultos(prev => {
+                const next = new Set(prev);
+                if (next.has(username)) next.delete(username);
+                else next.add(username);
+                return next;
+              });
+            };
+
+            // Dados filtrados pelos perfis visíveis (suporta _acumulado/_diario, _seguidores/_receita e _efetividade)
+            const dadosAtivosFiltrados = dadosAtivos.map((ponto: any) => {
+              const novoPonto: any = { name: ponto.name, dia: ponto.dia };
+              usuariosVisiveis.forEach((u: string) => {
+                // Financeiro / Seguidores
+                if (ponto[`${u}_acumulado`] !== undefined) novoPonto[`${u}_acumulado`] = ponto[`${u}_acumulado`];
+                if (ponto[`${u}_diario`] !== undefined) novoPonto[`${u}_diario`] = ponto[`${u}_diario`];
+                // Correlação
+                if (ponto[`${u}_seguidores`] !== undefined) novoPonto[`${u}_seguidores`] = ponto[`${u}_seguidores`];
+                if (ponto[`${u}_receita`] !== undefined) novoPonto[`${u}_receita`] = ponto[`${u}_receita`];
+                if (ponto[`${u}_efetividade`] !== undefined) novoPonto[`${u}_efetividade`] = ponto[`${u}_efetividade`];
+              });
+              return novoPonto;
+            });
+
+            // Legenda clicável compartilhada
+            const LegendaPerfis = () => (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 16, paddingTop: 14, borderTop: '1px solid #21262D' }}>
+                {todosUsuarios.map((user: string, idx: number) => {
+                  const oculto = perfisOcultos.has(user);
+                  const cor = CORES_GRAFICO[idx % CORES_GRAFICO.length];
+                  return (
+                    <button
+                      key={user}
+                      onClick={() => togglePerfil(user)}
+                      title={oculto ? `Adicionar @${user} na comparação` : `Remover @${user} da comparação`}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 7,
+                        padding: '5px 12px', borderRadius: 20, cursor: 'pointer',
+                        border: `1.5px solid ${oculto ? '#30363D' : cor}`,
+                        background: oculto ? 'transparent' : `${cor}18`,
+                        color: oculto ? '#586069' : cor,
+                        fontSize: 12, fontWeight: 600, transition: 'all 0.18s',
+                        opacity: oculto ? 0.45 : 1,
+                        textDecoration: 'none'
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'scale(1.04)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.opacity = oculto ? '0.45' : '1'; e.currentTarget.style.transform = 'scale(1)'; }}
+                    >
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: oculto ? '#586069' : cor, display: 'inline-block', flexShrink: 0 }} />
+                      @{user}
+                      <span style={{ fontSize: 10, opacity: 0.7 }}>{oculto ? '＋' : '✕'}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            );
+
+            return (
+              <div style={{ marginTop: 32 }}>
+                {/* Gráfico principal: Financeiro / Seguidores / Correlação */}
+                <div style={{ background: '#161b22', border: '1px solid #30363d', borderRadius: 8, padding: 20 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+                    <div>
+                      <h3 style={{ margin: 0, color: '#f0f6fc', fontSize: 16, fontWeight: 600 }}>Comparativo de Comportamento Operacional</h3>
+                      <p style={{ margin: '4px 0 0 0', color: '#8b949e', fontSize: 12 }}>Acompanhamento relativo por dia de início de cada operação</p>
+                    </div>
+                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', background: '#0d1117', padding: 4, borderRadius: 6, border: '1px solid #30363d' }}>
+                        {(['financeiro', 'seguidores', 'correlacao'] as const).map(tipo => (
+                          <button
+                            key={tipo}
+                            onClick={() => setGraficoAtivo(tipo)}
+                            style={{
+                              background: graficoAtivo === tipo ? '#21262d' : 'transparent',
+                              color: graficoAtivo === tipo ? '#fff' : '#8b949e',
+                              border: 'none', padding: '6px 12px', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 600
+                            }}
+                          >
+                            {tipo === 'financeiro' ? 'Financeiro' : tipo === 'seguidores' ? 'Seguidores' : '📊 Correlação'}
+                          </button>
+                        ))}
+                      </div>
+                      <div style={{ display: 'flex', background: '#0d1117', padding: 4, borderRadius: 6, border: '1px solid #30363d' }}>
+                        {(['linha', 'barra'] as const).map(tipo => (
+                          <button
+                            key={tipo}
+                            onClick={() => setTipoGrafico(tipo)}
+                            style={{
+                              background: tipoGrafico === tipo ? '#21262d' : 'transparent',
+                              color: tipoGrafico === tipo ? '#39FF14' : '#8b949e',
+                              border: 'none', padding: '6px 12px', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 600
+                            }}
+                          >
+                            {tipo === 'linha' ? 'Linha' : 'Barras'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ width: '100%', height: 340 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      {graficoAtivo === 'correlacao' ? (
+                        <LineChart data={dadosAtivosFiltrados} margin={{ top: 10, right: 30, left: 10, bottom: 5 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#21262D" />
+                          <XAxis dataKey="name" stroke="#8b949e" fontSize={11} />
+                          <YAxis
+                            stroke="#39FF14"
+                            fontSize={10}
+                            tickFormatter={(v) => `R$ ${v.toFixed(2)}`}
+                            label={{ value: 'Eficácia (Saldo / Seguidor)', angle: -90, position: 'insideLeft', offset: 10, fill: '#39FF14', fontSize: 10 }}
+                          />
+                          <Tooltip
+                            contentStyle={{ backgroundColor: '#0d1117', borderColor: '#30363d', borderRadius: 6 }}
+                            itemStyle={{ fontSize: 11 }}
+                            labelStyle={{ color: '#fff' }}
+                            formatter={((value: any, name: string, item: any) => {
+                              const username = name.replace('_efetividade', '');
+                              const payload = item?.payload || {};
+                              const receita = payload[`${username}_receita`] || 0;
+                              const seguidoresUser = payload[`${username}_seguidores`] || 0;
+
+                              return [
+                                <div key={username} style={{ display: 'inline-block' }}>
+                                  <span style={{ fontWeight: 800 }}>R$ {Number(value).toFixed(3)} / seg.</span>
+                                  <div style={{ fontSize: 10, color: '#8b949e', marginTop: 4 }}>
+                                    Saldo: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(receita)} | Segs: {seguidoresUser.toLocaleString('pt-BR')}
+                                  </div>
+                                </div>,
+                                `@${username}`
+                              ];
+                            }) as any}
+                          />
+                          <ReferenceLine y={0} stroke="#30363d" strokeWidth={1.5} />
+                          {usuariosVisiveis.map((user: string) => {
+                            const cor = CORES_GRAFICO[todosUsuarios.indexOf(user) % CORES_GRAFICO.length];
+                            return (
+                              <Line
+                                key={`${user}_efetividade`}
+                                type="monotone"
+                                dataKey={`${user}_efetividade`}
+                                name={`${user}_efetividade`}
+                                stroke={cor}
+                                strokeWidth={2.5}
+                                dot={{ r: 3 }}
+                                connectNulls={true}
+                              />
+                            );
+                          })}
+                        </LineChart>
+                      ) : tipoGrafico === 'linha' ? (
+                        <LineChart data={dadosAtivosFiltrados} margin={{ top: 10, right: 30, left: 10, bottom: 5 }}>
+                          <XAxis dataKey="name" stroke="#8b949e" fontSize={11} />
+                          <YAxis stroke="#8b949e" fontSize={11} tickFormatter={(v) => graficoAtivo === 'financeiro' ? fmtBRL(v) : v.toLocaleString('pt-BR')} />
+                          <Tooltip
+                            contentStyle={{ backgroundColor: '#0d1117', borderColor: '#30363d', borderRadius: 6 }}
+                            itemStyle={{ fontSize: 12 }}
+                            labelStyle={{ color: '#fff', fontWeight: 700, marginBottom: 4 }}
+                            formatter={(value: any, name: any) => [
+                              graficoAtivo === 'financeiro'
+                                ? fmtBRL(Number(value))
+                                : Number(value).toLocaleString('pt-BR'),
+                              name
+                            ]}
+                          />
+                          <ReferenceLine y={0} stroke="#30363d" strokeWidth={1.5} />
+                          {usuariosVisiveis.map((user: string, idx: number) => (
+                            <Line key={user} type="monotone" dataKey={`${user}_acumulado`} name={`@${user}`}
+                              stroke={CORES_GRAFICO[todosUsuarios.indexOf(user) % CORES_GRAFICO.length]}
+                              strokeWidth={2.5} dot={{ r: 3 }} connectNulls={true} />
+                          ))}
+                        </LineChart>
+                      ) : (
+                        <BarChart data={dadosAtivosFiltrados} margin={{ top: 10, right: 30, left: 10, bottom: 5 }}>
+                          <XAxis dataKey="name" stroke="#8b949e" fontSize={11} />
+                          <YAxis stroke="#8b949e" fontSize={11} tickFormatter={(v) => graficoAtivo === 'financeiro' ? fmtBRL(v) : v.toLocaleString('pt-BR')} />
+                          <Tooltip
+                            contentStyle={{ backgroundColor: '#0d1117', borderColor: '#30363d', borderRadius: 6 }}
+                            itemStyle={{ fontSize: 12 }}
+                            labelStyle={{ color: '#fff', fontWeight: 700, marginBottom: 4 }}
+                            formatter={(value: any, name: any) => [
+                              graficoAtivo === 'financeiro'
+                                ? fmtBRL(Number(value))
+                                : Number(value).toLocaleString('pt-BR'),
+                              name
+                            ]}
+                          />
+                          <ReferenceLine y={0} stroke="#484f58" strokeWidth={1.5} />
+                          {usuariosVisiveis.map((user: string, idx: number) => (
+                            <Bar key={user}
+                              dataKey={graficoAtivo === 'financeiro' ? `${user}_diario` : `${user}_acumulado`}
+                              name={`@${user}`}
+                              fill={CORES_GRAFICO[todosUsuarios.indexOf(user) % CORES_GRAFICO.length]}
+                              radius={[4, 4, 0, 0]} />
+                          ))}
+                        </BarChart>
+                      )}
+                    </ResponsiveContainer>
+                  </div>
+
+                  {graficoAtivo === 'correlacao' && (
+                    <div style={{ marginTop: 12, display: 'flex', gap: 20, flexWrap: 'wrap', paddingBottom: 4 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#8b949e' }}>
+                        <span style={{ fontSize: 13 }}>💡</span>
+                        <strong>Eficácia:</strong> Mostra o valor em Reais gerado por seguidor individual (Saldo Acumulado ÷ Seguidores) ao longo dos dias.
+                      </div>
+                    </div>
+                  )}
+
+                  <LegendaPerfis />
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* === EXTRATO DE LANÇAMENTOS === */}
+          <div style={{ marginTop: 32 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 16 }}>📋 Extrato de Lançamentos</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+              {controleData
+                .slice()
+                .sort((a: any, b: any) => {
+                  const lA = Array.isArray(a.lancamentos) ? a.lancamentos : [];
+                  const lB = Array.isArray(b.lancamentos) ? b.lancamentos : [];
+
+                  const maxA = lA.reduce((max: string, l: any) => {
+                    const d = l.data_lancamento || '';
+                    return d > max ? d : max;
+                  }, '');
+                  const maxB = lB.reduce((max: string, l: any) => {
+                    const d = l.data_lancamento || '';
+                    return d > max ? d : max;
+                  }, '');
+
+                  if (maxA === '' && maxB !== '') return 1;
+                  if (maxB === '' && maxA !== '') return -1;
+                  return maxB.localeCompare(maxA);
+                })
+                .map((p: any) => {
+                  const items: any[] = Array.isArray(p.lancamentos) ? p.lancamentos : [];
+                  const sortedItems = [...items].sort((a, b) => {
+                    const dateA = a.data_lancamento || '';
+                    const dateB = b.data_lancamento || '';
+                    return dateB.localeCompare(dateA);
+                  });
+
+                  return (
+                    <div key={`extrato-${p.username}`} style={{ background: '#161B22', border: '1px solid #30363D', borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column' }}>
+                      <div style={{ fontWeight: 700, marginBottom: 12, color: 'white' }}>@{p.username}</div>
+                      {sortedItems.length === 0 ? (
+                        <div style={{ color: '#586069', fontSize: 12 }}>Nenhum lançamento ainda.</div>
+                      ) : (
+                        <div style={{ maxHeight: '255px', overflowY: 'auto', paddingRight: '6px' }} className="custom-scrollbar">
+                          {sortedItems.map((l: any, i: number) => (
+                            <div
+                              key={i}
+                              style={{
+                                display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0',
+                                borderBottom: i < sortedItems.length - 1 ? '1px solid #21262D' : 'none', fontSize: 12, cursor: 'pointer'
+                              }}
+                              onClick={() => {
+                                setLancamentoSelecionado(l);
+                                setModalLancamento({ username: p.username, tipo: l.tipo });
+                              }}
+                            >
+                              <div>
+                                <span style={{ color: l.tipo === 'despesa' ? '#FF007A' : '#39FF14', marginRight: 6 }}>
+                                  {l.tipo === 'despesa' ? '💸' : '💰'}
+                                </span>
+                                <span style={{ color: '#8B949E' }}>
+                                  {l.data_lancamento ? formatDate(l.data_lancamento) : ''}
+                                </span>
+                                {l.rateado === 1 && <span style={{ color: '#7100E2', marginLeft: 6, fontSize: 10, fontWeight: 700 }}>RATEIO</span>}
+                                {l.descricao && <div style={{ color: '#586069', fontSize: 11, marginTop: 2 }}>{l.descricao}</div>}
+                              </div>
+                              <span style={{ fontWeight: 700, color: l.tipo === 'despesa' ? '#FF007A' : '#39FF14' }}>
+                                {fmtBRL(l.valor_brl)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+
         </div>
       )}
 
@@ -5193,702 +5620,6 @@ export default function Dashboard() {
         </div>
       )}
       {/* ====================================================
-        ABA: CONTROLE
-      ==================================================== */}
-      {activeTab === 'controle' && (
-        <div>
-          <div style={{ marginBottom: 24, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-            <div>
-              <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 6 }}>Minhas Operações</h1>
-              <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
-                Gestão das minhas operações.
-              </p>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-              <button
-                onClick={handleRunMetaIngestion}
-                disabled={ingestingMeta}
-                title="Atualiza seguidores, posts e métricas das operações que possuem META ID configurado, usando exclusivamente a API oficial da Meta"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '10px 20px',
-                  borderRadius: 8,
-                  border: '1px solid rgba(0, 149, 246, 0.5)',
-                  background: ingestingMeta
-                    ? 'rgba(0, 149, 246, 0.08)'
-                    : 'linear-gradient(135deg, rgba(0, 149, 246, 0.15), rgba(113, 0, 226, 0.15))',
-                  color: ingestingMeta ? '#8B949E' : '#0095F6',
-                  cursor: ingestingMeta ? 'not-allowed' : 'pointer',
-                  fontSize: 13,
-                  fontWeight: 700,
-                  whiteSpace: 'nowrap',
-                  transition: 'all 0.2s ease',
-                  boxShadow: ingestingMeta ? 'none' : '0 0 16px rgba(0, 149, 246, 0.2)',
-                }}
-                onMouseEnter={e => {
-                  if (!ingestingMeta) {
-                    (e.currentTarget as HTMLButtonElement).style.borderColor = '#0095F6';
-                    (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 20px rgba(0, 149, 246, 0.4)';
-                  }
-                }}
-                onMouseLeave={e => {
-                  if (!ingestingMeta) {
-                    (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(0, 149, 246, 0.5)';
-                    (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 16px rgba(0, 149, 246, 0.2)';
-                  }
-                }}
-              >
-                {ingestingMeta ? (
-                  <>
-                    <div style={{
-                      width: 14, height: 14, borderRadius: '50%',
-                      border: '2px solid #8B949E',
-                      borderTopColor: '#0095F6',
-                      animation: 'spin 0.8s linear infinite',
-                      flexShrink: 0
-                    }} />
-                    Atualizando Meta API...
-                  </>
-                ) : (
-                  <>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" />
-                    </svg>
-                    Atualizar via Meta API
-                  </>
-                )}
-              </button>
-
-              {ultimaMetaExec && (
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 5,
-                  fontSize: 11,
-                  color: '#8B949E',
-                  fontWeight: 500,
-                }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#10B981', display: 'inline-block', boxShadow: '0 0 6px #10B981' }} />
-                  <span>
-                    Última execução: <strong style={{ color: '#C9D1D9', fontFamily: 'monospace' }}>
-                      {(() => {
-                        try {
-                          const dateObj = new Date(ultimaMetaExec.includes('T') ? ultimaMetaExec : ultimaMetaExec.replace(' ', 'T'));
-                          if (isNaN(dateObj.getTime())) return ultimaMetaExec;
-                          return dateObj.toLocaleString('pt-BR', {
-                            day: '2-digit',
-                            month: '2-digit',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          });
-                        } catch {
-                          return ultimaMetaExec;
-                        }
-                      })()}
-                    </strong>
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {controleLoading ? (
-            <div className="loading-box"><div className="spinner"></div><p>Carregando...</p></div>
-          ) : controleData.length === 0 ? (
-            <div className="loading-box"><p>Nenhum perfil marcado com ⭐ encontrado.</p></div>
-          ) : (
-            <>
-              {/* === TABELA PRINCIPAL === */}
-              <div style={{ overflowX: 'auto', background: '#161B22', border: '1px solid #30363D', borderRadius: 12 }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1300, fontSize: 12 }}>
-                  <thead>
-                    <tr style={{ background: '#0D1117', borderBottom: '1px solid #30363D' }}>
-                      {['Nome', 'Nascimento', 'Idade', 'Seguidores', 'E-mail / Usuário', 'Reserva', 'Linktree', 'Início', 'Telegram', 'Pronta em', 'Dias', 'Resultado', 'Status', 'Obs'].map(h => (
-                        <th key={h} style={{ padding: '10px 12px', textAlign: 'left', color: '#8B949E', fontWeight: 700, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(() => {
-                      const getDiasPerfil = (p: any) => {
-                        const isMorreu = (p.status || '').toLowerCase().includes('morreu') || (p.status_controle || '').toLowerCase().includes('morreu') || (p.status || '').toUpperCase() === 'MORREU';
-                        if (isMorreu && p.inicio && p.ultima_coleta) {
-                          const dataInicioStr = p.inicio.split(' ')[0].split('T')[0];
-                          const dataColetaStr = p.ultima_coleta.split(' ')[0].split('T')[0];
-                          const dtInicio = new Date(dataInicioStr + 'T00:00:00').getTime();
-                          const dtColeta = new Date(dataColetaStr + 'T00:00:00').getTime();
-                          return Math.max(0, Math.floor((dtColeta - dtInicio) / 86400000));
-                        }
-                        if (p.inicio) return calcDias(p.inicio);
-                        return 0;
-                      };
-
-                      return controleData
-                        .slice() // Cria uma cópia para não mutar o array original
-                        .sort((a: any, b: any) => {
-                          const isDeadA = (a.status || '').toLowerCase().includes('morreu') || (a.status_controle || '').toLowerCase().includes('morreu') || (a.status || '').toUpperCase() === 'MORREU';
-                          const isDeadB = (b.status || '').toLowerCase().includes('morreu') || (b.status_controle || '').toLowerCase().includes('morreu') || (b.status || '').toUpperCase() === 'MORREU';
-
-                          // 1. Perfis "morreu" sempre no final
-                          if (isDeadA && !isDeadB) return 1;
-                          if (!isDeadA && isDeadB) return -1;
-
-                          // 2. Ordenar por dias do maior para o menor
-                          const diasA = getDiasPerfil(a);
-                          const diasB = getDiasPerfil(b);
-
-                          if (diasB !== diasA) {
-                            return diasB - diasA; // Do maior para o menor
-                          }
-
-                          // 3. Desempate pela data de início (mais antiga primeiro)
-                          const dataA = a.inicio ? new Date(a.inicio.split(' ')[0].split('T')[0] + 'T00:00:00').getTime() : 0;
-                          const dataB = b.inicio ? new Date(b.inicio.split(' ')[0].split('T')[0] + 'T00:00:00').getTime() : 0;
-                          return dataA - dataB;
-                        })
-                        .map((p: any, i: number) => {
-                          // Proteção de dados e cálculos
-                          const dataInicio = p.inicio || null;
-                          const dataNasc = p.nascimento || null;
-                          const lancamentosSeguros = Array.isArray(p.lancamentos) ? p.lancamentos : [];
-                          const diasTotal = getDiasPerfil(p);
-                          const diasValidos = diasTotal > 0 ? diasTotal : 1;
-
-                          const totalR = lancamentosSeguros.filter((l: any) => l.tipo === 'recebido').reduce((s: number, l: any) => s + (Number(l.valor_brl) || 0), 0);
-                          const totalD = lancamentosSeguros.filter((l: any) => l.tipo === 'despesa').reduce((s: number, l: any) => s + (Number(l.valor_brl) || 0), 0);
-                          const lucro = totalR - totalD;
-                          const diaTrabalho = lucro / diasValidos;
-
-                          const isMorreu = (p.status || '').toLowerCase().includes('morreu') || (p.status_controle || '').toLowerCase().includes('morreu') || (p.status || '').toUpperCase() === 'MORREU';
-                          const isAtivo = !isMorreu;
-
-                          return (
-                            <tr
-                              key={p.username || i}
-                              onClick={() => setModalControleEdit(p)}
-                              onMouseEnter={e => { e.currentTarget.style.backgroundColor = isMorreu ? 'rgba(248,81,73,0.18)' : (isAtivo ? 'rgba(46,160,67,0.18)' : '#1C2128'); }}
-                              onMouseLeave={e => { e.currentTarget.style.backgroundColor = isMorreu ? 'rgba(248,81,73,0.08)' : (isAtivo ? 'rgba(46,160,67,0.08)' : (i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)')); }}
-                              style={{
-                                borderBottom: '1px solid #21262D',
-                                borderLeft: isMorreu ? '3px solid #F85149' : (isAtivo ? '3px solid #2ea043' : '3px solid transparent'),
-                                background: isMorreu ? 'rgba(248,81,73,0.08)' : (isAtivo ? 'rgba(46,160,67,0.08)' : (i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)')),
-                                cursor: 'pointer',
-                                transition: 'background-color 0.15s'
-                              }}
-                            >
-                              <td style={{ padding: '12px 12px', whiteSpace: 'nowrap' }}>
-                                <a
-                                  href={`https://www.instagram.com/${(p.username || '').replace(/^@/, '')}/`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  onClick={e => e.stopPropagation()}
-                                  title={`Abrir @${p.username} no Instagram`}
-                                  style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: 10,
-                                    textDecoration: 'none',
-                                    color: 'inherit',
-                                    cursor: 'pointer'
-                                  }}
-                                >
-                                  <AvatarModelo
-                                    src={p.foto_url || null}
-                                    username={p.username}
-                                    size={32}
-                                    comentariosPendentes={p.comentarios_pendentes || 0}
-                                    mensagensPendentes={p.mensagens_pendentes || 0}
-                                    temPendencias={p.tem_pendencias || false}
-                                  />
-                                  <div>
-                                    <div style={{ fontWeight: 700, color: 'white' }}>{p.nome || p.username}</div>
-                                    <div style={{ color: '#8B949E', fontSize: 11 }}>@{p.username}</div>
-                                  </div>
-                                </a>
-                              </td>
-                              <td style={{ padding: '12px 12px', color: '#8B949E', whiteSpace: 'nowrap' }}>
-                                {dataNasc ? formatDate(dataNasc) : '—'}
-                              </td>
-                              <td style={{ padding: '12px 12px', whiteSpace: 'nowrap', color: 'white' }}>
-                                {dataNasc ? calcIdade(dataNasc) : '—'}
-                              </td>
-                              <td style={{ padding: '12px 12px', textAlign: 'center' }}>
-                                <span style={{ background: (p.seguidores || 0) > 0 ? 'rgba(0,240,255,0.08)' : 'rgba(255,0,122,0.1)', color: (p.seguidores || 0) > 0 ? '#00F0FF' : '#FF007A', padding: '2px 8px', borderRadius: 20, fontWeight: 700, fontFamily: 'monospace' }}>
-                                  {p.seguidores ? Number(p.seguidores).toLocaleString('pt-BR') : '—'}
-                                </span>
-                              </td>
-                              <td style={{ padding: '12px 12px', maxWidth: 180 }}>
-                                {(p.email || '').split('\n').map((line: string, j: number) => (
-                                  <div key={j} style={{ color: j % 2 === 0 ? 'white' : '#8B949E', fontSize: 11, lineHeight: 1.6 }}>{line}</div>
-                                ))}
-                              </td>
-                              <td style={{ padding: '12px 12px', textAlign: 'center' }}>
-                                {Number(p.reserva) > 0 ? (
-                                  <span
-                                    title={`${p.reserva} postagem(ns) agendada(s) futura(s)`}
-                                    style={{
-                                      background: 'rgba(56, 139, 253, 0.15)',
-                                      color: '#58A6FF',
-                                      border: '1px solid rgba(56, 139, 253, 0.35)',
-                                      padding: '2px 8px',
-                                      borderRadius: 12,
-                                      fontWeight: 800,
-                                      fontSize: 12,
-                                      fontFamily: 'monospace',
-                                      display: 'inline-block'
-                                    }}
-                                  >
-                                    {p.reserva}
-                                  </span>
-                                ) : (
-                                  <span style={{ color: '#484F58', fontSize: 12 }}>0</span>
-                                )}
-                              </td>
-                              <td style={{ padding: '12px 12px', textAlign: 'center' }}>
-                                {p.linktree ? (
-                                  <a
-                                    href={p.linktree.startsWith('http') ? p.linktree : `https://${p.linktree}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    onClick={e => e.stopPropagation()}
-                                    title={p.linktree}
-                                    style={{
-                                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                      width: 28, height: 28, borderRadius: 6,
-                                      background: 'rgba(0, 240, 255, 0.1)',
-                                      border: '1px solid rgba(0, 240, 255, 0.3)',
-                                      color: '#00F0FF',
-                                      textDecoration: 'none',
-                                      transition: 'all 0.2s'
-                                    }}
-                                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0, 240, 255, 0.25)'; e.currentTarget.style.borderColor = '#00F0FF'; }}
-                                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(0, 240, 255, 0.1)'; e.currentTarget.style.borderColor = 'rgba(0, 240, 255, 0.3)'; }}
-                                  >
-                                    <ExternalLink size={13} />
-                                  </a>
-                                ) : (
-                                  <span style={{ opacity: 0.25 }}>—</span>
-                                )}
-                              </td>
-                              <td style={{ padding: '12px 12px', whiteSpace: 'nowrap', color: '#8B949E' }}>
-                                {dataInicio ? formatDate(dataInicio) : '—'}
-                              </td>
-                              <td style={{ padding: '12px 12px', textAlign: 'center' }}>
-                                {p.telegram === 'SIM' ? (
-                                  <span
-                                    title="Tem grupo de retenção no Telegram"
-                                    style={{
-                                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                      width: 28, height: 28, borderRadius: 6,
-                                      background: 'rgba(38, 168, 235, 0.12)',
-                                      border: '1px solid rgba(38, 168, 235, 0.35)',
-                                      fontSize: 14
-                                    }}
-                                  >
-                                    📦
-                                  </span>
-                                ) : (
-                                  <span style={{ opacity: 0.25 }}>—</span>
-                                )}
-                              </td>
-                              <td style={{ padding: '12px 12px', whiteSpace: 'nowrap', color: '#00F0FF', fontWeight: 700 }}>
-                                {dataInicio ? calcProntaEm(dataInicio) : '—'}
-                              </td>
-                              <td style={{ padding: '12px 12px', textAlign: 'center' }}>
-                                <span
-                                  title={isMorreu && p.ultima_coleta ? `Início: ${formatDate(p.inicio)} | Último registro: ${formatDate(p.ultima_coleta)}` : (p.inicio ? `Início: ${formatDate(p.inicio)}` : undefined)}
-                                  style={{
-                                    fontWeight: 700,
-                                    color: 'white',
-                                    background: 'rgba(255, 255, 255, 0.06)',
-                                    border: '1px solid #30363D',
-                                    borderRadius: 6,
-                                    padding: '2px 10px',
-                                    display: 'inline-block',
-                                    cursor: 'default',
-                                    fontSize: 13,
-                                  }}
-                                >
-                                  {diasTotal}
-                                </span>
-                              </td>
-                              <td style={{ padding: '12px 12px', textAlign: 'center' }}>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setLancamentoSelecionado(null);
-                                    setModalLancamento({ username: p.username, tipo: lucro >= 0 ? "recebido" : "despesa" });
-                                  }}
-                                  style={{
-                                    background: lucro >= 0 ? 'rgba(57,255,20,0.1)' : 'rgba(255,0,122,0.15)',
-                                    border: `1px solid ${lucro >= 0 ? '#39FF14' : '#FF007A'}`,
-                                    color: lucro >= 0 ? '#39FF14' : '#FF007A',
-                                    borderRadius: 8,
-                                    padding: '5px 10px',
-                                    cursor: 'pointer',
-                                    fontSize: 11,
-                                    fontWeight: 700,
-                                    whiteSpace: 'nowrap'
-                                  }}
-                                >
-                                  {lucro >= 0 ? '💰' : '💸'} {fmtBRL(lucro)}
-                                </button>
-                              </td>
-                              <td style={{ padding: '12px 12px', whiteSpace: 'nowrap' }}>
-                                <span style={{ background: '#161B22', border: '1px solid #30363D', borderRadius: 20, padding: '3px 10px', fontSize: 11, color: 'white' }}>
-                                  {p.status || '—'}
-                                </span>
-                              </td>
-                              <td style={{ padding: '12px 12px', textAlign: 'center' }}>
-                                {(p.obs_historico || []).length > 0 ? (
-                                  <span title={`${(p.obs_historico || []).length} observações no diário`} style={{ fontSize: 14 }}>
-                                    📝
-                                  </span>
-                                ) : (
-                                  <span style={{ opacity: 0.25 }}>—</span>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        });
-                    })()}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* === BLOCO DOS GRÁFICOS === */}
-              {(() => {
-                const CORES_GRAFICO = [
-                  '#39FF14', '#00F0FF', '#FF007A', '#FF9F00', '#9E00FF', '#FF6B6B',
-                  '#4ECDC4', '#7100E2', '#FFD700', '#FF4500', '#10B981', '#EC4899',
-                  '#3B82F6', '#8B5CF6', '#F59E0B', '#EF4444', '#06B6D4', '#84CC16',
-                  '#D946EF', '#F97316', '#6366F1', '#14B8A6', '#FBBF24', '#E11D48', '#22C55E'
-                ];
-                const todosUsuarios = financeiro.usuarios;
-                const usuariosVisiveis = todosUsuarios.filter((u: string) => !perfisOcultos.has(u));
-
-                const togglePerfil = (username: string) => {
-                  setPerfisOcultos(prev => {
-                    const next = new Set(prev);
-                    if (next.has(username)) next.delete(username);
-                    else next.add(username);
-                    return next;
-                  });
-                };
-
-                // Dados filtrados pelos perfis visíveis (suporta _acumulado/_diario, _seguidores/_receita e _efetividade)
-                const dadosAtivosFiltrados = dadosAtivos.map((ponto: any) => {
-                  const novoPonto: any = { name: ponto.name, dia: ponto.dia };
-                  usuariosVisiveis.forEach((u: string) => {
-                    // Financeiro / Seguidores
-                    if (ponto[`${u}_acumulado`] !== undefined) novoPonto[`${u}_acumulado`] = ponto[`${u}_acumulado`];
-                    if (ponto[`${u}_diario`] !== undefined) novoPonto[`${u}_diario`] = ponto[`${u}_diario`];
-                    // Correlação
-                    if (ponto[`${u}_seguidores`] !== undefined) novoPonto[`${u}_seguidores`] = ponto[`${u}_seguidores`];
-                    if (ponto[`${u}_receita`] !== undefined) novoPonto[`${u}_receita`] = ponto[`${u}_receita`];
-                    if (ponto[`${u}_efetividade`] !== undefined) novoPonto[`${u}_efetividade`] = ponto[`${u}_efetividade`];
-                  });
-                  return novoPonto;
-                });
-
-                // Legenda clicável compartilhada
-                const LegendaPerfis = () => (
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 16, paddingTop: 14, borderTop: '1px solid #21262D' }}>
-                    {todosUsuarios.map((user: string, idx: number) => {
-                      const oculto = perfisOcultos.has(user);
-                      const cor = CORES_GRAFICO[idx % CORES_GRAFICO.length];
-                      return (
-                        <button
-                          key={user}
-                          onClick={() => togglePerfil(user)}
-                          title={oculto ? `Adicionar @${user} na comparação` : `Remover @${user} da comparação`}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 7,
-                            padding: '5px 12px', borderRadius: 20, cursor: 'pointer',
-                            border: `1.5px solid ${oculto ? '#30363D' : cor}`,
-                            background: oculto ? 'transparent' : `${cor}18`,
-                            color: oculto ? '#586069' : cor,
-                            fontSize: 12, fontWeight: 600, transition: 'all 0.18s',
-                            opacity: oculto ? 0.45 : 1,
-                            textDecoration: 'none'
-                          }}
-                          onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'scale(1.04)'; }}
-                          onMouseLeave={e => { e.currentTarget.style.opacity = oculto ? '0.45' : '1'; e.currentTarget.style.transform = 'scale(1)'; }}
-                        >
-                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: oculto ? '#586069' : cor, display: 'inline-block', flexShrink: 0 }} />
-                          @{user}
-                          <span style={{ fontSize: 10, opacity: 0.7 }}>{oculto ? '＋' : '✕'}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                );
-
-                return (
-                  <div className="mb-6">
-                    {/* Gráfico principal: Financeiro / Seguidores */}
-                    <div style={{ background: '#161b22', border: '1px solid #30363d', borderRadius: 8, padding: 20, marginTop: 20 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-                        <div>
-                          <h3 style={{ margin: 0, color: '#f0f6fc', fontSize: 16, fontWeight: 600 }}>Comparativo de Comportamento Operacional</h3>
-                          <p style={{ margin: '4px 0 0 0', color: '#8b949e', fontSize: 12 }}>Acompanhamento relativo por dia de início de cada operação</p>
-                        </div>
-                        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                          <div style={{ display: 'flex', background: '#0d1117', padding: 4, borderRadius: 6, border: '1px solid #30363d' }}>
-                            {(['financeiro', 'seguidores', 'correlacao'] as const).map(tipo => (
-                              <button
-                                key={tipo}
-                                onClick={() => setGraficoAtivo(tipo)}
-                                style={{
-                                  background: graficoAtivo === tipo ? '#21262d' : 'transparent',
-                                  color: graficoAtivo === tipo ? '#fff' : '#8b949e',
-                                  border: 'none', padding: '6px 12px', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 600
-                                }}
-                              >
-                                {tipo === 'financeiro' ? 'Financeiro' : tipo === 'seguidores' ? 'Seguidores' : '📊 Correlação'}
-                              </button>
-                            ))}
-                          </div>
-                          <div style={{ display: 'flex', background: '#0d1117', padding: 4, borderRadius: 6, border: '1px solid #30363d' }}>
-                            {(['linha', 'barra'] as const).map(tipo => (
-                              <button
-                                key={tipo}
-                                onClick={() => setTipoGrafico(tipo)}
-                                style={{
-                                  background: tipoGrafico === tipo ? '#21262d' : 'transparent',
-                                  color: tipoGrafico === tipo ? '#39FF14' : '#8b949e',
-                                  border: 'none', padding: '6px 12px', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 600
-                                }}
-                              >
-                                {tipo === 'linha' ? 'Linha' : 'Barras'}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div style={{ width: '100%', height: 340 }}>
-                        <ResponsiveContainer width="100%" height="100%">
-                          {graficoAtivo === 'correlacao' ? (
-                            // Gráfico de correlação: Efetividade (Saldo Acumulado ÷ Seguidores)
-                            <LineChart data={dadosAtivosFiltrados} margin={{ top: 10, right: 30, left: 10, bottom: 5 }}>
-                              <CartesianGrid strokeDasharray="3 3" stroke="#21262D" />
-                              <XAxis dataKey="name" stroke="#8b949e" fontSize={11} />
-                              <YAxis
-                                stroke="#39FF14"
-                                fontSize={10}
-                                tickFormatter={(v) => `R$ ${v.toFixed(2)}`}
-                                label={{ value: 'Eficácia (Saldo / Seguidor)', angle: -90, position: 'insideLeft', offset: 10, fill: '#39FF14', fontSize: 10 }}
-                              />
-                              <Tooltip
-                                contentStyle={{ backgroundColor: '#0d1117', borderColor: '#30363d', borderRadius: 6 }}
-                                itemStyle={{ fontSize: 11 }}
-                                labelStyle={{ color: '#fff' }}
-                                formatter={((value: any, name: string, item: any) => {
-                                  const username = name.replace('_efetividade', '');
-                                  const payload = item?.payload || {};
-                                  const receita = payload[`${username}_receita`] || 0;
-                                  const seguidoresUser = payload[`${username}_seguidores`] || 0;
-
-                                  return [
-                                    <div key={username} style={{ display: 'inline-block' }}>
-                                      <span style={{ fontWeight: 800 }}>R$ {Number(value).toFixed(3)} / seg.</span>
-                                      <div style={{ fontSize: 10, color: '#8b949e', marginTop: 4 }}>
-                                        Saldo: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(receita)} | Segs: {seguidoresUser.toLocaleString('pt-BR')}
-                                      </div>
-                                    </div>,
-                                    `@${username}`
-                                  ];
-                                }) as any}
-                              />
-                              <ReferenceLine y={0} stroke="#30363d" strokeWidth={1.5} />
-                              {usuariosVisiveis.map((user: string) => {
-                                const cor = CORES_GRAFICO[todosUsuarios.indexOf(user) % CORES_GRAFICO.length];
-                                return (
-                                  <Line
-                                    key={`${user}_efetividade`}
-                                    type="monotone"
-                                    dataKey={`${user}_efetividade`}
-                                    name={`${user}_efetividade`}
-                                    stroke={cor}
-                                    strokeWidth={2.5}
-                                    dot={{ r: 3 }}
-                                    connectNulls={true}
-                                  />
-                                );
-                              })}
-                            </LineChart>
-                          ) : tipoGrafico === 'linha' ? (
-                            <LineChart data={dadosAtivosFiltrados} margin={{ top: 10, right: 30, left: 10, bottom: 5 }}>
-                              <XAxis dataKey="name" stroke="#8b949e" fontSize={11} />
-                              <YAxis stroke="#8b949e" fontSize={11} tickFormatter={(v) => graficoAtivo === 'financeiro' ? fmtBRL(v) : v.toLocaleString('pt-BR')} />
-                              <Tooltip
-                                contentStyle={{ backgroundColor: '#0d1117', borderColor: '#30363d', borderRadius: 6 }}
-                                itemStyle={{ fontSize: 12 }}
-                                labelStyle={{ color: '#fff', fontWeight: 700, marginBottom: 4 }}
-                                formatter={(value: any, name: any) => [
-                                  graficoAtivo === 'financeiro'
-                                    ? fmtBRL(Number(value))
-                                    : Number(value).toLocaleString('pt-BR'),
-                                  name
-                                ]}
-                              />
-                              <ReferenceLine y={0} stroke="#30363d" strokeWidth={1.5} />
-                              {usuariosVisiveis.map((user: string, idx: number) => (
-                                <Line key={user} type="monotone" dataKey={`${user}_acumulado`} name={`@${user}`}
-                                  stroke={CORES_GRAFICO[todosUsuarios.indexOf(user) % CORES_GRAFICO.length]}
-                                  strokeWidth={2.5} dot={{ r: 3 }} connectNulls={true} />
-                              ))}
-                            </LineChart>
-                          ) : (
-                            <BarChart data={dadosAtivosFiltrados} margin={{ top: 10, right: 30, left: 10, bottom: 5 }}>
-                              <XAxis dataKey="name" stroke="#8b949e" fontSize={11} />
-                              <YAxis stroke="#8b949e" fontSize={11} tickFormatter={(v) => graficoAtivo === 'financeiro' ? fmtBRL(v) : v.toLocaleString('pt-BR')} />
-                              <Tooltip
-                                contentStyle={{ backgroundColor: '#0d1117', borderColor: '#30363d', borderRadius: 6 }}
-                                itemStyle={{ fontSize: 12 }}
-                                labelStyle={{ color: '#fff', fontWeight: 700, marginBottom: 4 }}
-                                formatter={(value: any, name: any) => [
-                                  graficoAtivo === 'financeiro'
-                                    ? fmtBRL(Number(value))
-                                    : Number(value).toLocaleString('pt-BR'),
-                                  name
-                                ]}
-                              />
-                              <ReferenceLine y={0} stroke="#484f58" strokeWidth={1.5} />
-                              {usuariosVisiveis.map((user: string, idx: number) => (
-                                <Bar key={user}
-                                  dataKey={graficoAtivo === 'financeiro' ? `${user}_diario` : `${user}_acumulado`}
-                                  name={`@${user}`}
-                                  fill={CORES_GRAFICO[todosUsuarios.indexOf(user) % CORES_GRAFICO.length]}
-                                  radius={[4, 4, 0, 0]} />
-                              ))}
-                            </BarChart>
-                          )}
-                        </ResponsiveContainer>
-                      </div>
-
-                      {/* Nota de legenda para o modo correlação */}
-                      {graficoAtivo === 'correlacao' && (
-                        <div style={{ marginTop: 12, display: 'flex', gap: 20, flexWrap: 'wrap', paddingBottom: 4 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#8b949e' }}>
-                            <span style={{ fontSize: 13 }}>💡</span>
-                            <strong>Eficácia:</strong> Mostra o valor em Reais gerado por seguidor individual (Saldo Acumulado ÷ Seguidores) ao longo dos dias.
-                          </div>
-                        </div>
-                      )}
-
-                      <LegendaPerfis />
-                    </div>
-
-                  </div>
-                );
-              })()}
-              {/* <-- FIM DOS GRÁFICOS */}
-
-              {/* === EXTRATO DE LANÇAMENTOS === */}
-              <div style={{ marginTop: 32 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 16 }}>📋 Extrato de Lançamentos</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-                  {controleData
-                    .slice()
-                    .sort((a: any, b: any) => {
-                      const lA = Array.isArray(a.lancamentos) ? a.lancamentos : [];
-                      const lB = Array.isArray(b.lancamentos) ? b.lancamentos : [];
-
-                      const maxA = lA.reduce((max: string, l: any) => {
-                        const d = l.data_lancamento || '';
-                        return d > max ? d : max;
-                      }, '');
-                      const maxB = lB.reduce((max: string, l: any) => {
-                        const d = l.data_lancamento || '';
-                        return d > max ? d : max;
-                      }, '');
-
-                      if (maxA === '' && maxB !== '') return 1;
-                      if (maxB === '' && maxA !== '') return -1;
-                      return maxB.localeCompare(maxA);
-                    })
-                    .map((p: any) => {
-                      const items: any[] = Array.isArray(p.lancamentos) ? p.lancamentos : [];
-
-                      // Ordena os lançamentos em ordem decrescente de data
-                      const sortedItems = [...items].sort((a, b) => {
-                        const dateA = a.data_lancamento || '';
-                        const dateB = b.data_lancamento || '';
-                        return dateB.localeCompare(dateA);
-                      });
-
-                      return (
-                        <div key={`extrato-${p.username}`} style={{ background: '#161B22', border: '1px solid #30363D', borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column' }}>
-                          <div style={{ fontWeight: 700, marginBottom: 12, color: 'white' }}>@{p.username}</div>
-                          {sortedItems.length === 0 ? (
-                            <div style={{ color: '#586069', fontSize: 12 }}>Nenhum lançamento ainda.</div>
-                          ) : (
-                            <div style={{ maxHeight: '255px', overflowY: 'auto', paddingRight: '6px' }} className="custom-scrollbar">
-                              {sortedItems.map((l: any, i: number) => (
-                                <div
-                                  key={i}
-                                  style={{
-                                    display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0',
-                                    borderBottom: i < sortedItems.length - 1 ? '1px solid #21262D' : 'none', fontSize: 12, cursor: 'pointer'
-                                  }}
-                                  onClick={() => {
-                                    setLancamentoSelecionado(l);
-                                    setModalLancamento({ username: p.username, tipo: l.tipo });
-                                  }}
-                                >
-                                  <div>
-                                    <span style={{ color: l.tipo === 'despesa' ? '#FF007A' : '#39FF14', marginRight: 6 }}>
-                                      {l.tipo === 'despesa' ? '💸' : '💰'}
-                                    </span>
-                                    <span style={{ color: '#8B949E' }}>
-                                      {l.data_lancamento ? formatDate(l.data_lancamento) : ''}
-                                    </span>
-                                    {l.rateado === 1 && <span style={{ color: '#7100E2', marginLeft: 6, fontSize: 10, fontWeight: 700 }}>RATEIO</span>}
-                                    {l.descricao && <div style={{ color: '#586069', fontSize: 11, marginTop: 2 }}>{l.descricao}</div>}
-                                  </div>
-                                  <span style={{ fontWeight: 700, color: l.tipo === 'despesa' ? '#FF007A' : '#39FF14' }}>
-                                    {fmtBRL(l.valor_brl)}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                </div>
-              </div>
-            </>
-          )} {/* <-- Fecha o if do carregamento/tabela/graficos */}
-
-          {/* === MODAIS === */}
-          {modalLancamento && (
-            <ModalLancamento
-              isOpen={!!modalLancamento}
-              onClose={() => {
-                setModalLancamento(null);
-                setLancamentoSelecionado(null);
-              }}
-              username={modalLancamento?.username}
-              lancamento={lancamentoSelecionado || { tipo: modalLancamento?.tipo }}
-              onSave={salvarLancamento}
-              onDelete={excluirLancamento}
-            />
-          )}
-
-          {modalControleEdit && (
-            <ModalControleEditInline perfil={modalControleEdit} onClose={() => setModalControleEdit(null)} onSave={salvarControleEdit} />
-          )}
-
-        </div>
-      )}
-
-      {/* ====================================================
         ABA: HISTÓRICO CONTA
       ==================================================== */}
       {activeTab === 'anomalias' && (
@@ -5980,6 +5711,30 @@ export default function Dashboard() {
           onClose={() => setModalPostEvolucao(null)}
           getInstagramPostUrl={getInstagramPostUrl}
           onUpdatePostMetrics={handleUpdatePostMetrics}
+        />
+      )}
+
+      {/* Modal de Lançamento Financeiro (Receita / Despesa) */}
+      {modalLancamento && (
+        <ModalLancamento
+          isOpen={!!modalLancamento}
+          onClose={() => {
+            setModalLancamento(null);
+            setLancamentoSelecionado(null);
+          }}
+          username={modalLancamento?.username}
+          lancamento={lancamentoSelecionado || { tipo: modalLancamento?.tipo }}
+          onSave={salvarLancamento}
+          onDelete={excluirLancamento}
+        />
+      )}
+
+      {/* Modal de Edição de Modelo e Controle */}
+      {modalControleEdit && (
+        <ModalControleEditInline
+          perfil={modalControleEdit}
+          onClose={() => setModalControleEdit(null)}
+          onSave={salvarControleEdit}
         />
       )}
     </div>

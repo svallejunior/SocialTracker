@@ -2001,3 +2001,193 @@ body::after {
     opacity: 0;
   }
 }
+
+/* ====================================================
+   CARDS DE MINHAS MODELOS (ABA PERFIS - 3 POR LINHA)
+   ==================================================== */
+.modelos-section {
+  margin-bottom: 32px;
+}
+
+.modelos-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.modelos-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 1180px) {
+  .modelos-cards-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 740px) {
+  .modelos-cards-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.modelo-card {
+  background: #161B22;
+  border: 1px solid #30363D;
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  gap: 14px;
+  position: relative;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  box-sizing: border-box;
+}
+
+.modelo-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(57, 255, 20, 0.35);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+
+.modelo-card-media-col {
+  width: 110px;
+  min-width: 110px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.modelo-card-photo-box {
+  width: 110px;
+  height: 140px;
+  min-height: 140px;
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: #0D1117;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modelo-card-photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.25s ease;
+}
+
+.modelo-card:hover .modelo-card-photo {
+  transform: scale(1.05);
+}
+
+.modelo-card-name-box {
+  width: 100%;
+  text-align: center;
+  overflow: hidden;
+}
+
+.modelo-card-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #F0F6FC;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  line-height: 1.3;
+}
+
+.modelo-card-handle {
+  font-size: 10px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+.modelo-card-btn {
+  width: 100%;
+  padding: 6px 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: rgba(57, 255, 20, 0.08);
+  border: 1px solid rgba(57, 255, 20, 0.35);
+  color: #39FF14;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+
+.modelo-card-btn:hover {
+  background: rgba(57, 255, 20, 0.18);
+  border-color: #39FF14;
+  box-shadow: 0 0 10px rgba(57, 255, 20, 0.3);
+}
+
+.modelo-card-window {
+  flex: 1;
+  min-width: 0;
+  background: #0D1117;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  gap: 12px;
+}
+
+.modelo-metric-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.modelo-metric-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #8B949E;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.modelo-metric-val-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.modelo-metric-val {
+  font-size: 16px;
+  font-weight: 800;
+  color: #FFFFFF;
+  font-family: var(--font-mono, monospace);
+  line-height: 1.2;
+}
+
+.neon-green-badge {
+  color: #39FF14;
+  font-size: 12px;
+  font-weight: 700;
+  text-shadow: 0 0 8px rgba(57, 255, 20, 0.45);
+  white-space: nowrap;
+}
