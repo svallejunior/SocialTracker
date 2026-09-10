@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     'instagram_business_manage_insights'
   ].join(',');
 
-  const url = new URL('https://api.instagram.com/oauth/authorize');
+  const url = new URL('https://www.instagram.com/oauth/authorize');
   url.searchParams.set('client_id', appId);
   url.searchParams.set('redirect_uri', redirectUri);
   url.searchParams.set('response_type', 'code');
