@@ -110,19 +110,44 @@ export async function GET(req: NextRequest) {
     // (a previsão por dia da semana só vale para hoje/futuro).
     let publicacoes: any[] = [];
     try {
-      const rows = username
-        ? await db.all(
-            `SELECT * FROM automacao_publicacoes
-              WHERE LOWER(username) = LOWER(?) AND data_local >= date('now', 'localtime', '-180 days')
-              ORDER BY data_local DESC, hora_local DESC`,
-            [username]
-          )
-        : await db.all(
-            `SELECT * FROM automacao_publicacoes
-              WHERE data_local >= date('now', 'localtime', '-180 days')
-              ORDER BY data_local DESC, hora_local DESC`
-          );
-      publicacoes = rows.map((p: any) => ({
+      // Ordena trazendo AGENDADOR/MANUAL primeiro para priorizar quem tem agendamento_id
+      const querySql = username
+        ? `SELECT * FROM automacao_publicacoes
+            WHERE LOWER(username) = LOWER(?) AND data_local >= date('now', 'localtime', '-180 days')
+            ORDER BY data_local DESC, 
+                     CASE WHEN origem = 'AGENDADOR' THEN 0 WHEN origem = 'MANUAL' THEN 1 ELSE 2 END,
+                     hora_local DESC`
+        : `SELECT * FROM automacao_publicacoes
+            WHERE data_local >= date('now', 'localtime', '-180 days')
+            ORDER BY data_local DESC, 
+                     CASE WHEN origem = 'AGENDADOR' THEN 0 WHEN origem = 'MANUAL' THEN 1 ELSE 2 END,
+                     hora_local DESC`;
+      const rows = username ? await db.all(querySql, [username]) : await db.all(querySql);
+
+      // Deduplicação estrita: se houver o mesmo meta_media_id ou mesmo post duplicado, mantém apenas 1
+      const seenMetaIds = new Set<string>();
+      const seenFallback = new Set<string>();
+      const rawPubs: any[] = [];
+
+      for (const p of rows) {
+        const metaId = (p.meta_media_id || '').toString().trim();
+        if (metaId) {
+          if (seenMetaIds.has(metaId)) continue;
+          seenMetaIds.add(metaId);
+        }
+
+        const horaChave = (p.hora_local || '').slice(0, 4); // "15:4"
+        const legChave = (p.legenda || '').trim().slice(0, 20).toLowerCase();
+        const fallbackKey = `${(p.username || '').toLowerCase()}|${p.data_local}|${p.tipo_postagem}|${horaChave}|${legChave}`;
+        if (legChave && seenFallback.has(fallbackKey)) {
+          continue;
+        }
+        if (legChave) seenFallback.add(fallbackKey);
+
+        rawPubs.push(p);
+      }
+
+      publicacoes = rawPubs.map((p: any) => ({
         ...p,
         arquivos: (() => {
           try { return JSON.parse(p.arquivos || '[]'); } catch { return []; }

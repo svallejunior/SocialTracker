@@ -421,7 +421,7 @@ export async function GET() {
 
       // B) Publicações da tabela automacao_publicacoes com status 'PUBLICADO' hoje
       const autoPubsHoje = await db.all(`
-        SELECT LOWER(username) as uname, tipo_postagem, COUNT(*) as total
+        SELECT LOWER(username) as uname, tipo_postagem, COUNT(DISTINCT COALESCE(NULLIF(meta_media_id, ''), id)) as total
         FROM automacao_publicacoes
         WHERE status = 'PUBLICADO' AND (data_local = ? OR publicado_em LIKE ?)
         GROUP BY LOWER(username), tipo_postagem

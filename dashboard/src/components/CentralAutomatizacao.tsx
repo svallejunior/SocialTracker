@@ -214,6 +214,47 @@ export function isPrevisaoNoDia(ag: Agendamento, dataObj: Date, hojeIso: string)
   return isAgendamentoNoDia(ag, dataObj);
 }
 
+/**
+ * Deduplica publicações garantindo que cada post publicado no Instagram ou agendado
+ * apareça estritamente UMA vez em qualquer visualização ou contagem.
+ */
+export function deduplicatePublicacoes(pubs: Publicacao[]): Publicacao[] {
+  if (!pubs || pubs.length === 0) return [];
+
+  const seenMetaIds = new Set<string>();
+  const seenFallback = new Set<string>();
+  const result: Publicacao[] = [];
+
+  // Prioriza registros com agendamento_id e que tenham arquivos com permalink do Instagram
+  const sorted = [...pubs].sort((a, b) => {
+    const aAg = a.agendamento_id ? 2 : 0;
+    const bAg = b.agendamento_id ? 2 : 0;
+    const aLink = Array.isArray(a.arquivos) && a.arquivos.some(x => typeof x?.url === 'string' && x.url.includes('instagram.com')) ? 1 : 0;
+    const bLink = Array.isArray(b.arquivos) && b.arquivos.some(x => typeof x?.url === 'string' && x.url.includes('instagram.com')) ? 1 : 0;
+    return (bAg + bLink) - (aAg + aLink);
+  });
+
+  for (const p of sorted) {
+    const metaId = (p.meta_media_id || '').toString().trim();
+    if (metaId) {
+      if (seenMetaIds.has(metaId)) continue;
+      seenMetaIds.add(metaId);
+    }
+
+    const horaMin = (p.hora_local || '').slice(0, 4); // Ex: "15:4" cobre 15:40 a 15:49
+    const legSnip = (p.legenda || '').trim().slice(0, 20).toLowerCase();
+    const fallbackKey = `${(p.username || '').toLowerCase()}|${p.data_local}|${p.tipo_postagem}|${horaMin}|${legSnip}`;
+    if (legSnip && seenFallback.has(fallbackKey)) {
+      continue;
+    }
+    if (legSnip) seenFallback.add(fallbackKey);
+
+    result.push(p);
+  }
+
+  return result.sort((a, b) => (b.hora_local || '').localeCompare(a.hora_local || ''));
+}
+
 function formatDaemonTime(dateStr?: string) {
   if (!dateStr) return 'Aguardando primeira verificação...';
   try {
@@ -690,7 +731,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
       const data = await res.json();
       if (data.success) {
         setAgendamentos(data.agendamentos || []);
-        setPublicacoes(data.publicacoes || []);
+        setPublicacoes(deduplicatePublicacoes(data.publicacoes || []));
       }
     } catch (err) {
       console.error('Erro ao buscar agendamentos:', err);
@@ -1782,8 +1823,10 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
 
             const isDiaPassado = selectedDate < hojeObj && !isDiaHoje;
             const isoDataSelecionada = dataIsoLocal(selectedDate);
-            const pubsDoDiaSelecionado = publicacoesDoPerfil.filter(
-              p => p.data_local === isoDataSelecionada && p.status === 'PUBLICADO'
+            const pubsDoDiaSelecionado = deduplicatePublicacoes(
+              publicacoesDoPerfil.filter(
+                p => p.data_local === isoDataSelecionada && p.status === 'PUBLICADO'
+              )
             );
 
             // Filtra agendamentos apenas para a data selecionada/hoje
@@ -2240,7 +2283,8 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                       ) : (
                         pubsDoDiaSelecionado.map((pub, pIdx) => {
                           const arquivosPub = Array.isArray(pub.arquivos) ? pub.arquivos : [];
-                          const permalink = arquivosPub[0]?.url || '';
+                          const instaLink = arquivosPub.find(a => typeof a?.url === 'string' && a.url.includes('instagram.com/'))?.url;
+                          const permalink = instaLink || arquivosPub[0]?.url || (pub.meta_media_id ? `https://www.instagram.com/p/${pub.meta_media_id}/` : '');
                           return (
                             <div
                               key={pub.id || pIdx}
@@ -2956,7 +3000,9 @@ function CalendarioAgendamentos({ agendamentos, publicacoes = [], selectedDate, 
   const getPublicacoesDoDia = (dia: number, mes: number, ano: number): Publicacao[] => {
     const dObj = new Date(ano, mes, dia);
     const isoD = dataIsoLocal(dObj);
-    return publicacoes.filter(p => p.data_local === isoD && p.status === 'PUBLICADO');
+    return deduplicatePublicacoes(
+      publicacoes.filter(p => p.data_local === isoD && p.status === 'PUBLICADO')
+    );
   };
 
   // Gerar células do calendário
@@ -3190,9 +3236,14 @@ function CalendarioAgendamentos({ agendamentos, publicacoes = [], selectedDate, 
                     onSelectDate(dataCel);
                   }
                   if (temAtividade) {
+                    // Evita duplicação: postagens que já foram publicadas aparecem em 'publicados'.
+                    // Não devem aparecer novamente como agendamento pendente/mídia em 'posts'.
+                    const idsPublicados = new Set(pubs.map(p => p.agendamento_id).filter(Boolean));
+                    const agsPendentes = ags.filter(a => a.status !== 'PUBLICADO' && !idsPublicados.has(a.id));
+
                     setSelectedDayInfo({
                       dateStr: `${String(c.dia).padStart(2, '0')}/${String(c.mes + 1).padStart(2, '0')}/${c.ano}`,
-                      posts: ags,
+                      posts: isPassado ? [] : agsPendentes,
                       publicados: pubs
                     });
                   } else {

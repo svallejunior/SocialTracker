@@ -579,29 +579,49 @@ def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str):
         pub_id = f"meta_{post_id}"
         arquivos_json = json.dumps([{"url": permalink, "tipo": formato, "previewUrl": thumbnail_url or media_url}])
 
-        c.execute("""
-            INSERT INTO automacao_publicacoes (
-                id, agendamento_id, username, meta_account_id, tipo_postagem,
-                data_local, hora_local, publicado_em, status, meta_media_id,
-                erro_detalhe, arquivos, legenda, origem
-            ) VALUES (?, NULL, ?, ?, ?, ?, ?, ?, 'PUBLICADO', ?, '', ?, ?, 'META_API')
-            ON CONFLICT(id) DO UPDATE SET
-                username = excluded.username,
-                meta_account_id = excluded.meta_account_id,
-                tipo_postagem = excluded.tipo_postagem,
-                data_local = excluded.data_local,
-                hora_local = excluded.hora_local,
-                publicado_em = excluded.publicado_em,
-                status = 'PUBLICADO',
-                meta_media_id = excluded.meta_media_id,
-                arquivos = excluded.arquivos,
-                legenda = excluded.legenda,
-                origem = 'META_API'
-        """, (
-            pub_id, username, (dados_perfil.get("id") or ""), tipo_pub,
-            data_local, hora_local, data_postagem, post_id,
-            arquivos_json, legenda
-        ))
+        # Evita duplicação: se a publicação já existe (ex: criada pelo AGENDADOR ou MANUAL com este meta_media_id),
+        # atualiza os dados/links oficiais mantendo o registro original.
+        row_existente = c.execute("""
+            SELECT id, agendamento_id, origem
+            FROM automacao_publicacoes
+            WHERE (meta_media_id = ? AND meta_media_id IS NOT NULL AND meta_media_id != '')
+               OR id = ?
+            ORDER BY CASE WHEN origem = 'AGENDADOR' THEN 0 WHEN origem = 'MANUAL' THEN 1 ELSE 2 END
+            LIMIT 1
+        """, (str(post_id), pub_id)).fetchone()
+
+        if row_existente:
+            existente_id = row_existente[0]
+            c.execute("""
+                UPDATE automacao_publicacoes
+                SET username = ?,
+                    meta_account_id = ?,
+                    tipo_postagem = ?,
+                    data_local = COALESCE(NULLIF(data_local, ''), ?),
+                    hora_local = COALESCE(NULLIF(hora_local, ''), ?),
+                    publicado_em = COALESCE(NULLIF(publicado_em, ''), ?),
+                    status = 'PUBLICADO',
+                    meta_media_id = ?,
+                    arquivos = ?,
+                    legenda = CASE WHEN ? != '' THEN ? ELSE legenda END
+                WHERE id = ?
+            """, (
+                username, (dados_perfil.get("id") or ""), tipo_pub,
+                data_local, hora_local, data_postagem,
+                str(post_id), arquivos_json, legenda, legenda, existente_id
+            ))
+        else:
+            c.execute("""
+                INSERT INTO automacao_publicacoes (
+                    id, agendamento_id, username, meta_account_id, tipo_postagem,
+                    data_local, hora_local, publicado_em, status, meta_media_id,
+                    erro_detalhe, arquivos, legenda, origem
+                ) VALUES (?, NULL, ?, ?, ?, ?, ?, ?, 'PUBLICADO', ?, '', ?, ?, 'META_API')
+            """, (
+                pub_id, username, (dados_perfil.get("id") or ""), tipo_pub,
+                data_local, hora_local, data_postagem, str(post_id),
+                arquivos_json, legenda
+            ))
 
     conn.commit()
     conn.close()
