@@ -2761,14 +2761,14 @@ export default function Dashboard() {
               onClick={() => setActiveTab('perfis')}
             >
               <Users size={16} />
-              PERFIS
+              Perfis
             </button>
             <button
               className={`tab-btn ${activeTab === 'graficos' ? 'active' : ''}`}
               onClick={() => setActiveTab('graficos')}
             >
               <BarChart3 size={16} />
-              GRÁFICOS
+              Gráficos
             </button>
             <button
               className={`tab-btn ${activeTab === 'cards' ? 'active' : ''}`}
@@ -2858,18 +2858,59 @@ export default function Dashboard() {
       {activeTab === 'perfis' && (
         <div>
           {/* ====================================================
-              SEÇÃO: CARDS DE MINHAS MODELOS (3 POR LINHA)
+              SEÇÃO: CARDS DE MINHAS MODELOS (4 POR LINHA)
               ==================================================== */}
           <div className="modelos-section">
+            {/* Horário de Última Atualização em Verde Neon */}
+            {ultimaAtualizacaoGeral && (
+              <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center' }}>
+                <div style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '4px 12px',
+                  background: 'rgba(0, 255, 102, 0.08)',
+                  border: '1px solid rgba(0, 255, 102, 0.3)',
+                  borderRadius: '8px',
+                  color: '#00FF66',
+                  textShadow: '0 0 10px rgba(0, 255, 102, 0.5)',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  letterSpacing: '0.2px'
+                }}>
+                  <span style={{
+                    display: 'inline-block',
+                    width: '8px',
+                    height: '8px',
+                    borderRadius: '50%',
+                    backgroundColor: '#00FF66',
+                    boxShadow: '0 0 8px #00FF66, 0 0 16px rgba(0, 255, 102, 0.6)'
+                  }} />
+                  última atualização em: {formatarHorarioNeon(ultimaAtualizacaoGeral)}
+                </div>
+              </div>
+            )}
+
             <div className="modelos-cards-grid">
               {(() => {
+                const isMorreu = (p: any) => {
+                  const st = (p.status || '').toUpperCase();
+                  const stCtrl = (p.status_controle || '').toUpperCase();
+                  return st.includes('MORREU') || stCtrl.includes('MORREU');
+                };
+
                 const mapaControle = new Map((controleData || []).map((c: any) => [(c.username || '').toLowerCase(), c]));
                 let modelos = profiles
-                  .filter((p: any) => Number(p.meu_perfil) === 1 || mapaControle.has((p.username || '').toLowerCase()))
+                  .filter((p: any) => {
+                    const u = (p.username || '').toLowerCase();
+                    const c = mapaControle.get(u) || {};
+                    const isMinha = Number(p.meu_perfil) === 1 || mapaControle.has(u);
+                    return isMinha && !isMorreu(p) && !isMorreu(c);
+                  })
                   .sort((a: any, b: any) => (Number(b.seguidores) || 0) - (Number(a.seguidores) || 0));
 
                 if (modelos.length === 0 && controleData.length > 0) {
-                  modelos = controleData;
+                  modelos = controleData.filter((c: any) => !isMorreu(c));
                 }
 
                 return modelos.map((m: any) => {
@@ -2881,11 +2922,12 @@ export default function Dashboard() {
                   const foto = pProf.foto_url || pCtrl.foto_url || pProf.foto_perfil_meta || m.foto_url || null;
                   const seguidores = Number(pProf.seguidores || pCtrl.seguidores || m.seguidores || 0);
 
-                  const deltaSeg = pProf.novosSeguidoresColeta !== undefined
-                    ? Number(pProf.novosSeguidoresColeta)
-                    : (pCtrl.novos_seguidores_coleta !== undefined
-                      ? Number(pCtrl.novos_seguidores_coleta)
-                      : (pProf.novosSeguidoresDia !== undefined ? Number(pProf.novosSeguidoresDia) : 0));
+                  // Quantidade de seguidores novos no dia (e não na atualização)
+                  const deltaSegDia = pProf.novosSeguidoresDia !== undefined
+                    ? Number(pProf.novosSeguidoresDia)
+                    : (pCtrl.novos_seguidores_dia !== undefined
+                      ? Number(pCtrl.novos_seguidores_dia)
+                      : 0);
 
                   const viewsDia = pProf.views_dia !== undefined
                     ? Number(pProf.views_dia)
@@ -2954,8 +2996,8 @@ export default function Dashboard() {
                             <span className="modelo-metric-val">
                               {formatNumber(seguidores)}
                             </span>
-                            <span className="neon-green-badge" title="Diferença na última coleta">
-                              ({deltaSeg >= 0 ? `+${formatNumber(deltaSeg)}` : formatNumber(deltaSeg)})
+                            <span className="neon-green-badge" title="Novos seguidores no dia">
+                              ({deltaSegDia >= 0 ? `+${formatNumber(deltaSegDia)}` : formatNumber(deltaSegDia)})
                             </span>
                           </div>
                         </div>
