@@ -379,6 +379,13 @@ const FeedMediaThumbnail = ({
   );
 };
 
+// Formatação utilitária de números
+const formatNumber = (num: number | string) => {
+  const val = typeof num === 'string' ? parseFloat(num) : num;
+  if (isNaN(val)) return '0';
+  return new Intl.NumberFormat('pt-BR').format(val);
+};
+
 // ============================================================
 // 🔥 COMPONENTE DE THUMBNAIL PARA CARD DE POST VIRAL
 // ============================================================
@@ -502,6 +509,34 @@ const ViralCardThumbnail = ({
           </>
         )}
       </div>
+      {/* Badge de tração/views recentes no momento */}
+      {topPost && (Number(topPost.delta_views_coleta) > 0 || Number(topPost.views_dia) > 0) && (
+        <div style={{
+          position: 'absolute',
+          top: 6,
+          right: 6,
+          background: 'rgba(0, 0, 0, 0.85)',
+          border: '1px solid #00FF66',
+          color: '#00FF66',
+          padding: '2px 7px',
+          borderRadius: 4,
+          fontSize: '9px',
+          fontWeight: 800,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '3px',
+          boxShadow: '0 0 8px rgba(0, 255, 102, 0.4)',
+          pointerEvents: 'none',
+          letterSpacing: '0.2px'
+        }}>
+          <span>🔥</span>
+          <span>
+            {Number(topPost.delta_views_coleta) > 0
+              ? `+${formatNumber(topPost.delta_views_coleta)} views`
+              : `+${formatNumber(topPost.views_dia)} hoje`}
+          </span>
+        </div>
+      )}
 
       {/* Tarja inferior com link */}
       {postUrl && postUrl !== '#' && (
@@ -1946,13 +1981,37 @@ export default function Dashboard() {
             }
           }
 
-          // Posts virais e médias
+          // Posts virais e seleção da publicação da modelo que está trazendo mais visualizações no momento (diferença entre a leitura anterior)
           let postMaisViral: any = null;
           const viralPosts = profPosts.filter((p: any) => p.performanceMultiplier >= 1.8 || p.viralStatus === 'Viralizando');
           if (profPosts.length > 0) {
-            const sortedByPerf = [...profPosts].sort((a, b) => b.performanceMultiplier - a.performanceMultiplier);
-            postMaisViral = { ...sortedByPerf[0] };
-            postMaisViral.viralStatus = postMaisViral.performanceMultiplier >= 1.8 ? 'Viralizando' : 'Normal';
+            // Ordenação para destacar o post trazendo mais visualizações no momento (diferença entre a leitura anterior):
+            // 1º critério: maior ganho de views no momento (delta_views_coleta = última carga - penúltima)
+            // 2º critério: se empate/0, maior ganho de views no dia (views_dia)
+            // 3º critério: maior performanceMultiplier
+            // 4º critério: maior total de visualizações/engajamento
+            const sortedByViewsMomento = [...profPosts].sort((a, b) => {
+              const deltaA = Number(a.delta_views_coleta) || 0;
+              const deltaB = Number(b.delta_views_coleta) || 0;
+              if (deltaB !== deltaA) {
+                return deltaB - deltaA;
+              }
+              const diaA = Number(a.views_dia) || 0;
+              const diaB = Number(b.views_dia) || 0;
+              if (diaB !== diaA) {
+                return diaB - diaA;
+              }
+              const perfA = Number(a.performanceMultiplier) || 0;
+              const perfB = Number(b.performanceMultiplier) || 0;
+              if (perfB !== perfA) {
+                return perfB - perfA;
+              }
+              return (Number(b.views) || 0) - (Number(a.views) || 0);
+            });
+            postMaisViral = { ...sortedByViewsMomento[0] };
+            postMaisViral.viralStatus = ((postMaisViral.delta_views_coleta || 0) > 0 || postMaisViral.performanceMultiplier >= 1.8)
+              ? 'Viralizando'
+              : 'Normal';
           }
 
           // Timestamp da postagem viral mais recente
@@ -2542,12 +2601,7 @@ export default function Dashboard() {
     fetchControle();
     setModalControleEdit(null);
   }
-  // Formatação de números
-  const formatNumber = (num: number | string) => {
-    const val = typeof num === 'string' ? parseFloat(num) : num;
-    if (isNaN(val)) return '0';
-    return new Intl.NumberFormat('pt-BR').format(val);
-  };
+
 
   // --- FILTRAGENS ---
   // Precisam vir antes dos `return` condicionais de loading/error abaixo —
@@ -2886,7 +2940,7 @@ export default function Dashboard() {
                     backgroundColor: '#00FF66',
                     boxShadow: '0 0 8px #00FF66, 0 0 16px rgba(0, 255, 102, 0.6)'
                   }} />
-                  última atualização em: {formatarHorarioNeon(ultimaAtualizacaoGeral)}
+                  Última Atualização em: {formatarHorarioNeon(ultimaAtualizacaoGeral)}
                 </div>
               </div>
             )}
@@ -4142,6 +4196,18 @@ export default function Dashboard() {
                 if (isMeA !== isMeB) {
                   return isMeB - isMeA; // 1º Meus perfis
                 }
+                // Prioriza perfis que têm a publicação trazendo mais visualizações no momento (diferença da leitura anterior)
+                const viewsMomentoA = Number(a.postMaisViral?.delta_views_coleta) || 0;
+                const viewsMomentoB = Number(b.postMaisViral?.delta_views_coleta) || 0;
+                if (viewsMomentoB !== viewsMomentoA) {
+                  return viewsMomentoB - viewsMomentoA;
+                }
+                // Critério secundário: maior ganho no dia
+                const viewsDiaA = Number(a.postMaisViral?.views_dia) || 0;
+                const viewsDiaB = Number(b.postMaisViral?.views_dia) || 0;
+                if (viewsDiaB !== viewsDiaA) {
+                  return viewsDiaB - viewsDiaA;
+                }
                 // Depois o que estiver com a última postagem viralizada e assim por diante
                 const dateA = a.latestViralTimestamp || 0;
                 const dateB = b.latestViralTimestamp || 0;
@@ -4151,7 +4217,7 @@ export default function Dashboard() {
                 return (b.seguidores || 0) - (a.seguidores || 0);
               })
               .map(perfil => {
-                // Pegar o post mais viral deste perfil
+                // Pegar a publicação da modelo trazendo mais visualizações no momento (diferença entre a leitura anterior)
                 const topPost = perfil.postMaisViral;
                 const hasViral = topPost && topPost.viralStatus === 'Viralizando';
                 const formattedFollowers = formatNumber(perfil.seguidores);
@@ -4221,9 +4287,11 @@ export default function Dashboard() {
                     <p className="insight-text">
                       <strong>
                         {topPost
-                          ? (topPost.viralStatus === 'Viralizando'
-                            ? `Um post está performando ${(topPost.performanceMultiplier || 1.0).toFixed(1).replace('.', ',')}x a média histórica da conta, e o ganho de seguidores acelerou no mesmo período — forte indício de que o post está atraindo novos seguidores.`
-                            : `A melhor publicação performou ${(topPost.performanceMultiplier || 1.0).toFixed(1).replace('.', ',')}x a média da conta, mantendo o nível estável de crescimento de seguidores.`)
+                          ? ((topPost.delta_views_coleta || 0) > 0
+                            ? `Publicação com maior ganho no momento: +${formatNumber(topPost.delta_views_coleta)} visualizações na última leitura (${(topPost.performanceMultiplier || 1.0).toFixed(1).replace('.', ',')}x a média da conta).`
+                            : (topPost.viralStatus === 'Viralizando'
+                              ? `Um post está performando ${(topPost.performanceMultiplier || 1.0).toFixed(1).replace('.', ',')}x a média histórica da conta, e o ganho de seguidores acelerou no mesmo período — forte indício de que o post está atraindo novos seguidores.`
+                              : `A melhor publicação performou ${(topPost.performanceMultiplier || 1.0).toFixed(1).replace('.', ',')}x a média da conta, mantendo o nível estável de crescimento de seguidores.`))
                           : "Aguardando mais coletas para computar desvios de desempenho."
                         }
                       </strong>
@@ -4232,7 +4300,7 @@ export default function Dashboard() {
                     {/* Grid de 3 Métricas */}
                     <div className="metrics-row">
                       <div className="metric-box">
-                        <span className="metric-lbl">👥 Novos Seguidores</span>
+                        <span className="metric-lbl">👥 Seguidores HOJE</span>
                         <span className="metric-val" style={{ color: (perfil.novosSeguidoresColeta || 0) > 0 ? '#10B981' : (perfil.novosSeguidoresColeta || 0) < 0 ? '#F85149' : undefined }}>
                           {(perfil.novosSeguidoresColeta || 0) > 0 ? '+' : ''}{(perfil.novosSeguidoresColeta || 0) !== 0 ? formatNumber(perfil.novosSeguidoresColeta) : '0'}
                         </span>
@@ -4255,13 +4323,26 @@ export default function Dashboard() {
                         </span>
                       </div>
                       <div className="metric-box">
-                        <span className="metric-lbl">👁️ Visualizações</span>
+                        <span className="metric-lbl">👁️ Visualizações POST</span>
                         <span className="metric-val">
                           {topPost && topPost.views > 0 ? formatNumber(topPost.views) : '—'}
                         </span>
-                        <span className="metric-sub">
-                          {topPost && topPost.views > 0 ? 'Reels plays' : 'Post estático'}
-                        </span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          {(topPost && (topPost.delta_views_coleta || 0) > 0) ? (
+                            <span className="metric-sub" style={{ color: '#00FF66', fontWeight: 700 }} title="Diferença da penúltima para a última leitura">
+                              +{formatNumber(topPost.delta_views_coleta)} no momento
+                            </span>
+                          ) : (
+                            <span className="metric-sub">
+                              {topPost && topPost.views > 0 ? 'Reels plays' : 'Post estático'}
+                            </span>
+                          )}
+                          {topPost && (topPost.views_dia || 0) > 0 && (
+                            <span className="metric-sub" style={{ color: 'var(--text-secondary)', fontSize: '10px' }}>
+                              No dia: <strong style={{ color: '#00FF66' }}>+{formatNumber(topPost.views_dia)}</strong>
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -5471,7 +5552,7 @@ export default function Dashboard() {
                     // Determinar classe de performance e cor da linha
                     const rawMult = post.performanceMultiplier;
                     const pMult = typeof rawMult === 'number' && !isNaN(rawMult) ? rawMult : 1.0;
-                    
+
                     // Regra solicitada:
                     // Desempenho > 10: Linha vermelha
                     // Desempenho de 5 a 10: Linha laranja
