@@ -25,24 +25,78 @@ import ModalEvolucaoPost from "../components/ModalEvolucaoPost";
 import FloatingLogButton from "../components/FloatingLogButton";
 import LogoSplash from "../components/LogoSplash";
 
-function SparklineWave({ color = '#00FF66', id = 'wave' }: { color?: string; id?: string }) {
+function generateSparklinePath(points: number[], width: number = 160, height: number = 38): { strokePath: string; fillPath: string } {
+  if (!points || points.length === 0) {
+    const baseline = height - 6;
+    return {
+      strokePath: `M 0 ${baseline} L ${width} ${baseline}`,
+      fillPath: `M 0 ${baseline} L ${width} ${baseline} L ${width} ${height} L 0 ${height} Z`
+    };
+  }
+
+  const data = points.length === 1 ? [points[0], points[0]] : points;
+  const minVal = 0; // Sempre inicia do zero (00h)
+  const maxVal = Math.max(...data, 1);
+
+  const topPad = 6;
+  const btmPad = 5;
+  const usableHeight = height - topPad - btmPad;
+
+  const coords = data.map((val, idx) => {
+    const x = (idx / (data.length - 1)) * width;
+    const clampedVal = Math.max(0, val);
+    const y = (height - btmPad) - ((clampedVal - minVal) / (maxVal - minVal)) * usableHeight;
+    return { x: Number(x.toFixed(1)), y: Number(y.toFixed(1)) };
+  });
+
+  let strokePath = `M ${coords[0].x} ${coords[0].y}`;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const p0 = coords[i === 0 ? 0 : i - 1];
+    const p1 = coords[i];
+    const p2 = coords[i + 1];
+    const p3 = coords[i + 2 < coords.length ? i + 2 : coords.length - 1];
+
+    const cp1x = p1.x + (p2.x - p0.x) / 6;
+    const cp1y = p1.y + (p2.y - p0.y) / 6;
+
+    const cp2x = p2.x - (p3.x - p1.x) / 6;
+    const cp2y = p2.y - (p3.y - p1.y) / 6;
+
+    strokePath += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+  }
+
+  const fillPath = `${strokePath} L ${width} ${height} L 0 ${height} Z`;
+  return { strokePath, fillPath };
+}
+
+function SparklineWave({
+  data,
+  color = '#00FF66',
+  id = 'wave'
+}: {
+  data?: number[];
+  color?: string;
+  id?: string;
+}) {
+  const { strokePath, fillPath } = useMemo(() => {
+    return generateSparklinePath(data || []);
+  }, [data]);
+
   return (
     <svg viewBox="0 0 160 38" fill="none" style={{ width: '100%', height: '32px', overflow: 'hidden', display: 'block' }}>
       <defs>
         <linearGradient id={`grad-${id}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.28" />
+          <stop offset="0%" stopColor={color} stopOpacity="0.3" />
           <stop offset="100%" stopColor={color} stopOpacity="0.0" />
         </linearGradient>
       </defs>
+      <path d={fillPath} fill={`url(#grad-${id})`} />
       <path
-        d="M0 26 C20 22, 35 30, 55 24 C75 18, 90 26, 110 18 C125 12, 140 18, 160 8 L160 38 L0 38 Z"
-        fill={`url(#grad-${id})`}
-      />
-      <path
-        d="M0 26 C20 22, 35 30, 55 24 C75 18, 90 26, 110 18 C125 12, 140 18, 160 8"
+        d={strokePath}
         stroke={color}
         strokeWidth="2.2"
         strokeLinecap="round"
+        strokeLinejoin="round"
         fill="none"
       />
     </svg>
@@ -3067,7 +3121,7 @@ export default function Dashboard() {
                               </span>
                             </div>
                             <div className="modelo-stat-wave">
-                              <SparklineWave color="#00FF66" id={`seg-${m.username}`} />
+                              <SparklineWave data={m.curva_seguidores_dia} color="#00FF66" id={`seg-${m.username}`} />
                             </div>
                           </div>
 
@@ -3088,7 +3142,7 @@ export default function Dashboard() {
                               </span>
                             </div>
                             <div className="modelo-stat-wave">
-                              <SparklineWave color="#00FF66" id={`views-${m.username}`} />
+                              <SparklineWave data={m.curva_views_dia} color="#00FF66" id={`views-${m.username}`} />
                             </div>
                           </div>
                         </div>
@@ -3137,22 +3191,6 @@ export default function Dashboard() {
                                 <span className="modelo-hoje-plus val-stories">({hojeStoriesAg >= 0 ? `+${hojeStoriesAg}` : hojeStoriesAg})</span>
                               </div>
                             </div>
-                          </div>
-                        </div>
-
-                        {/* 3. BASE: FAIXA DE STATUS / INSIGHT DINÂMICA */}
-                        <div className="modelo-insight-footer">
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                            <TrendingUp size={15} color="#00FF66" style={{ flexShrink: 0 }} />
-                            <div style={{ width: '1px', height: '14px', background: 'rgba(255, 255, 255, 0.12)', flexShrink: 0 }} />
-                            <span style={{ fontSize: '11px', color: '#C9D1D9', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {deltaSegDia > 0
-                                ? `Seu conteúdo continua crescendo (+${formatNumber(deltaSegDia)} hoje)! Bora manter essa energia! 🔥`
-                                : `Monitorando engajamento e métricas oficiais em tempo real 🚀`}
-                            </span>
-                          </div>
-                          <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: 'rgba(255, 255, 255, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                            <Target size={12} color="#8B949E" />
                           </div>
                         </div>
                       </div>

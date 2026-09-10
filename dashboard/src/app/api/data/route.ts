@@ -144,6 +144,7 @@ export async function GET() {
     const viewsDeltaMap: Record<string, number> = {};
     const postViewsDeltaMap: Record<string, number> = {};
     const postViewsDiaMap: Record<string, number> = {};
+    const curvaViewsDiaMap: Record<string, number[]> = {};
 
     try {
       const hojeStr = new Date().toISOString().substring(0, 10);
@@ -223,6 +224,43 @@ export async function GET() {
           viewsDiaMap[u] = (viewsDiaMap[u] || 0) + delta;
           postViewsDiaMap[s.post_id] = delta;
         }
+      }
+
+      // 3) Curva de evolução de visualizações ganhas acumuladas hoje por perfil (começando de 00h e evoluindo com as amostras)
+      const snapRowsHoje = await db.all(`
+        SELECT data_carga, LOWER(username) as uname, post_id, views
+        FROM posts_metricas_snapshots
+        WHERE data_carga >= ?
+        ORDER BY data_carga ASC
+      `, [limiteHoje]).catch(() => []);
+
+      const userCargasMap: Record<string, Record<string, Record<string, number>>> = {};
+      for (const row of snapRowsHoje) {
+        const u = row.uname;
+        const dc = row.data_carga;
+        if (!userCargasMap[u]) userCargasMap[u] = {};
+        if (!userCargasMap[u][dc]) userCargasMap[u][dc] = {};
+        userCargasMap[u][dc][row.post_id] = Number(row.views) || 0;
+      }
+
+      for (const [u, cargasObj] of Object.entries(userCargasMap)) {
+        const cargasOrdenadas = Object.keys(cargasObj).sort();
+        const curva: number[] = [0]; // Ponto 0 às 00h
+        const localBaseMap: Record<string, number> = { ...antesMap };
+
+        for (const dc of cargasOrdenadas) {
+          const postsDc = cargasObj[dc];
+          let viewsGanhasDc = 0;
+          for (const [pid, v] of Object.entries(postsDc)) {
+            if (localBaseMap[pid] === undefined) {
+              localBaseMap[pid] = v;
+            }
+            const diff = Math.max(0, v - localBaseMap[pid]);
+            viewsGanhasDc += diff;
+          }
+          curva.push(viewsGanhasDc);
+        }
+        curvaViewsDiaMap[u] = curva;
       }
     } catch (e) {
       console.warn("Aviso ao calcular views_dia e views_delta:", e);
@@ -569,6 +607,7 @@ export async function GET() {
 
       // 2) Variação no Dia (crescimento acumulado desde a zero hora / 00:00 do dia da última leitura)
       let variacaoDia = 0;
+      let curvaSeguidoresDia: number[] = [0]; // Ponto 0 às 00h
       if (atual && atual.data_coleta) {
         const diaRef = String(atual.data_coleta).substring(0, 10);
         const limiteZeroHora = `${diaRef} 00:00:00`;
@@ -584,8 +623,15 @@ export async function GET() {
           baseDia = atual;
         }
 
+        const baseSeg = baseDia ? Number(baseDia.seguidores) : seguidoresAtuais;
         if (baseDia) {
-          variacaoDia = seguidoresAtuais - Number(baseDia.seguidores);
+          variacaoDia = seguidoresAtuais - baseSeg;
+        }
+
+        for (const lh of leiturasDeHoje) {
+          const seg = Number(lh.seguidores) || 0;
+          const diff = Math.max(0, seg - baseSeg);
+          curvaSeguidoresDia.push(diff);
         }
       }
 
@@ -604,6 +650,8 @@ export async function GET() {
         novos_seguidores_dia: variacaoDia,
         variacao_ultima: variacaoUltima,
         variacao_dia: variacaoDia,
+        curva_seguidores_dia: curvaSeguidoresDia,
+        curva_views_dia: curvaViewsDiaMap[u] || [0, 0],
         comentarios_pendentes: nCom,
         mensagens_pendentes: nMsg,
         total_pendencias: totalPend,
