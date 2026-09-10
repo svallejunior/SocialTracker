@@ -7,7 +7,7 @@ import {
   TrendingUp, ExternalLink, LogOut, Calendar, Search, Users, MessageSquare, Eye, EyeOff, Heart, Filter,
   BarChart3, Play, Hash, Hash as TagIcon, Image as ImageIcon, Film as VideoIcon, Layers as LayersIcon,
   HelpCircle, CheckCircle2, DollarSign, Wallet, FileText, X, Brain, AlertTriangle, BadgeCheck, History,
-  Smartphone, RefreshCw, Clock, Sliders
+  Smartphone, RefreshCw, Clock, Sliders, ChevronRight, PlusCircle, Film, Target
 } from "lucide-react";
 import {
   LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, AreaChart, Area, ReferenceLine, CartesianGrid,
@@ -24,6 +24,30 @@ import AvatarModelo from "../components/AvatarModelo";
 import ModalEvolucaoPost from "../components/ModalEvolucaoPost";
 import FloatingLogButton from "../components/FloatingLogButton";
 import LogoSplash from "../components/LogoSplash";
+
+function SparklineWave({ color = '#00FF66', id = 'wave' }: { color?: string; id?: string }) {
+  return (
+    <svg viewBox="0 0 160 38" fill="none" style={{ width: '100%', height: '32px', overflow: 'hidden', display: 'block' }}>
+      <defs>
+        <linearGradient id={`grad-${id}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.28" />
+          <stop offset="100%" stopColor={color} stopOpacity="0.0" />
+        </linearGradient>
+      </defs>
+      <path
+        d="M0 26 C20 22, 35 30, 55 24 C75 18, 90 26, 110 18 C125 12, 140 18, 160 8 L160 38 L0 38 Z"
+        fill={`url(#grad-${id})`}
+      />
+      <path
+        d="M0 26 C20 22, 35 30, 55 24 C75 18, 90 26, 110 18 C125 12, 140 18, 160 8"
+        stroke={color}
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        fill="none"
+      />
+    </svg>
+  );
+}
 
 const TabLoading = () => (
   <div className="loading-box"><div className="spinner"></div><p>Carregando...</p></div>
@@ -2972,15 +2996,16 @@ export default function Dashboard() {
                   const hojeStoriesAg = pProf.hoje_stories_ag !== undefined ? Number(pProf.hoje_stories_ag) : (pCtrl.hoje_stories_ag !== undefined ? Number(pCtrl.hoje_stories_ag) : 0);
 
                   return (
-                    <div key={m.username} className="modelo-card">
-                      {/* Coluna da Foto, Nome e Botão */}
-                      <div className="modelo-card-media-col">
-                        <div className="modelo-card-photo-box">
+                    <div key={m.username} className="modelo-card-mockup">
+                      {/* COLUNA ESQUERDA: FOTO, NOME, USERNAME E BOTÃO GERENCIAR */}
+                      <div className="modelo-col-left">
+                        {/* Foto da Modelo (Sem badge 'Online') */}
+                        <div className="modelo-photo-frame">
                           {foto ? (
                             <img
                               src={foto}
                               alt={nome}
-                              className="modelo-card-photo"
+                              className="modelo-photo-img"
                               referrerPolicy="no-referrer"
                               crossOrigin="anonymous"
                               onError={(e) => {
@@ -2988,125 +3013,146 @@ export default function Dashboard() {
                               }}
                             />
                           ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#8B949E', gap: 4 }}>
-                              <Users size={28} />
-                              <span style={{ fontSize: '10px' }}>Sem foto</span>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#8B949E', gap: 4, height: '100%' }}>
+                              <Users size={32} />
+                              <span style={{ fontSize: '11px' }}>Sem foto</span>
                             </div>
                           )}
                         </div>
 
-                        {/* Abaixo da foto: Nome da modelo */}
-                        <div className="modelo-card-name-box">
-                          <span className="modelo-card-name" title={nome}>
-                            {nome}
-                          </span>
+                        {/* Nome da Modelo e Handle (Sem frase 'boas vibrações') */}
+                        <div className="modelo-info-box">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span className="modelo-title-name" title={nome}>
+                              {nome}
+                            </span>
+                            <BadgeCheck size={17} fill="#00FF66" color="#0B0E14" style={{ flexShrink: 0 }} />
+                          </div>
                           {m.username && (
-                            <span className="modelo-card-handle" title={`@${m.username}`}>
+                            <span className="modelo-sub-handle" title={`@${m.username}`}>
                               @{m.username}
                             </span>
                           )}
                         </div>
 
-                        {/* Abaixo da foto: Botão para abrir o modal */}
+                        {/* Botão Gerenciar (Estilo Mockup Neon Verde) */}
                         <button
                           type="button"
-                          className="modelo-card-btn"
+                          className="modelo-action-btn"
                           onClick={() => setModalControleEdit(pCtrl)}
                           title={`Abrir modal de controle de ${nome}`}
                         >
-                          <Sliders size={12} />
-                          Gerenciar
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Users size={16} />
+                            <span>Gerenciar</span>
+                          </div>
+                          <ChevronRight size={16} />
                         </button>
                       </div>
 
-                      {/* Janela ao lado da foto */}
-                      <div className="modelo-card-window">
-                        {/* Seguidores */}
-                        <div className="modelo-metric-row">
-                          <span className="modelo-metric-label">
-                            <Users size={12} /> Seguidores
-                          </span>
-                          <div className="modelo-metric-val-wrap">
-                            <span className="modelo-metric-val">
-                              {formatNumber(seguidores)}
-                            </span>
-                            <span className="neon-green-badge" title="Novos seguidores no dia">
-                              ({deltaSegDia >= 0 ? `+${formatNumber(deltaSegDia)}` : formatNumber(deltaSegDia)})
-                            </span>
+                      {/* COLUNA DIREITA: SEGUIDORES + VIEWS NO DIA + RECIPIENTE HOJE + STATUS */}
+                      <div className="modelo-col-right">
+                        {/* 1. TOPO: 2 CARDS DE MÉTRICAS */}
+                        <div className="modelo-metrics-grid">
+                          {/* CARD SEGUIDORES */}
+                          <div className="modelo-stat-box">
+                            <div className="modelo-stat-header">
+                              <Users size={13} color="#8B949E" />
+                              <span>SEGUIDORES</span>
+                            </div>
+                            <div className="modelo-stat-val-row">
+                              <span className="modelo-stat-number">{formatNumber(seguidores)}</span>
+                              <span className="modelo-stat-badge">
+                                ↑ {deltaSegDia >= 0 ? `+${formatNumber(deltaSegDia)}` : formatNumber(deltaSegDia)}
+                              </span>
+                            </div>
+                            <div className="modelo-stat-wave">
+                              <SparklineWave color="#00FF66" id={`seg-${m.username}`} />
+                            </div>
+                          </div>
+
+                          {/* CARD VISUALIZAÇÕES NO DIA */}
+                          <div className="modelo-stat-box">
+                            <div className="modelo-stat-header">
+                              <Eye size={13} color="#8B949E" />
+                              <span>VISUALIZAÇÕES NO DIA</span>
+                            </div>
+                            <div className="modelo-stat-val-row">
+                              <span className="modelo-stat-number">{viewsDia > 0 ? formatNumber(viewsDia) : '0'}</span>
+                              <span className="modelo-stat-badge" style={{
+                                background: viewsDeltaCarga > 0 ? 'rgba(0, 255, 102, 0.12)' : 'rgba(255, 255, 255, 0.05)',
+                                borderColor: viewsDeltaCarga > 0 ? 'rgba(0, 255, 102, 0.3)' : 'rgba(255, 255, 255, 0.1)',
+                                color: viewsDeltaCarga > 0 ? '#00FF66' : '#8B949E'
+                              }}>
+                                ↑ {viewsDeltaCarga > 0 ? `+${formatNumber(viewsDeltaCarga)}` : '+0'}
+                              </span>
+                            </div>
+                            <div className="modelo-stat-wave">
+                              <SparklineWave color="#00FF66" id={`views-${m.username}`} />
+                            </div>
                           </div>
                         </div>
 
-                        <div style={{ height: '1px', background: 'rgba(255, 255, 255, 0.06)', width: '100%' }} />
+                        {/* 2. MEIO: RECIPIENTE "HOJE" */}
+                        <div className="modelo-hoje-container">
+                          <div className="modelo-hoje-header">
+                            <Calendar size={13} color="#8B949E" />
+                            <span>HOJE</span>
+                          </div>
 
-                        {/* Visualizações no Dia */}
-                        <div className="modelo-metric-row">
-                          <span className="modelo-metric-label">
-                            <Eye size={12} /> Views no Dia
-                          </span>
-                          <div className="modelo-metric-val-wrap">
-                            <span className="modelo-metric-val">
-                              {viewsDia > 0 ? formatNumber(viewsDia) : '—'}
-                            </span>
-                            <span
-                              className="neon-green-badge"
-                              style={{
-                                color: viewsDeltaCarga > 0 ? '#39FF14' : '#8B949E',
-                                textShadow: viewsDeltaCarga > 0 ? '0 0 8px rgba(57, 255, 20, 0.45)' : 'none'
-                              }}
-                              title="Diferença no último carregamento de dados"
-                            >
-                              ({viewsDeltaCarga > 0 ? `+${formatNumber(viewsDeltaCarga)}` : '0'})
-                            </span>
+                          {/* 3 CARDS: 1) REELS (VERMELHO), 2) POSTS (AZUL), 3) STORIES (AMARELO) */}
+                          <div className="modelo-hoje-grid">
+                            {/* 1. REELS (VERMELHO) */}
+                            <div className="modelo-hoje-card card-reels">
+                              <div className="modelo-hoje-icon-circle circle-reels">
+                                <Film size={15} color="#EF4444" />
+                              </div>
+                              <span className="modelo-hoje-lbl lbl-reels">REELS</span>
+                              <div className="modelo-hoje-val-wrap">
+                                <span className="modelo-hoje-num">{hojeReelsPub}</span>
+                                <span className="modelo-hoje-plus val-reels">({hojeReelsAg >= 0 ? `+${hojeReelsAg}` : hojeReelsAg})</span>
+                              </div>
+                            </div>
+
+                            {/* 2. POSTS (AZUL) */}
+                            <div className="modelo-hoje-card card-posts">
+                              <div className="modelo-hoje-icon-circle circle-posts">
+                                <ImageIcon size={15} color="#60A5FA" />
+                              </div>
+                              <span className="modelo-hoje-lbl lbl-posts">POSTS</span>
+                              <div className="modelo-hoje-val-wrap">
+                                <span className="modelo-hoje-num">{hojePostPub}</span>
+                                <span className="modelo-hoje-plus val-posts">({hojePostAg >= 0 ? `+${hojePostAg}` : hojePostAg})</span>
+                              </div>
+                            </div>
+
+                            {/* 3. STORIES (AMARELO) */}
+                            <div className="modelo-hoje-card card-stories">
+                              <div className="modelo-hoje-icon-circle circle-stories">
+                                <PlusCircle size={15} color="#FBBF24" />
+                              </div>
+                              <span className="modelo-hoje-lbl lbl-stories">STORIES</span>
+                              <div className="modelo-hoje-val-wrap">
+                                <span className="modelo-hoje-num">{hojeStoriesPub}</span>
+                                <span className="modelo-hoje-plus val-stories">({hojeStoriesAg >= 0 ? `+${hojeStoriesAg}` : hojeStoriesAg})</span>
+                              </div>
+                            </div>
                           </div>
                         </div>
 
-                        <div style={{ height: '1px', background: 'rgba(255, 255, 255, 0.06)', width: '100%' }} />
-
-                        {/* Recipiente: HOJE (POST, REELS, STORIES) */}
-                        <div className="modelo-metric-row">
-                          <span className="modelo-metric-label">
-                            <Calendar size={12} /> Hoje
-                          </span>
-                          <div style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            background: 'rgba(255, 255, 255, 0.02)',
-                            border: '1px solid rgba(255, 255, 255, 0.05)',
-                            borderRadius: '6px',
-                            padding: '5px 8px',
-                            gap: '4px'
-                          }}>
-                            {/* POST */}
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
-                              <span style={{ fontSize: '9px', fontWeight: 700, color: '#8B949E', letterSpacing: '0.3px' }}>POST</span>
-                              <span style={{ fontSize: '13px', fontWeight: 800, color: '#FFFFFF', fontFamily: 'var(--font-mono, monospace)', display: 'inline-flex', alignItems: 'baseline', gap: '2px' }}>
-                                {hojePostPub}
-                                <span className="neon-green-badge" style={{ fontSize: '11px' }}>({hojePostAg >= 0 ? `+${hojePostAg}` : hojePostAg})</span>
-                              </span>
-                            </div>
-
-                            <div style={{ width: '1px', height: '18px', background: 'rgba(255, 255, 255, 0.07)' }} />
-
-                            {/* REELS */}
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
-                              <span style={{ fontSize: '9px', fontWeight: 700, color: '#8B949E', letterSpacing: '0.3px' }}>REELS</span>
-                              <span style={{ fontSize: '13px', fontWeight: 800, color: '#FFFFFF', fontFamily: 'var(--font-mono, monospace)', display: 'inline-flex', alignItems: 'baseline', gap: '2px' }}>
-                                {hojeReelsPub}
-                                <span className="neon-green-badge" style={{ fontSize: '11px' }}>({hojeReelsAg >= 0 ? `+${hojeReelsAg}` : hojeReelsAg})</span>
-                              </span>
-                            </div>
-
-                            <div style={{ width: '1px', height: '18px', background: 'rgba(255, 255, 255, 0.07)' }} />
-
-                            {/* STORIES */}
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
-                              <span style={{ fontSize: '9px', fontWeight: 700, color: '#8B949E', letterSpacing: '0.3px' }}>STORIES</span>
-                              <span style={{ fontSize: '13px', fontWeight: 800, color: '#FFFFFF', fontFamily: 'var(--font-mono, monospace)', display: 'inline-flex', alignItems: 'baseline', gap: '2px' }}>
-                                {hojeStoriesPub}
-                                <span className="neon-green-badge" style={{ fontSize: '11px' }}>({hojeStoriesAg >= 0 ? `+${hojeStoriesAg}` : hojeStoriesAg})</span>
-                              </span>
-                            </div>
+                        {/* 3. BASE: FAIXA DE STATUS / INSIGHT DINÂMICA */}
+                        <div className="modelo-insight-footer">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                            <TrendingUp size={15} color="#00FF66" style={{ flexShrink: 0 }} />
+                            <div style={{ width: '1px', height: '14px', background: 'rgba(255, 255, 255, 0.12)', flexShrink: 0 }} />
+                            <span style={{ fontSize: '11px', color: '#C9D1D9', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {deltaSegDia > 0
+                                ? `Seu conteúdo continua crescendo (+${formatNumber(deltaSegDia)} hoje)! Bora manter essa energia! 🔥`
+                                : `Monitorando engajamento e métricas oficiais em tempo real 🚀`}
+                            </span>
+                          </div>
+                          <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: 'rgba(255, 255, 255, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <Target size={12} color="#8B949E" />
                           </div>
                         </div>
                       </div>
