@@ -310,6 +310,162 @@ export async function GET() {
       console.warn("Aviso ao calcular métricas de controle:", err);
     }
 
+    // Estatísticas de Hoje por Modelo: POST, REELS e STORIES (Publicados e Agendados)
+    const statsHojeMap: Record<string, {
+      postPub: number;
+      postAg: number;
+      reelsPub: number;
+      reelsAg: number;
+      storiesPub: number;
+      storiesAg: number;
+    }> = {};
+
+    const getStatsModelo = (uname: string) => {
+      if (!statsHojeMap[uname]) {
+        statsHojeMap[uname] = {
+          postPub: 0,
+          postAg: 0,
+          reelsPub: 0,
+          reelsAg: 0,
+          storiesPub: 0,
+          storiesAg: 0,
+        };
+      }
+      return statsHojeMap[uname];
+    };
+
+    try {
+      const offsetMs = -3 * 60 * 60 * 1000;
+      const dataHojeLocal = new Date(Date.now() + offsetMs);
+      const hojeIso = dataHojeLocal.toISOString().substring(0, 10);
+      const diaSemanaMap: Record<number, string> = {
+        0: 'DOM', 1: 'SEG', 2: 'TER', 3: 'QUA', 4: 'QUI', 5: 'SEX', 6: 'SAB'
+      };
+      const diaSemanaStr = diaSemanaMap[dataHojeLocal.getUTCDay()];
+      const [anoStr, mesStr, diaStr] = hojeIso.split('-');
+      const hojeBr = `${diaStr}/${mesStr}/${anoStr}`;
+
+      const postsHistoricoHoje = await db.all(`
+        SELECT LOWER(username) as uname, formato, media_product_type
+        FROM posts_historico
+        WHERE data_postagem LIKE ?
+      `, [`${hojeIso}%`]).catch(() => []);
+
+      const histReelsMap: Record<string, number> = {};
+      const histPostMap: Record<string, number> = {};
+
+      for (const ph of postsHistoricoHoje) {
+        const u = ph.uname;
+        const fUpper = (ph.formato || '').toUpperCase();
+        const mptUpper = (ph.media_product_type || '').toUpperCase();
+        if (fUpper === 'REELS' || mptUpper === 'REELS' || fUpper === 'VIDEO') {
+          histReelsMap[u] = (histReelsMap[u] || 0) + 1;
+        } else {
+          histPostMap[u] = (histPostMap[u] || 0) + 1;
+        }
+      }
+
+      const autoPubsHoje = await db.all(`
+        SELECT LOWER(username) as uname, tipo_postagem, COUNT(*) as total
+        FROM automacao_publicacoes
+        WHERE status = 'PUBLICADO' AND (data_local = ? OR publicado_em LIKE ?)
+        GROUP BY LOWER(username), tipo_postagem
+      `, [hojeIso, `${hojeIso}%`]).catch(() => []);
+
+      const autoReelsMap: Record<string, number> = {};
+      const autoPostMap: Record<string, number> = {};
+      const autoStoriesMap: Record<string, number> = {};
+
+      for (const ap of autoPubsHoje) {
+        const u = ap.uname;
+        const tot = Number(ap.total) || 0;
+        const tipo = (ap.tipo_postagem || '').toUpperCase();
+        if (tipo === 'REELS') {
+          autoReelsMap[u] = (autoReelsMap[u] || 0) + tot;
+        } else if (tipo === 'STORIES' || tipo === 'STORY') {
+          autoStoriesMap[u] = (autoStoriesMap[u] || 0) + tot;
+        } else {
+          autoPostMap[u] = (autoPostMap[u] || 0) + tot;
+        }
+      }
+
+      const agsAtivos = await db.all(`
+        SELECT id, LOWER(username) as uname, tipo_postagem, data_especifica, dias_selecionados, recorrencia, tipo_agendamento, data_inicio, data_fim
+        FROM automacao_agendamentos
+        WHERE status = 'AGENDADO'
+      `).catch(() => []);
+
+      const agReelsMap: Record<string, number> = {};
+      const agPostMap: Record<string, number> = {};
+      const agStoriesMap: Record<string, number> = {};
+
+      for (const ag of agsAtivos) {
+        const u = ag.uname;
+        const tipo = (ag.tipo_postagem || '').toUpperCase();
+        const isDataEsp = ag.tipo_agendamento === 'DATA_ESPECIFICA' || ag.recorrencia === 'UNICA';
+
+        let ehHoje = false;
+        if (isDataEsp) {
+          if (ag.data_especifica && (ag.data_especifica === hojeIso || ag.data_especifica === hojeBr)) {
+            ehHoje = true;
+          } else if (ag.dias_selecionados) {
+            try {
+              const dArr = typeof ag.dias_selecionados === 'string' ? JSON.parse(ag.dias_selecionados) : ag.dias_selecionados;
+              if (Array.isArray(dArr) && (dArr.includes(hojeIso) || dArr.includes(hojeBr))) {
+                ehHoje = true;
+              }
+            } catch (e) {}
+          }
+        } else {
+          const passouInicio = !ag.data_inicio || ag.data_inicio <= hojeIso;
+          const antesFim = !ag.data_fim || ag.data_fim >= hojeIso;
+          if (passouInicio && antesFim) {
+            if (ag.recorrencia === 'DIARIA') {
+              ehHoje = true;
+            } else if (ag.recorrencia === 'DIAS_UTEIS') {
+              ehHoje = ['SEG', 'TER', 'QUA', 'QUI', 'SEX'].includes(diaSemanaStr);
+            } else if (ag.dias_selecionados) {
+              try {
+                const dArr = typeof ag.dias_selecionados === 'string' ? JSON.parse(ag.dias_selecionados) : ag.dias_selecionados;
+                if (Array.isArray(dArr) && (dArr.includes(diaSemanaStr) || dArr.includes(hojeIso) || dArr.includes(hojeBr))) {
+                  ehHoje = true;
+                }
+              } catch (e) {}
+            }
+          }
+        }
+
+        if (ehHoje) {
+          if (tipo === 'REELS') {
+            agReelsMap[u] = (agReelsMap[u] || 0) + 1;
+          } else if (tipo === 'STORIES' || tipo === 'STORY') {
+            agStoriesMap[u] = (agStoriesMap[u] || 0) + 1;
+          } else {
+            agPostMap[u] = (agPostMap[u] || 0) + 1;
+          }
+        }
+      }
+
+      const allUsers = new Set([
+        ...Object.keys(histReelsMap), ...Object.keys(histPostMap),
+        ...Object.keys(autoReelsMap), ...Object.keys(autoPostMap), ...Object.keys(autoStoriesMap),
+        ...Object.keys(agReelsMap), ...Object.keys(agPostMap), ...Object.keys(agStoriesMap)
+      ]);
+
+      for (const u of allUsers) {
+        const st = getStatsModelo(u);
+        st.postPub = Math.max(histPostMap[u] || 0, autoPostMap[u] || 0);
+        st.reelsPub = Math.max(histReelsMap[u] || 0, autoReelsMap[u] || 0);
+        st.storiesPub = autoStoriesMap[u] || 0;
+
+        st.postAg = agPostMap[u] || 0;
+        st.reelsAg = agReelsMap[u] || 0;
+        st.storiesAg = agStoriesMap[u] || 0;
+      }
+    } catch (e) {
+      console.warn("Aviso ao calcular stats de hoje em controle:", e);
+    }
+
     // 5. Tratamento de Dados: Transforma 'null' em valores seguros que o React aceita
 
     // Agrupa lançamentos e observações por username uma única vez (O(n)) em vez de
@@ -369,6 +525,12 @@ export async function GET() {
         views_delta_ultima_carga: viewsDeltaMap[u] || 0,
         novos_seguidores_coleta: segDeltaColetaMap[u] || 0,
         novos_seguidores_dia: segDeltaDiaMap[u] || 0,
+        hoje_post_pub: statsHojeMap[u]?.postPub || 0,
+        hoje_post_ag: statsHojeMap[u]?.postAg || 0,
+        hoje_reels_pub: statsHojeMap[u]?.reelsPub || 0,
+        hoje_reels_ag: statsHojeMap[u]?.reelsAg || 0,
+        hoje_stories_pub: statsHojeMap[u]?.storiesPub || 0,
+        hoje_stories_ag: statsHojeMap[u]?.storiesAg || 0,
         lancamentos: lancamentosDoPerfil // Injeta obrigatoriamente um array []
       };
     });

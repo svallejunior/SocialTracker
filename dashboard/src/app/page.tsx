@@ -2963,6 +2963,14 @@ export default function Dashboard() {
                     ? Number(pProf.views_delta_ultima_carga)
                     : (pCtrl.views_delta_ultima_carga !== undefined ? Number(pCtrl.views_delta_ultima_carga) : 0);
 
+                  // Estatísticas de publicações e agendamentos de HOJE
+                  const hojePostPub = pProf.hoje_post_pub !== undefined ? Number(pProf.hoje_post_pub) : (pCtrl.hoje_post_pub !== undefined ? Number(pCtrl.hoje_post_pub) : 0);
+                  const hojePostAg = pProf.hoje_post_ag !== undefined ? Number(pProf.hoje_post_ag) : (pCtrl.hoje_post_ag !== undefined ? Number(pCtrl.hoje_post_ag) : 0);
+                  const hojeReelsPub = pProf.hoje_reels_pub !== undefined ? Number(pProf.hoje_reels_pub) : (pCtrl.hoje_reels_pub !== undefined ? Number(pCtrl.hoje_reels_pub) : 0);
+                  const hojeReelsAg = pProf.hoje_reels_ag !== undefined ? Number(pProf.hoje_reels_ag) : (pCtrl.hoje_reels_ag !== undefined ? Number(pCtrl.hoje_reels_ag) : 0);
+                  const hojeStoriesPub = pProf.hoje_stories_pub !== undefined ? Number(pProf.hoje_stories_pub) : (pCtrl.hoje_stories_pub !== undefined ? Number(pCtrl.hoje_stories_pub) : 0);
+                  const hojeStoriesAg = pProf.hoje_stories_ag !== undefined ? Number(pProf.hoje_stories_ag) : (pCtrl.hoje_stories_ag !== undefined ? Number(pCtrl.hoje_stories_ag) : 0);
+
                   return (
                     <div key={m.username} className="modelo-card">
                       {/* Coluna da Foto, Nome e Botão */}
@@ -3049,6 +3057,56 @@ export default function Dashboard() {
                             >
                               ({viewsDeltaCarga > 0 ? `+${formatNumber(viewsDeltaCarga)}` : '0'})
                             </span>
+                          </div>
+                        </div>
+
+                        <div style={{ height: '1px', background: 'rgba(255, 255, 255, 0.06)', width: '100%' }} />
+
+                        {/* Recipiente: HOJE (POST, REELS, STORIES) */}
+                        <div className="modelo-metric-row">
+                          <span className="modelo-metric-label">
+                            <Calendar size={12} /> Hoje
+                          </span>
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            background: 'rgba(255, 255, 255, 0.02)',
+                            border: '1px solid rgba(255, 255, 255, 0.05)',
+                            borderRadius: '6px',
+                            padding: '5px 8px',
+                            gap: '4px'
+                          }}>
+                            {/* POST */}
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
+                              <span style={{ fontSize: '9px', fontWeight: 700, color: '#8B949E', letterSpacing: '0.3px' }}>POST</span>
+                              <span style={{ fontSize: '13px', fontWeight: 800, color: '#FFFFFF', fontFamily: 'var(--font-mono, monospace)', display: 'inline-flex', alignItems: 'baseline', gap: '2px' }}>
+                                {hojePostPub}
+                                <span className="neon-green-badge" style={{ fontSize: '11px' }}>({hojePostAg >= 0 ? `+${hojePostAg}` : hojePostAg})</span>
+                              </span>
+                            </div>
+
+                            <div style={{ width: '1px', height: '18px', background: 'rgba(255, 255, 255, 0.07)' }} />
+
+                            {/* REELS */}
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
+                              <span style={{ fontSize: '9px', fontWeight: 700, color: '#8B949E', letterSpacing: '0.3px' }}>REELS</span>
+                              <span style={{ fontSize: '13px', fontWeight: 800, color: '#FFFFFF', fontFamily: 'var(--font-mono, monospace)', display: 'inline-flex', alignItems: 'baseline', gap: '2px' }}>
+                                {hojeReelsPub}
+                                <span className="neon-green-badge" style={{ fontSize: '11px' }}>({hojeReelsAg >= 0 ? `+${hojeReelsAg}` : hojeReelsAg})</span>
+                              </span>
+                            </div>
+
+                            <div style={{ width: '1px', height: '18px', background: 'rgba(255, 255, 255, 0.07)' }} />
+
+                            {/* STORIES */}
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
+                              <span style={{ fontSize: '9px', fontWeight: 700, color: '#8B949E', letterSpacing: '0.3px' }}>STORIES</span>
+                              <span style={{ fontSize: '13px', fontWeight: 800, color: '#FFFFFF', fontFamily: 'var(--font-mono, monospace)', display: 'inline-flex', alignItems: 'baseline', gap: '2px' }}>
+                                {hojeStoriesPub}
+                                <span className="neon-green-badge" style={{ fontSize: '11px' }}>({hojeStoriesAg >= 0 ? `+${hojeStoriesAg}` : hojeStoriesAg})</span>
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </div>
