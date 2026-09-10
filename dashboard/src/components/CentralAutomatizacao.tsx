@@ -426,11 +426,35 @@ function MetaIdEditor({ username, currentId, onSave }: {
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(currentId);
+  const [buscando, setBuscando] = useState(false);
+  const [buscaMsg, setBuscaMsg] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null);
 
   // Sincroniza quando o valor externo muda
   React.useEffect(() => {
     if (!editing) setValue(currentId);
   }, [currentId, editing]);
+
+  // Busca o Meta ID automaticamente pelo @username via Business Discovery —
+  // não exige que a modelo faça login em lugar nenhum.
+  const buscarMetaId = async () => {
+    setBuscando(true);
+    setBuscaMsg(null);
+    try {
+      const res = await fetch(`/api/automacao/buscar-meta-id?username=${encodeURIComponent(username)}`);
+      const data = await res.json();
+      if (data.success) {
+        setValue(data.meta_account_id);
+        const seguidores = data.followers_count != null ? ` · ${new Intl.NumberFormat('pt-BR').format(data.followers_count)} seguidores` : '';
+        setBuscaMsg({ tipo: 'ok', texto: `✓ @${data.username}${seguidores} — confira e confirme` });
+      } else {
+        setBuscaMsg({ tipo: 'erro', texto: data.error || 'Não encontrado' });
+      }
+    } catch {
+      setBuscaMsg({ tipo: 'erro', texto: 'Falha ao consultar a API' });
+    } finally {
+      setBuscando(false);
+    }
+  };
 
   if (!editing) {
     return (
@@ -456,88 +480,141 @@ function MetaIdEditor({ username, currentId, onSave }: {
         >
           {currentId || '⚠️ Clique para configurar'}
         </span>
+        <button
+          type="button"
+          title="Buscar Meta ID automaticamente pelo @username (não exige login da modelo)"
+          onClick={() => {
+            setEditing(true);
+            buscarMetaId();
+          }}
+          style={{
+            background: '#0D1117',
+            border: '1px solid #30363D',
+            borderRadius: 4,
+            color: '#8B949E',
+            cursor: 'pointer',
+            fontSize: 11,
+            padding: '2px 5px',
+            lineHeight: '14px',
+            flexShrink: 0
+          }}
+        >
+          🔎
+        </button>
       </div>
     );
   }
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
-      <span style={{ fontSize: 10, fontWeight: 600, color: '#6E7681', flexShrink: 0 }}>Meta ID:</span>
-      <input
-        autoFocus
-        type="text"
-        value={value}
-        onChange={e => setValue(e.target.value)}
-        onKeyDown={e => {
-          if (e.key === 'Enter') {
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <span style={{ fontSize: 10, fontWeight: 600, color: '#6E7681', flexShrink: 0 }}>Meta ID:</span>
+        <input
+          autoFocus
+          type="text"
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') {
+              const trimmed = value.trim();
+              if (trimmed) { onSave(trimmed); }
+              setEditing(false);
+            } else if (e.key === 'Escape') {
+              setValue(currentId);
+              setEditing(false);
+            }
+          }}
+          placeholder="ex: 17841234567890"
+          style={{
+            background: '#0D1117',
+            border: '1px solid #388BFD',
+            borderRadius: 4,
+            color: '#58A6FF',
+            fontSize: 11,
+            fontFamily: 'monospace',
+            padding: '2px 6px',
+            width: 140,
+            outline: 'none'
+          }}
+        />
+        {/* 🔎 Buscar automaticamente pelo @username (Business Discovery) */}
+        <button
+          type="button"
+          title="Buscar Meta ID automaticamente pelo @username (não exige login da modelo)"
+          onClick={buscarMetaId}
+          disabled={buscando}
+          style={{
+            background: '#0D1117',
+            border: '1px solid #30363D',
+            borderRadius: 4,
+            color: buscando ? '#484F58' : '#8B949E',
+            cursor: buscando ? 'not-allowed' : 'pointer',
+            fontSize: 12,
+            padding: '1px 6px',
+            lineHeight: '20px',
+            flexShrink: 0
+          }}
+        >
+          {buscando ? '⏳' : '🔎'}
+        </button>
+        {/* ✓ Confirmar */}
+        <button
+          type="button"
+          title="Confirmar"
+          onClick={() => {
             const trimmed = value.trim();
             if (trimmed) { onSave(trimmed); }
             setEditing(false);
-          } else if (e.key === 'Escape') {
+          }}
+          style={{
+            background: '#166534',
+            border: '1px solid #22C55E',
+            borderRadius: 4,
+            color: '#4ADE80',
+            cursor: 'pointer',
+            fontWeight: 800,
+            fontSize: 13,
+            padding: '0px 6px',
+            lineHeight: '20px',
+            flexShrink: 0
+          }}
+        >
+          ✓
+        </button>
+        {/* ✗ Cancelar */}
+        <button
+          type="button"
+          title="Cancelar"
+          onClick={() => {
             setValue(currentId);
             setEditing(false);
-          }
-        }}
-        placeholder="ex: 17841234567890"
-        style={{
-          background: '#0D1117',
-          border: '1px solid #388BFD',
-          borderRadius: 4,
-          color: '#58A6FF',
-          fontSize: 11,
-          fontFamily: 'monospace',
-          padding: '2px 6px',
-          width: 140,
-          outline: 'none'
-        }}
-      />
-      {/* ✓ Confirmar */}
-      <button
-        type="button"
-        title="Confirmar"
-        onClick={() => {
-          const trimmed = value.trim();
-          if (trimmed) { onSave(trimmed); }
-          setEditing(false);
-        }}
-        style={{
-          background: '#166534',
-          border: '1px solid #22C55E',
-          borderRadius: 4,
-          color: '#4ADE80',
-          cursor: 'pointer',
-          fontWeight: 800,
-          fontSize: 13,
-          padding: '0px 6px',
-          lineHeight: '20px',
-          flexShrink: 0
-        }}
-      >
-        ✓
-      </button>
-      {/* ✗ Cancelar */}
-      <button
-        type="button"
-        title="Cancelar"
-        onClick={() => {
-          setValue(currentId);
-          setEditing(false);
-        }}
-        style={{
-          background: '#7F1D1D',
-          border: '1px solid #EF4444',
-          borderRadius: 4,
-          color: '#FCA5A5',
-          cursor: 'pointer',
-          fontWeight: 800,
-          fontSize: 13,
-          padding: '0px 6px',
-          lineHeight: '20px',
-          flexShrink: 0
-        }}
-      >
-        ✗
-      </button>
+          }}
+          style={{
+            background: '#7F1D1D',
+            border: '1px solid #EF4444',
+            borderRadius: 4,
+            color: '#FCA5A5',
+            cursor: 'pointer',
+            fontWeight: 800,
+            fontSize: 13,
+            padding: '0px 6px',
+            lineHeight: '20px',
+            flexShrink: 0
+          }}
+        >
+          ✗
+        </button>
+      </div>
+      {buscaMsg && (
+        <span style={{
+          fontSize: 10,
+          fontWeight: 600,
+          color: buscaMsg.tipo === 'ok' ? '#4ADE80' : '#F87171',
+          maxWidth: 260
+        }}>
+          {buscaMsg.texto}
+        </span>
+      )}
     </div>
   );
 }
