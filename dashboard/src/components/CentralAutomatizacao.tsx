@@ -1445,19 +1445,32 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
               ag => isAgendamentoNoDia(ag, selectedDate)
             );
 
+            const idsPublicados = new Set(pubsDoDiaSelecionado.map(p => p.agendamento_id).filter(Boolean));
+            const agsPendentesHoje = agendamentosDoDia.filter(a => a.status !== 'PUBLICADO' && !idsPublicados.has(a.id));
+
             const totalReels = isDiaPassado
               ? pubsDoDiaSelecionado.filter(p => p.tipo_postagem === 'REELS').length
-              : agendamentosDoDia.filter(a => a.tipo_postagem === 'REELS').length;
+              : isDiaHoje
+                ? pubsDoDiaSelecionado.filter(p => p.tipo_postagem === 'REELS').length + agsPendentesHoje.filter(a => a.tipo_postagem === 'REELS').length
+                : agendamentosDoDia.filter(a => a.tipo_postagem === 'REELS').length;
 
             const totalPost = isDiaPassado
               ? pubsDoDiaSelecionado.filter(p => p.tipo_postagem === 'FEED').length
-              : agendamentosDoDia.filter(a => a.tipo_postagem === 'FEED').length;
+              : isDiaHoje
+                ? pubsDoDiaSelecionado.filter(p => p.tipo_postagem === 'FEED').length + agsPendentesHoje.filter(a => a.tipo_postagem === 'FEED').length
+                : agendamentosDoDia.filter(a => a.tipo_postagem === 'FEED').length;
 
             const totalStories = isDiaPassado
               ? pubsDoDiaSelecionado.filter(p => p.tipo_postagem === 'STORIES').length
-              : agendamentosDoDia.filter(a => a.tipo_postagem === 'STORIES').length;
+              : isDiaHoje
+                ? pubsDoDiaSelecionado.filter(p => p.tipo_postagem === 'STORIES').length + agsPendentesHoje.filter(a => a.tipo_postagem === 'STORIES').length
+                : agendamentosDoDia.filter(a => a.tipo_postagem === 'STORIES').length;
 
-            const totalNoDia = isDiaPassado ? pubsDoDiaSelecionado.length : agendamentosDoDia.length;
+            const totalNoDia = isDiaPassado
+              ? pubsDoDiaSelecionado.length
+              : isDiaHoje
+                ? (pubsDoDiaSelecionado.length + agsPendentesHoje.length)
+                : agendamentosDoDia.length;
 
             const isFormOpen = !!formOpenMap[perfil.username];
             const currentEditing = editingAgendamentoMap[perfil.username] || null;
