@@ -2034,25 +2034,25 @@ export default function Dashboard() {
             }
           }
 
-          // Posts virais e seleção da publicação da modelo que está trazendo mais visualizações no momento (diferença entre a leitura anterior)
+          // Posts virais e seleção da publicação da modelo que está gerando mais visualizações NO DIA
           let postMaisViral: any = null;
           const viralPosts = profPosts.filter((p: any) => p.performanceMultiplier >= 1.8 || p.viralStatus === 'Viralizando');
           if (profPosts.length > 0) {
-            // Ordenação para destacar o post trazendo mais visualizações no momento (diferença entre a leitura anterior):
-            // 1º critério: maior ganho de views no momento (delta_views_coleta = última carga - penúltima)
-            // 2º critério: se empate/0, maior ganho de views no dia (views_dia)
+            // Ordenação para destacar o post trazendo mais visualizações no dia:
+            // 1º critério: maior ganho de views no dia (views_dia)
+            // 2º critério: se empate/0, maior ganho de views no momento (delta_views_coleta = última carga - penúltima)
             // 3º critério: maior performanceMultiplier
             // 4º critério: maior total de visualizações/engajamento
             const sortedByViewsMomento = [...profPosts].sort((a, b) => {
-              const deltaA = Number(a.delta_views_coleta) || 0;
-              const deltaB = Number(b.delta_views_coleta) || 0;
-              if (deltaB !== deltaA) {
-                return deltaB - deltaA;
-              }
               const diaA = Number(a.views_dia) || 0;
               const diaB = Number(b.views_dia) || 0;
               if (diaB !== diaA) {
                 return diaB - diaA;
+              }
+              const deltaA = Number(a.delta_views_coleta) || 0;
+              const deltaB = Number(b.delta_views_coleta) || 0;
+              if (deltaB !== deltaA) {
+                return deltaB - deltaA;
               }
               const perfA = Number(a.performanceMultiplier) || 0;
               const perfB = Number(b.performanceMultiplier) || 0;
@@ -2062,7 +2062,7 @@ export default function Dashboard() {
               return (Number(b.views) || 0) - (Number(a.views) || 0);
             });
             postMaisViral = { ...sortedByViewsMomento[0] };
-            postMaisViral.viralStatus = ((postMaisViral.delta_views_coleta || 0) > 0 || postMaisViral.performanceMultiplier >= 1.8)
+            postMaisViral.viralStatus = ((postMaisViral.views_dia || 0) > 0 || postMaisViral.performanceMultiplier >= 1.8)
               ? 'Viralizando'
               : 'Normal';
           }
@@ -3153,12 +3153,16 @@ export default function Dashboard() {
                             </div>
                             <div className="modelo-stat-val-row">
                               <span className="modelo-stat-number">{formatNumber(seguidores)}</span>
-                              <span className="modelo-stat-badge">
-                                ↑ {deltaSegDia >= 0 ? `+${formatNumber(deltaSegDia)}` : formatNumber(deltaSegDia)}
+                              <span className="modelo-stat-badge" style={{
+                                background: deltaSegDia < 0 ? 'rgba(248, 81, 73, 0.12)' : 'rgba(0, 255, 102, 0.12)',
+                                borderColor: deltaSegDia < 0 ? 'rgba(248, 81, 73, 0.3)' : 'rgba(0, 255, 102, 0.3)',
+                                color: deltaSegDia < 0 ? '#F85149' : '#00FF66'
+                              }}>
+                                {deltaSegDia < 0 ? '↓' : '↑'} {deltaSegDia >= 0 ? `+${formatNumber(deltaSegDia)}` : formatNumber(deltaSegDia)}
                               </span>
                             </div>
                             <div className="modelo-stat-wave">
-                              <SparklineWave data={m.curva_seguidores_dia} color="#00FF66" id={`seg-${m.username}`} />
+                              <SparklineWave data={m.curva_seguidores_dia} color={deltaSegDia < 0 ? '#F85149' : '#00FF66'} id={`seg-${m.username}`} />
                             </div>
                           </div>
 
@@ -4347,17 +4351,17 @@ export default function Dashboard() {
                 if (isMeA !== isMeB) {
                   return isMeB - isMeA; // 1º Meus perfis
                 }
-                // Prioriza perfis que têm a publicação trazendo mais visualizações no momento (diferença da leitura anterior)
-                const viewsMomentoA = Number(a.postMaisViral?.delta_views_coleta) || 0;
-                const viewsMomentoB = Number(b.postMaisViral?.delta_views_coleta) || 0;
-                if (viewsMomentoB !== viewsMomentoA) {
-                  return viewsMomentoB - viewsMomentoA;
-                }
-                // Critério secundário: maior ganho no dia
+                // Prioriza perfis que têm a publicação gerando mais visualizações NO DIA
                 const viewsDiaA = Number(a.postMaisViral?.views_dia) || 0;
                 const viewsDiaB = Number(b.postMaisViral?.views_dia) || 0;
                 if (viewsDiaB !== viewsDiaA) {
                   return viewsDiaB - viewsDiaA;
+                }
+                // Critério secundário: maior ganho no momento (diferença da leitura anterior)
+                const viewsMomentoA = Number(a.postMaisViral?.delta_views_coleta) || 0;
+                const viewsMomentoB = Number(b.postMaisViral?.delta_views_coleta) || 0;
+                if (viewsMomentoB !== viewsMomentoA) {
+                  return viewsMomentoB - viewsMomentoA;
                 }
                 // Depois o que estiver com a última postagem viralizada e assim por diante
                 const dateA = a.latestViralTimestamp || 0;
@@ -4438,8 +4442,8 @@ export default function Dashboard() {
                     <p className="insight-text">
                       <strong>
                         {topPost
-                          ? ((topPost.delta_views_coleta || 0) > 0
-                            ? `Publicação com maior ganho no momento: +${formatNumber(topPost.delta_views_coleta)} visualizações na última leitura (${(topPost.performanceMultiplier || 1.0).toFixed(1).replace('.', ',')}x a média da conta).`
+                          ? ((topPost.views_dia || 0) > 0
+                            ? `Publicação com maior ganho no dia: +${formatNumber(topPost.views_dia)} visualizações hoje (${(topPost.performanceMultiplier || 1.0).toFixed(1).replace('.', ',')}x a média da conta).`
                             : (topPost.viralStatus === 'Viralizando'
                               ? `Um post está performando ${(topPost.performanceMultiplier || 1.0).toFixed(1).replace('.', ',')}x a média histórica da conta, e o ganho de seguidores acelerou no mesmo período — forte indício de que o post está atraindo novos seguidores.`
                               : `A melhor publicação performou ${(topPost.performanceMultiplier || 1.0).toFixed(1).replace('.', ',')}x a média da conta, mantendo o nível estável de crescimento de seguidores.`))
@@ -4454,7 +4458,7 @@ export default function Dashboard() {
                         <span className="metric-lbl">👥 Seguidores</span>
                         <span className="metric-val" style={{ color: '#FFFFFF' }}>
                           {formatNumber(perfil.novosSeguidoresDia || 0)}
-                          <span style={{ color: '#00FF66', fontSize: '15px', fontWeight: 700, marginLeft: '6px' }}>
+                          <span style={{ color: (perfil.novosSeguidoresColeta || 0) < 0 ? '#F85149' : '#00FF66', fontSize: '15px', fontWeight: 700, marginLeft: '6px' }}>
                             ({(perfil.novosSeguidoresColeta || 0) >= 0 ? `+${formatNumber(perfil.novosSeguidoresColeta || 0)}` : formatNumber(perfil.novosSeguidoresColeta || 0)})
                           </span>
                         </span>
@@ -4469,14 +4473,18 @@ export default function Dashboard() {
                         </span>
                       </div>
                       <div className="metric-box">
-                        <span className="metric-lbl">👁️ Visualizações</span>
+                        <span className="metric-lbl">👁️ Visualizações no Dia</span>
                         <span className="metric-val" style={{ color: '#FFFFFF' }}>
-                          {topPost && topPost.views > 0 ? formatNumber(topPost.views) : '—'}
-                          {topPost && (topPost.delta_views_coleta || 0) > 0 && (
+                          {formatNumber(perfil.views_dia || 0)}
+                          {(perfil.views_delta_ultima_carga || 0) > 0 && (
                             <span style={{ color: '#00FF66', fontSize: '15px', fontWeight: 700, marginLeft: '6px' }}>
-                              (+{formatNumber(topPost.delta_views_coleta)})
+                              (+{formatNumber(perfil.views_delta_ultima_carga)})
                             </span>
                           )}
+                        </span>
+                        <span className="metric-sub">
+                          Post: {topPost && topPost.views > 0 ? formatNumber(topPost.views) : '—'}
+                          {topPost && (topPost.views_dia || 0) > 0 && ` (+${formatNumber(topPost.views_dia)} hoje)`}
                         </span>
                       </div>
                     </div>
