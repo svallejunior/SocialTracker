@@ -1695,6 +1695,7 @@ export default function Dashboard() {
   const [postsPage, setPostsPage] = useState<number>(1);
   const [postsPerPage, setPostsPerPage] = useState<number>(20);
   const [refreshingFeed, setRefreshingFeed] = useState<boolean>(false);
+  const [refreshingCards, setRefreshingCards] = useState<boolean>(false);
   const [modalPostEvolucao, setModalPostEvolucao] = useState<any | null>(null);
   const [searchAcompanhados, setSearchAcompanhados] = useState('');
   const [acompStatusFilter, setAcompStatusFilter] = useState<'TODOS' | 'ATIVO' | 'INATIVO' | 'INDISPONIVEL' | 'MORREU'>('TODOS');
@@ -1920,6 +1921,22 @@ export default function Dashboard() {
       console.error('Erro ao atualizar feed:', err);
     } finally {
       setRefreshingFeed(false);
+    }
+  };
+
+  // Atualização rápida dos cards para a última atualização disponível
+  const handleRefreshCards = async () => {
+    if (refreshingCards) return;
+    setRefreshingCards(true);
+    try {
+      await Promise.all([
+        fetchData(true),
+        fetchControle(true)
+      ]);
+    } catch (err) {
+      console.error('Erro ao atualizar dados dos cards:', err);
+    } finally {
+      setRefreshingCards(false);
     }
   };
 
@@ -3038,33 +3055,81 @@ export default function Dashboard() {
               SEÇÃO: CARDS DE MINHAS MODELOS (4 POR LINHA)
               ==================================================== */}
           <div className="modelos-section">
-            {/* Horário de Última Atualização em Verde Neon */}
+            {/* Botão Neon de Última Atualização - Atualiza os Cards ao Clicar */}
             {ultimaAtualizacaoGeral && (
               <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center' }}>
-                <div style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '4px 12px',
-                  background: 'rgba(0, 255, 102, 0.08)',
-                  border: '1px solid rgba(0, 255, 102, 0.3)',
-                  borderRadius: '8px',
-                  color: '#00FF66',
-                  textShadow: '0 0 10px rgba(0, 255, 102, 0.5)',
-                  fontSize: '13px',
-                  fontWeight: 700,
-                  letterSpacing: '0.2px'
-                }}>
-                  <span style={{
-                    display: 'inline-block',
-                    width: '8px',
-                    height: '8px',
-                    borderRadius: '50%',
-                    backgroundColor: '#00FF66',
-                    boxShadow: '0 0 8px #00FF66, 0 0 16px rgba(0, 255, 102, 0.6)'
-                  }} />
-                  Última Atualização em: {formatarHorarioNeon(ultimaAtualizacaoGeral)}
-                </div>
+                <button
+                  type="button"
+                  onClick={handleRefreshCards}
+                  disabled={refreshingCards}
+                  title="Clique para carregar a última atualização disponível dos cards"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '5px 14px',
+                    background: refreshingCards ? 'rgba(0, 255, 102, 0.16)' : 'rgba(0, 255, 102, 0.08)',
+                    border: '1px solid rgba(0, 255, 102, 0.35)',
+                    borderRadius: '8px',
+                    color: '#00FF66',
+                    textShadow: '0 0 10px rgba(0, 255, 102, 0.5)',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    letterSpacing: '0.2px',
+                    cursor: refreshingCards ? 'wait' : 'pointer',
+                    transition: 'all 0.2s ease',
+                    outline: 'none',
+                    userSelect: 'none'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!refreshingCards) {
+                      e.currentTarget.style.background = 'rgba(0, 255, 102, 0.16)';
+                      e.currentTarget.style.borderColor = 'rgba(0, 255, 102, 0.65)';
+                      e.currentTarget.style.boxShadow = '0 0 14px rgba(0, 255, 102, 0.35)';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!refreshingCards) {
+                      e.currentTarget.style.background = 'rgba(0, 255, 102, 0.08)';
+                      e.currentTarget.style.borderColor = 'rgba(0, 255, 102, 0.35)';
+                      e.currentTarget.style.boxShadow = 'none';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }
+                  }}
+                >
+                  {refreshingCards ? (
+                    <RefreshCw
+                      size={13}
+                      style={{
+                        animation: 'spin 0.8s linear infinite',
+                        color: '#00FF66'
+                      }}
+                    />
+                  ) : (
+                    <span style={{
+                      display: 'inline-block',
+                      width: '8px',
+                      height: '8px',
+                      borderRadius: '50%',
+                      backgroundColor: '#00FF66',
+                      boxShadow: '0 0 8px #00FF66, 0 0 16px rgba(0, 255, 102, 0.6)'
+                    }} />
+                  )}
+                  <span>
+                    {refreshingCards ? 'Atualizando cards...' : `Última Atualização em: ${formatarHorarioNeon(ultimaAtualizacaoGeral)}`}
+                  </span>
+                  {!refreshingCards && (
+                    <RefreshCw
+                      size={12}
+                      style={{
+                        marginLeft: '2px',
+                        opacity: 0.65,
+                        transition: 'opacity 0.2s ease'
+                      }}
+                    />
+                  )}
+                </button>
               </div>
             )}
 
@@ -4357,31 +4422,79 @@ export default function Dashboard() {
               Identificação algorítmica de perfis e postagens que estão apresentando tração acima da média histórica de engajamento do perfil.
             </p>
             {ultimaAtualizacaoGeral && (
-              <div style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                marginTop: '6px',
-                padding: '4px 10px',
-                background: 'rgba(0, 255, 102, 0.08)',
-                border: '1px solid rgba(0, 255, 102, 0.3)',
-                borderRadius: '8px',
-                color: '#00FF66',
-                textShadow: '0 0 10px rgba(0, 255, 102, 0.5)',
-                fontSize: '13px',
-                fontWeight: 700,
-                letterSpacing: '0.2px'
-              }}>
-                <span style={{
-                  display: 'inline-block',
-                  width: '8px',
-                  height: '8px',
-                  borderRadius: '50%',
-                  backgroundColor: '#00FF66',
-                  boxShadow: '0 0 8px #00FF66, 0 0 16px rgba(0, 255, 102, 0.6)'
-                }} />
-                ùltima atualização em: {formatarHorarioNeon(ultimaAtualizacaoGeral)}
-              </div>
+              <button
+                type="button"
+                onClick={handleRefreshCards}
+                disabled={refreshingCards}
+                title="Clique para carregar a última atualização disponível dos cards"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  marginTop: '6px',
+                  padding: '5px 12px',
+                  background: refreshingCards ? 'rgba(0, 255, 102, 0.16)' : 'rgba(0, 255, 102, 0.08)',
+                  border: '1px solid rgba(0, 255, 102, 0.35)',
+                  borderRadius: '8px',
+                  color: '#00FF66',
+                  textShadow: '0 0 10px rgba(0, 255, 102, 0.5)',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  letterSpacing: '0.2px',
+                  cursor: refreshingCards ? 'wait' : 'pointer',
+                  transition: 'all 0.2s ease',
+                  outline: 'none',
+                  userSelect: 'none'
+                }}
+                onMouseEnter={(e) => {
+                  if (!refreshingCards) {
+                    e.currentTarget.style.background = 'rgba(0, 255, 102, 0.16)';
+                    e.currentTarget.style.borderColor = 'rgba(0, 255, 102, 0.65)';
+                    e.currentTarget.style.boxShadow = '0 0 14px rgba(0, 255, 102, 0.35)';
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!refreshingCards) {
+                    e.currentTarget.style.background = 'rgba(0, 255, 102, 0.08)';
+                    e.currentTarget.style.borderColor = 'rgba(0, 255, 102, 0.35)';
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }
+                }}
+              >
+                {refreshingCards ? (
+                  <RefreshCw
+                    size={13}
+                    style={{
+                      animation: 'spin 0.8s linear infinite',
+                      color: '#00FF66'
+                    }}
+                  />
+                ) : (
+                  <span style={{
+                    display: 'inline-block',
+                    width: '8px',
+                    height: '8px',
+                    borderRadius: '50%',
+                    backgroundColor: '#00FF66',
+                    boxShadow: '0 0 8px #00FF66, 0 0 16px rgba(0, 255, 102, 0.6)'
+                  }} />
+                )}
+                <span>
+                  {refreshingCards ? 'Atualizando cards...' : `Última Atualização em: ${formatarHorarioNeon(ultimaAtualizacaoGeral)}`}
+                </span>
+                {!refreshingCards && (
+                  <RefreshCw
+                    size={12}
+                    style={{
+                      marginLeft: '2px',
+                      opacity: 0.65,
+                      transition: 'opacity 0.2s ease'
+                    }}
+                  />
+                )}
+              </button>
             )}
           </div>
 
