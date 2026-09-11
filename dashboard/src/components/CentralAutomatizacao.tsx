@@ -700,6 +700,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
     mensagem?: string;
   } | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [agendaDia, setAgendaDia] = useState<Date>(new Date());
 
   const fetchMetaConfig = async () => {
     try {
@@ -1081,6 +1082,36 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
 
   // Próximo envio pendente em toda a automação
   const proximoEnvio = getProximoEnvioInfo(agsMeus, pubsMinhas);
+
+  // ─── CARD "AGENDA DO DIA" (navega entre dias, mostra os agendamentos daquela data) ───
+  const agendaDiaIso = dataIsoLocal(agendaDia);
+  const agendaDiaItems = agsMeus
+    .filter(ag => isAgendamentoNoDia(ag, agendaDia))
+    .map(ag => {
+      const horaOrdenavel = ag.modo_hora === 'ALEATORIA' ? (ag.hora_janela_inicio || '00:00') : (ag.hora_fixa || '00:00');
+      const publicado = pubsMinhas.some(p => p.agendamento_id === ag.id && p.data_local === agendaDiaIso && p.status === 'PUBLICADO');
+      const erro = pubsMinhas.some(p => p.agendamento_id === ag.id && p.data_local === agendaDiaIso && p.status === 'ERRO');
+      const perfil = perfisAtivos.find(p => p.username.toLowerCase() === ag.username.toLowerCase());
+      return { ag, horaOrdenavel, publicado, erro, perfil };
+    })
+    .sort((a, b) => a.horaOrdenavel.localeCompare(b.horaOrdenavel));
+
+  const labelAgendaDia = (() => {
+    const diffDias = Math.round((new Date(agendaDiaIso + 'T00:00:00').getTime() - new Date(hojeIso + 'T00:00:00').getTime()) / 86400000);
+    const [y, m, d] = agendaDiaIso.split('-');
+    const dataFmt = `${d}/${m}/${y}`;
+    if (diffDias === 0) return `Hoje, ${dataFmt}`;
+    if (diffDias === 1) return `Amanhã, ${dataFmt}`;
+    if (diffDias === -1) return `Ontem, ${dataFmt}`;
+    const diaSemana = agendaDia.toLocaleDateString('pt-BR', { weekday: 'long' });
+    return `${diaSemana.charAt(0).toUpperCase() + diaSemana.slice(1)}, ${dataFmt}`;
+  })();
+
+  const TIPO_POSTAGEM_TEMA: { [k: string]: { cor: string; bg: string; label: string } } = {
+    REELS: { cor: '#F87171', bg: 'rgba(239, 68, 68, 0.15)', label: '🎬 REELS' },
+    FEED: { cor: '#60A5FA', bg: 'rgba(59, 130, 246, 0.15)', label: '🖼️ POST' },
+    STORIES: { cor: '#FBBF24', bg: 'rgba(245, 158, 11, 0.15)', label: '📱 STORIES' }
+  };
 
   return (
     <div style={{ padding: '4px 0 40px 0', minHeight: '80vh', color: '#E6EDF3' }}>
@@ -1596,6 +1627,101 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
         </div>
       </div>
 
+      {/* --- CARD "AGENDA DO DIA": lista os agendamentos de uma data, navegável --- */}
+      <div style={{
+        width: '100%',
+        marginBottom: 16,
+        background: '#161B22',
+        border: '1px solid #30363D',
+        borderRadius: 12,
+        padding: '14px 18px',
+        boxShadow: '0 4px 14px rgba(0, 0, 0, 0.25)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Calendar size={16} color="#58A6FF" />
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#F0F6FC' }}>Agenda do Dia</span>
+            <span style={{
+              fontSize: 10, fontWeight: 700, color: '#8B949E',
+              background: 'rgba(139, 148, 158, 0.12)', border: '1px solid #30363D',
+              padding: '2px 8px', borderRadius: 12
+            }}>
+              {agendaDiaItems.length} {agendaDiaItems.length === 1 ? 'agendamento' : 'agendamentos'}
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button
+              type="button"
+              onClick={() => setAgendaDia(d => { const n = new Date(d); n.setDate(n.getDate() - 1); return n; })}
+              title="Dia anterior"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, background: '#0D1117', border: '1px solid #30363D', borderRadius: 6, color: '#C9D1D9', cursor: 'pointer' }}
+            >
+              <ChevronLeft size={14} />
+            </button>
+
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#E6EDF3', minWidth: 150, textAlign: 'center' }}>
+              {labelAgendaDia}
+            </span>
+
+            <button
+              type="button"
+              onClick={() => setAgendaDia(d => { const n = new Date(d); n.setDate(n.getDate() + 1); return n; })}
+              title="Próximo dia"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, background: '#0D1117', border: '1px solid #30363D', borderRadius: 6, color: '#C9D1D9', cursor: 'pointer' }}
+            >
+              <ChevronRight size={14} />
+            </button>
+
+            {agendaDiaIso !== hojeIso && (
+              <button
+                type="button"
+                onClick={() => setAgendaDia(new Date())}
+                style={{ marginLeft: 4, background: 'rgba(56, 139, 253, 0.12)', border: '1px solid rgba(56, 139, 253, 0.3)', borderRadius: 6, color: '#58A6FF', fontSize: 11, fontWeight: 700, padding: '5px 10px', cursor: 'pointer' }}
+              >
+                Hoje
+              </button>
+            )}
+          </div>
+        </div>
+
+        {agendaDiaItems.length === 0 ? (
+          <div style={{ padding: '18px 0', textAlign: 'center', color: '#6E7681', fontSize: 12.5, fontStyle: 'italic' }}>
+            Nenhuma publicação agendada para este dia.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {agendaDiaItems.map(({ ag, horaOrdenavel, publicado, erro, perfil }) => {
+              const tema = TIPO_POSTAGEM_TEMA[ag.tipo_postagem] || TIPO_POSTAGEM_TEMA.FEED;
+              const statusInfo = publicado
+                ? { texto: 'Publicado', cor: '#4ADE80', bg: 'rgba(34, 197, 94, 0.12)' }
+                : erro
+                  ? { texto: 'Erro', cor: '#F87171', bg: 'rgba(239, 68, 68, 0.12)' }
+                  : { texto: 'Agendado', cor: '#8B949E', bg: 'rgba(139, 148, 158, 0.12)' };
+              return (
+                <div key={ag.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  background: '#0D1117', border: '1px solid #21262D', borderRadius: 8, padding: '8px 12px'
+                }}>
+                  <span style={{ fontFamily: 'monospace', fontSize: 12.5, fontWeight: 700, color: '#E6EDF3', minWidth: 44 }}>
+                    {horaOrdenavel}
+                  </span>
+                  <AvatarModelo username={ag.username} src={perfil?.foto_url || perfil?.foto_perfil} size={22} showBadge={false} />
+                  <span style={{ fontSize: 12.5, fontWeight: 600, color: '#C9D1D9', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    @{ag.username}
+                  </span>
+                  <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 4, background: tema.bg, color: tema.cor, whiteSpace: 'nowrap' }}>
+                    {tema.label}
+                  </span>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 12, background: statusInfo.bg, color: statusInfo.cor, whiteSpace: 'nowrap' }}>
+                    {statusInfo.texto}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {/* --- CARD DE LIMITAÇÕES DA API DA META (LARGURA TOTAL DA LINHA) --- */}
       <div style={{

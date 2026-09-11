@@ -2311,10 +2311,12 @@ export default function Dashboard() {
   // A ingestão oficial da Meta API roda sozinha no servidor a cada 30min
   // (cron :15/:45) e só afeta "minhas modelos" — este polling leve mantém os
   // seguidores em dia (aqui e na aba Controle) sem exigir reload da página.
+  // Pausado na aba "Histórico da Conta" para não interromper a validação manual dos registros.
   useEffect(() => {
+    if (activeTab === 'anomalias') return;
     const interval = setInterval(() => fetchControle(true), 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [activeTab]);
 
   // Busca contagem de anomalias pendentes para o badge na aba (independente da aba ativa)
   useEffect(() => {
@@ -5645,6 +5647,48 @@ export default function Dashboard() {
                 })}
               </div>
             </div>
+
+            {/* Atalhos rápidos: minhas modelos, para facilitar a busca sem abrir o select */}
+            {profiles.some(p => p.meu_perfil && p.exibir !== 0) && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '11px', fontWeight: 700, marginRight: '2px' }}>
+                  ⭐ MINHAS MODELOS:
+                </span>
+                {[...profiles]
+                  .filter(p => p.meu_perfil && p.exibir !== 0)
+                  .sort((a, b) => a.username.localeCompare(b.username))
+                  .map(p => {
+                    const isActive = selectedProfileFilter === p.username;
+                    return (
+                      <button
+                        key={p.username}
+                        onClick={() => {
+                          setSelectedProfileFilter(prev => prev === p.username ? 'Todos' : p.username);
+                          setPostsPage(1);
+                        }}
+                        title={`Filtrar posts de @${p.username}`}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '5px 10px',
+                          borderRadius: '999px',
+                          border: `1px solid ${isActive ? 'rgba(0, 240, 255, 0.5)' : 'var(--border-color)'}`,
+                          background: isActive ? 'rgba(0, 240, 255, 0.15)' : 'rgba(0, 0, 0, 0.2)',
+                          color: isActive ? '#00F0FF' : 'var(--text-secondary)',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        @{p.username}
+                      </button>
+                    );
+                  })}
+              </div>
+            )}
           </div>
 
           {/* Tabela de Posts */}
