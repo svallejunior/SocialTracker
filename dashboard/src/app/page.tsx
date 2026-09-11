@@ -2098,8 +2098,26 @@ export default function Dashboard() {
             confiancaCor = '#F59E0B';
           }
 
+          const prevProf = lastValidProfilesRef.current.find((p: any) => (p.username || '').toLowerCase() === u);
+
+          // Proteção contra oscilações de carga: preserva valor positivo anterior caso venha zerado transitoriamente
+          const viewsDiaEfetivo = (prof.views_dia !== undefined && Number(prof.views_dia) > 0)
+            ? Number(prof.views_dia)
+            : (prevProf?.views_dia && Number(prevProf.views_dia) > 0 ? Number(prevProf.views_dia) : Number(prof.views_dia || 0));
+
+          const viewsDeltaEfetivo = (prof.views_delta_ultima_carga !== undefined && Number(prof.views_delta_ultima_carga) > 0)
+            ? Number(prof.views_delta_ultima_carga)
+            : (prevProf?.views_delta_ultima_carga && Number(prevProf.views_delta_ultima_carga) > 0 ? Number(prevProf.views_delta_ultima_carga) : Number(prof.views_delta_ultima_carga || 0));
+
+          const curvaViewsEfetiva = (Array.isArray(prof.curva_views_dia) && prof.curva_views_dia.length > 2)
+            ? prof.curva_views_dia
+            : (prevProf?.curva_views_dia && prevProf.curva_views_dia.length > 2 ? prevProf.curva_views_dia : (prof.curva_views_dia || [0, 0]));
+
           return {
             ...prof,
+            views_dia: viewsDiaEfetivo,
+            views_delta_ultima_carga: viewsDeltaEfetivo,
+            curva_views_dia: curvaViewsEfetiva,
             postMaisViral,
             viralPosts,
             mediaPostsVirais,

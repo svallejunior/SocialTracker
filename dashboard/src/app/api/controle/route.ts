@@ -200,8 +200,17 @@ export async function GET() {
     const segDeltaDiaMap: Record<string, number> = {};
 
     try {
-      const hojeStr = new Date().toISOString().substring(0, 10);
-      const limiteHoje = `${hojeStr} 00:00:00`;
+      // Data de hoje no fuso oficial de Brasília (America/Sao_Paulo)
+      const hojeStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+      let limiteHoje = `${hojeStr} 00:00:00`;
+
+      const maxCargaRow = await db.get(`SELECT MAX(data_carga) as max_c FROM posts_metricas_snapshots`).catch(() => null);
+      if (maxCargaRow?.max_c) {
+        const diaUltimaCarga = String(maxCargaRow.max_c).substring(0, 10);
+        if (diaUltimaCarga < hojeStr) {
+          limiteHoje = `${diaUltimaCarga} 00:00:00`;
+        }
+      }
 
       // 1) Duas últimas cargas de snapshots para delta do último ciclo
       const ultimasCargas = await db.all(`

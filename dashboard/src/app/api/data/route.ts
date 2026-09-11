@@ -147,8 +147,19 @@ export async function GET() {
     const curvaViewsDiaMap: Record<string, number[]> = {};
 
     try {
-      const hojeStr = new Date().toISOString().substring(0, 10);
-      const limiteHoje = `${hojeStr} 00:00:00`;
+      // Data de hoje no fuso oficial de Brasília (America/Sao_Paulo)
+      const hojeStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+      let limiteHoje = `${hojeStr} 00:00:00`;
+
+      // Fallback protetor: se ainda não houver cargas registradas no dia atual (ex: primeiros minutos após a meia-noite),
+      // mantém como base o dia da última carga registrada para evitar que os dados zerem na tela
+      const maxCargaRow = await db.get(`SELECT MAX(data_carga) as max_c FROM posts_metricas_snapshots`).catch(() => null);
+      if (maxCargaRow?.max_c) {
+        const diaUltimaCarga = String(maxCargaRow.max_c).substring(0, 10);
+        if (diaUltimaCarga < hojeStr) {
+          limiteHoje = `${diaUltimaCarga} 00:00:00`;
+        }
+      }
 
       // 1) Duas últimas cargas de snapshots para delta do último ciclo calculadas por perfil individualmente
       // (Isso impede que o delta zere enquanto a ingestão está em andamento gravando outro perfil primeiro)
