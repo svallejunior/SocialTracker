@@ -113,12 +113,17 @@ export async function GET(req: NextRequest) {
       // Ordena trazendo AGENDADOR/MANUAL primeiro para priorizar quem tem agendamento_id
       const querySql = username
         ? `SELECT * FROM automacao_publicacoes
-            WHERE LOWER(username) = LOWER(?) AND data_local >= date('now', 'localtime', '-180 days')
+            WHERE LOWER(username) = LOWER(?) 
+              AND status = 'PUBLICADO'
+              AND (is_deleted IS NULL OR is_deleted = 0)
+              AND data_local >= date('now', 'localtime', '-180 days')
             ORDER BY data_local DESC, 
                      CASE WHEN origem = 'AGENDADOR' THEN 0 WHEN origem = 'MANUAL' THEN 1 ELSE 2 END,
                      hora_local DESC`
         : `SELECT * FROM automacao_publicacoes
-            WHERE data_local >= date('now', 'localtime', '-180 days')
+            WHERE status = 'PUBLICADO'
+              AND (is_deleted IS NULL OR is_deleted = 0)
+              AND data_local >= date('now', 'localtime', '-180 days')
             ORDER BY data_local DESC, 
                      CASE WHEN origem = 'AGENDADOR' THEN 0 WHEN origem = 'MANUAL' THEN 1 ELSE 2 END,
                      hora_local DESC`;

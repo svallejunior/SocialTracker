@@ -54,6 +54,7 @@ export async function GET(req: NextRequest) {
     const rawPosts = await db.all(`
       SELECT post_id, username, data_postagem, formato, views, likes, comentarios, reach, shortcode, permalink, total_interactions
       FROM posts_historico
+      WHERE (is_deleted IS NULL OR is_deleted = 0)
       ORDER BY data_postagem DESC
     `);
 
@@ -282,6 +283,7 @@ export async function GET(req: NextRequest) {
           id, agendamento_id, username, tipo_postagem, data_local, hora_local,
           publicado_em, status, meta_media_id, arquivos, legenda
         FROM automacao_publicacoes
+        WHERE status = 'PUBLICADO' AND (is_deleted IS NULL OR is_deleted = 0)
         ORDER BY publicado_em DESC, data_local DESC, hora_local DESC
         LIMIT 15
       `);

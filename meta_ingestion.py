@@ -140,6 +140,7 @@ def inicializar_estrutura_banco():
         ("total_interactions", "INTEGER DEFAULT 0"),
         ("media_url", "TEXT"),
         ("thumbnail_url", "TEXT"),
+        ("is_deleted", "INTEGER DEFAULT 0"),
     ]
     
     for col_name, col_type in colunas_para_adicionar:
@@ -150,6 +151,15 @@ def inicializar_estrutura_banco():
                 print(f"Aviso ao adicionar coluna {col_name} em posts_historico: {e}")
 
     c.execute("CREATE INDEX IF NOT EXISTS idx_posts_historico_user_data ON posts_historico(username, data_postagem)")
+
+    # Garante coluna is_deleted em automacao_publicacoes se a tabela existir
+    c.execute("PRAGMA table_info(automacao_publicacoes)")
+    cols_pub = [col["name"] for col in c.fetchall()]
+    if cols_pub and "is_deleted" not in cols_pub:
+        try:
+            c.execute("ALTER TABLE automacao_publicacoes ADD COLUMN is_deleted INTEGER DEFAULT 0")
+        except Exception as e:
+            print(f"Aviso ao adicionar is_deleted em automacao_publicacoes: {e}")
 
     # 3. Tabela de Perfis Histórico
     c.execute("""
@@ -357,6 +367,100 @@ def extrair_posts_perfil(account_id, token, limite=50):
     return posts[:limite]
 
 
+def verificar_e_remover_posts_apagados(c, username, account_id, token, active_media_ids):
+    """
+    Compara os posts recentes armazenados no banco para o perfil com os IDs ativos
+    retornados pela Meta API. Se algum post recente não estiver na lista ativa,
+    faz uma consulta direta ao ID na Meta API. Se confirmado como deletado/inexistente,
+    remove de posts_historico, posts_metricas_snapshots e atualiza automacao_publicacoes
+    para status 'DELETADO' e is_deleted = 1 (garantindo que saia da contabilização).
+    """
+    try:
+        active_set = {str(mid).strip() for mid in active_media_ids if mid}
+
+        # Busca posts salvos nos últimos 45 dias no banco para este perfil
+        c.execute("""
+            SELECT post_id, shortcode, data_postagem
+            FROM posts_historico
+            WHERE LOWER(username) = LOWER(?)
+              AND (is_deleted IS NULL OR is_deleted = 0)
+              AND data_postagem >= date('now', 'localtime', '-45 days')
+        """, (username,))
+        banco_posts = c.fetchall()
+
+        # Também busca identificadores em automacao_publicacoes
+        c.execute("""
+            SELECT id, meta_media_id, data_local
+            FROM automacao_publicacoes
+            WHERE LOWER(username) = LOWER(?)
+              AND status = 'PUBLICADO'
+              AND (is_deleted IS NULL OR is_deleted = 0)
+              AND data_local >= date('now', 'localtime', '-45 days')
+        """, (username,))
+        banco_pubs = c.fetchall()
+
+        candidatos_para_verificar = set()
+
+        for row in banco_posts:
+            pid = str(row["post_id"]).strip()
+            if pid and pid not in active_set:
+                candidatos_para_verificar.add(pid)
+
+        for row in banco_pubs:
+            mid = str(row["meta_media_id"] or "").strip()
+            if mid and mid not in active_set:
+                candidatos_para_verificar.add(mid)
+
+        if not candidatos_para_verificar:
+            return 0
+
+        total_removidos = 0
+        base_url = graph_api_base(token)
+
+        for media_id in candidatos_para_verificar:
+            # Consulta específica na Meta API para confirmar se o post foi apagado
+            url = f"{base_url}/{media_id}"
+            try:
+                res = requests.get(url, params={"fields": "id", "access_token": token}, timeout=10)
+                if res.status_code in (400, 404):
+                    # Erro 100 com subcode 33 indica que o objeto foi excluído ou não existe
+                    err_json = res.json().get("error", {}) if res.content else {}
+                    err_code = err_json.get("code")
+                    err_msg = str(err_json.get("message", "")).lower()
+
+                    if err_code in (100, 803, 10) or "does not exist" in err_msg or "deleted" in err_msg:
+                        print(f"  🗑️ Post {media_id} de @{username} foi APAGADO no Instagram! Removendo da contabilização...")
+
+                        # 1. Marca/remove de posts_historico
+                        c.execute("""
+                            UPDATE posts_historico
+                            SET is_deleted = 1
+                            WHERE post_id = ? OR shortcode = ?
+                        """, (media_id, media_id))
+
+                        # 2. Exclui de automacao_publicacoes ou marca como DELETADO
+                        c.execute("""
+                            UPDATE automacao_publicacoes
+                            SET status = 'DELETADO', is_deleted = 1
+                            WHERE meta_media_id = ? OR id = ? OR id = ?
+                        """, (media_id, f"meta_{media_id}", media_id))
+
+                        # 3. Limpa snapshots desse post para zerar visualizações ganhas residuais
+                        c.execute("""
+                            DELETE FROM posts_metricas_snapshots
+                            WHERE post_id = ?
+                        """, (media_id,))
+
+                        total_removidos += 1
+            except Exception as check_err:
+                print(f"  ⚠️ Erro ao verificar exclusão do post {media_id}: {check_err}")
+
+        return total_removidos
+    except Exception as e:
+        print(f"  ⚠️ Erro no processo de verificação de posts apagados para @{username}: {e}")
+        return 0
+
+
 # --- CONSTANTES DE DETECÇÃO DE ANOMALIAS ---
 # Mesmos limiares de ingestion.py:66-67 (pipeline Apify) — duplicados aqui
 # porque a coleta via Meta Graph API roda num pipeline separado que grava
@@ -408,7 +512,7 @@ def classificar_variacao_seguidores(c, registro_id, username, seguidores_atual, 
             print(f"  🔴 @{username}: variação > 2% e >= 10 seg (ΔS={delta_s:+d}, %ΔS={pct_delta_s:.1f}%) → enviado para curadoria.")
 
 
-def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str):
+def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str, account_id=None, token=None):
     """Persiste dados de perfil, posts e snapshots no SQLite com data_carga."""
     conn = get_db_connection()
     c = conn.cursor()
@@ -628,9 +732,15 @@ def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str):
                 arquivos_json, legenda
             ))
 
+    # 3. Detectar e remover posts de modelo que foram apagados no Instagram
+    active_media_ids = [str(p.get("id")) for p in posts_data if p.get("id")]
+    removidos = 0
+    if account_id and token:
+        removidos = verificar_e_remover_posts_apagados(c, username, account_id, token, active_media_ids)
+
     conn.commit()
     conn.close()
-    return posts_salvos, snapshots_salvos
+    return posts_salvos, snapshots_salvos, removidos
 
 
 def rodar_ingestao_meta(username_filtro=None, buscar_insights_posts=True, limite_posts=30):
@@ -689,14 +799,16 @@ def rodar_ingestao_meta(username_filtro=None, buscar_insights_posts=True, limite
                 p["insights"] = extrair_insights_post(media_id, media_type, product_type, token)
 
         # 4. Salva no banco e grava snapshots
-        posts_salvos, snapshots_salvos = salvar_dados_no_banco(username, dados_perfil, posts, data_carga_str)
-        print(f"  💾 Banco atualizado: {posts_salvos} posts salvos | {snapshots_salvos} snapshots de evolução registrados.")
+        posts_salvos, snapshots_salvos, posts_removidos = salvar_dados_no_banco(username, dados_perfil, posts, data_carga_str, account_id=account_id, token=token)
+        msg_removidos = f" | 🗑️ {posts_removidos} post(s) apagado(s) desconsiderado(s)" if posts_removidos > 0 else ""
+        print(f"  💾 Banco atualizado: {posts_salvos} posts salvos | {snapshots_salvos} snapshots registrados{msg_removidos}.")
 
         resultados.append({
             "username": username,
             "seguidores": seguidores,
             "total_midias": total_midias,
             "posts_extraidos": len(posts),
+            "posts_removidos": posts_removidos,
             "data_carga": data_carga_str
         })
 

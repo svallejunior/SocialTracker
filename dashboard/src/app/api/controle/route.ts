@@ -366,7 +366,7 @@ export async function GET() {
       const postsHistoricoHoje = await db.all(`
         SELECT LOWER(username) as uname, formato, media_product_type
         FROM posts_historico
-        WHERE data_postagem LIKE ?
+        WHERE (is_deleted IS NULL OR is_deleted = 0) AND data_postagem LIKE ?
       `, [`${hojeIso}%`]).catch(() => []);
 
       const histReelsMap: Record<string, number> = {};
@@ -386,7 +386,7 @@ export async function GET() {
       const autoPubsHoje = await db.all(`
         SELECT LOWER(username) as uname, tipo_postagem, COUNT(DISTINCT COALESCE(NULLIF(meta_media_id, ''), id)) as total
         FROM automacao_publicacoes
-        WHERE status = 'PUBLICADO' AND (data_local = ? OR publicado_em LIKE ?)
+        WHERE status = 'PUBLICADO' AND (is_deleted IS NULL OR is_deleted = 0) AND (data_local = ? OR publicado_em LIKE ?)
         GROUP BY LOWER(username), tipo_postagem
       `, [hojeIso, `${hojeIso}%`]).catch(() => []);
 
