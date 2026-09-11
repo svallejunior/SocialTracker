@@ -780,7 +780,17 @@ function psStatusInfo(score: number): { color: string; bg: string; border: strin
 }
 
 
-function ModalControleEditInline({ perfil, onClose, onSave }: { perfil: any; onClose: () => void; onSave: (d: any) => void }) {
+function ModalControleEditInline({
+  perfil,
+  onClose,
+  onSave,
+  onOpenFinanceiro
+}: {
+  perfil: any;
+  onClose: () => void;
+  onSave: (d: any) => void;
+  onOpenFinanceiro?: (username: string) => void;
+}) {
   const [form, setForm] = useState({
     username: perfil.username,
     nome: perfil.nome || '',
@@ -914,26 +924,59 @@ function ModalControleEditInline({ perfil, onClose, onSave }: { perfil: any; onC
           </div>
         </div>
 
-        {/* Close Button */}
-        <button onClick={onClose} style={{
-          background: 'transparent',
-          border: 'none',
-          color: '#8B949E',
-          cursor: 'pointer',
-          padding: 8,
-          position: 'absolute',
-          top: 28,
-          right: 28,
-          lineHeight: 1,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center'
-        }}
-          onMouseEnter={e => e.currentTarget.style.color = 'white'}
-          onMouseLeave={e => e.currentTarget.style.color = '#8B949E'}
-        >
-          <X size={20} />
-        </button>
+        {/* Close Button & Actions */}
+        <div style={{ position: 'absolute', top: 24, right: 24, display: 'flex', alignItems: 'center', gap: 10 }}>
+          {onOpenFinanceiro && (
+            <button
+              type="button"
+              onClick={() => onOpenFinanceiro(form.username || perfil.username)}
+              title="Abrir Lançamentos Financeiros (Receitas e Despesas) deste perfil"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '6px 12px',
+                borderRadius: 8,
+                background: 'rgba(16, 185, 129, 0.12)',
+                border: '1px solid #10B981',
+                color: '#34D399',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                boxShadow: '0 2px 8px rgba(16, 185, 129, 0.15)'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'rgba(16, 185, 129, 0.22)';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'rgba(16, 185, 129, 0.12)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              <DollarSign size={14} />
+              <span>Financeiro</span>
+            </button>
+          )}
+
+          <button onClick={onClose} style={{
+            background: 'transparent',
+            border: 'none',
+            color: '#8B949E',
+            cursor: 'pointer',
+            padding: 8,
+            lineHeight: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+            onMouseEnter={e => e.currentTarget.style.color = 'white'}
+            onMouseLeave={e => e.currentTarget.style.color = '#8B949E'}
+          >
+            <X size={20} />
+          </button>
+        </div>
 
         {/* Form Body split in columns */}
         <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 24, marginBottom: 20 }}>
@@ -6043,6 +6086,10 @@ export default function Dashboard() {
           perfil={modalControleEdit}
           onClose={() => setModalControleEdit(null)}
           onSave={salvarControleEdit}
+          onOpenFinanceiro={(u) => {
+            setLancamentoSelecionado(null);
+            setModalLancamento({ username: u, tipo: 'recebido' });
+          }}
         />
       )}
     </div>
