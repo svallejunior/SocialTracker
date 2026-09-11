@@ -323,13 +323,13 @@ export async function POST() {
         const precisaAnalise = pctDeltaS > 2.0 && deltaS >= 10;
 
         if (precisaAnalise) {
-          // Se for "Meu Perfil" e já foi marcado/revisado como ADS ou VIRAL_ORGANICO, preserva como validado!
+          // 1. Se já estiver classificado manualmente como ADS ou VIRAL_ORGANICO e validado (revisado = 1), preserva!
           const jaClassificadoManualmente = (r.revisado_manualmente === 1) && (r.tipo_janela === 'ADS' || r.tipo_janela === 'VIRAL_ORGANICO');
-          if (r.meu_perfil === 1 && jaClassificadoManualmente) {
+          if (jaClassificadoManualmente) {
             autoValidados++;
-          } else if (Number(r.revisado_manualmente || 0) === 0 && r.tipo_janela !== 'VIRAL_ORGANICO') {
+          } else {
             const ant = ultimoPorPerfil[r.username];
-            // Se a leitura imediatamente anterior já estava validada como VIRAL_ORGANICO, a conta está em viralização ativa contínua
+            // 2. Se a leitura anterior já estava validada como VIRAL_ORGANICO, conta segue em viralização ativa
             if (ant?.tipo_janela === 'VIRAL_ORGANICO' && ant?.revisado === 1) {
               await db.run(
                 `UPDATE perfis_historico SET tipo_janela = 'VIRAL_ORGANICO', revisado_manualmente = 1 WHERE id = ?`,
@@ -339,6 +339,7 @@ export async function POST() {
               r.revisado_manualmente = 1;
               autoValidados++;
             } else {
+              // 3. Caso geral: estava como ORGANICO ou sem validação -> envia para verificação (revisado = 0, tipo ADS)
               await db.run(
                 `UPDATE perfis_historico SET tipo_janela = 'ADS', revisado_manualmente = 0 WHERE id = ?`,
                 [r.id]
@@ -347,15 +348,6 @@ export async function POST() {
               r.revisado_manualmente = 0;
               marcadosAnalise++;
             }
-          } else if (r.meu_perfil === 1 && r.tipo_janela === 'ORGANICO') {
-            // Se for meu perfil e está como ORGANICO (ou seja, não foi marcado como Viral ou ADS), deve ir para verificação!
-            await db.run(
-              `UPDATE perfis_historico SET tipo_janela = 'ADS', revisado_manualmente = 0 WHERE id = ?`,
-              [r.id]
-            );
-            r.tipo_janela = 'ADS';
-            r.revisado_manualmente = 0;
-            marcadosAnalise++;
           }
         } else {
           // Dentro do parâmetro normal: se não foi manualmente marcado como ADS/VIRAL, valida como ORGANICO

@@ -176,12 +176,8 @@ def salvar_no_banco(username, dados, inativo=0):
     if reg_hoje:
         tipo_janela_ant = reg_hoje[1]
         revisado_ant = reg_hoje[2]
-        # Se for meu perfil e no dia da ocorrência já foi marcado como ADS ou VIRAL_ORGANICO, preserva validado!
-        if is_meu_perfil and tipo_janela_ant in ('VIRAL_ORGANICO', 'ADS'):
-            tipo_janela_inicial = tipo_janela_ant
-            revisado_inicial = 1
-            ja_validado_hoje = True
-        elif revisado_ant == 1 or tipo_janela_ant in ('VIRAL_ORGANICO', 'ADS', 'IGNORAR'):
+        # Preserva como validado apenas se o usuário já classificou explicitamente como VIRAL_ORGANICO, ADS ou IGNORAR
+        if tipo_janela_ant in ('VIRAL_ORGANICO', 'ADS', 'IGNORAR') and revisado_ant == 1:
             tipo_janela_inicial = tipo_janela_ant
             revisado_inicial = 1
             ja_validado_hoje = True

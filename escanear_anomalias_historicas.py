@@ -61,9 +61,7 @@ def escanear_historico():
 
             if precisa_analise:
                 ja_classificado = (revisado == 1) and (tipo_janela in ('ADS', 'VIRAL_ORGANICO'))
-                if meu_perfil == 1 and ja_classificado:
-                    ignorados_ja_revisados += 1
-                elif revisado == 1 and tipo_janela != 'ORGANICO':
+                if ja_classificado:
                     ignorados_ja_revisados += 1
                 elif tipo_ant == 'VIRAL_ORGANICO' and rev_ant == 1:
                     cursor.execute("""
@@ -75,16 +73,6 @@ def escanear_historico():
                     revisado = 1
                     auto_validados_organico += 1
                     print(f"  🔥 Registro #{rid} | @{uname} | {data_coleta} | ΔS={int(delta_s):+d} | %ΔS={pct_delta_s:.1f}% → mantido VIRAL_ORGANICO (viralização ativa)")
-                elif meu_perfil == 1 and tipo_janela == 'ORGANICO':
-                    cursor.execute("""
-                        UPDATE perfis_historico
-                        SET tipo_janela = 'ADS', revisado_manualmente = 0
-                        WHERE id = ?
-                    """, (rid,))
-                    tipo_janela = 'ADS'
-                    revisado = 0
-                    marcados_analise += 1
-                    print(f"  🔴 Registro #{rid} | @{uname} (Meu Perfil) | {data_coleta} | ΔS={int(delta_s):+d} | %ΔS={pct_delta_s:.1f}% | Sem marcação Viral/ADS → enviado para verificação")
                 else:
                     cursor.execute("""
                         UPDATE perfis_historico
@@ -94,7 +82,8 @@ def escanear_historico():
                     tipo_janela = 'ADS'
                     revisado = 0
                     marcados_analise += 1
-                    print(f"  🔴 Registro #{rid} | @{uname} | {data_coleta} | ΔS={int(delta_s):+d} | %ΔS={pct_delta_s:.1f}% → enviado para análise/validação")
+                    perfil_tag = " (Meu Perfil)" if meu_perfil == 1 else ""
+                    print(f"  🔴 Registro #{rid} | @{uname}{perfil_tag} | {data_coleta} | ΔS={int(delta_s):+d} | %ΔS={pct_delta_s:.1f}% → enviado para análise/validação")
             else:
                 cursor.execute("""
                     UPDATE perfis_historico
