@@ -105,7 +105,7 @@ def avaliar_anomalia(cursor, registro_id, username, seguidores_atual, posts_atua
     delta_posts = posts_atual - posts_anterior
     pct_delta_s = ((seguidores_atual - seg_anterior) / seg_anterior * 100) if seg_anterior > 0 else 0
 
-    precisa_analise = (pct_delta_s > LIMIAR_PERCENTUAL_MINIMO) and (delta_s > LIMIAR_DELTA_S_MINIMO)
+    precisa_analise = (pct_delta_s > LIMIAR_PERCENTUAL_MINIMO) and (delta_s >= LIMIAR_DELTA_S_MINIMO)
 
     if precisa_analise:
         # Se a conta já estava em viralização confirmada na leitura anterior, herda VIRAL_ORGANICO e valida automaticamente
@@ -165,6 +165,10 @@ def salvar_no_banco(username, dados, inativo=0):
     """, (username, f"{hoje_prefix}%", hoje_prefix))
     reg_hoje = cursor.fetchone()
 
+    cursor.execute("SELECT meu_perfil FROM perfis_monitorados WHERE LOWER(username) = LOWER(?)", (username,))
+    row_perfil = cursor.fetchone()
+    is_meu_perfil = bool(row_perfil and row_perfil[0] == 1)
+
     tipo_janela_inicial = 'ORGANICO'
     revisado_inicial = 1
     ja_validado_hoje = False
@@ -172,7 +176,12 @@ def salvar_no_banco(username, dados, inativo=0):
     if reg_hoje:
         tipo_janela_ant = reg_hoje[1]
         revisado_ant = reg_hoje[2]
-        if revisado_ant == 1 or tipo_janela_ant in ('VIRAL_ORGANICO', 'ADS', 'IGNORAR'):
+        # Se for meu perfil e no dia da ocorrência já foi marcado como ADS ou VIRAL_ORGANICO, preserva validado!
+        if is_meu_perfil and tipo_janela_ant in ('VIRAL_ORGANICO', 'ADS'):
+            tipo_janela_inicial = tipo_janela_ant
+            revisado_inicial = 1
+            ja_validado_hoje = True
+        elif revisado_ant == 1 or tipo_janela_ant in ('VIRAL_ORGANICO', 'ADS', 'IGNORAR'):
             tipo_janela_inicial = tipo_janela_ant
             revisado_inicial = 1
             ja_validado_hoje = True

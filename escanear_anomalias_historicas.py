@@ -30,11 +30,13 @@ def escanear_historico():
     conn.execute('PRAGMA busy_timeout = 30000;')
     cursor = conn.cursor()
 
-    # Busca todos os registros ordenados cronologicamente por perfil
+    # Busca todos os registros ordenados cronologicamente por perfil com identificador de meu_perfil
     cursor.execute("""
-        SELECT id, username, data_coleta, seguidores, total_posts, inativo, tipo_janela, revisado_manualmente
-        FROM perfis_historico
-        ORDER BY username, datetime(data_coleta) ASC, id ASC
+        SELECT h.id, h.username, h.data_coleta, h.seguidores, h.total_posts, h.inativo, h.tipo_janela, h.revisado_manualmente,
+               COALESCE(pm.meu_perfil, 0) as meu_perfil
+        FROM perfis_historico h
+        LEFT JOIN perfis_monitorados pm ON LOWER(pm.username) = LOWER(h.username)
+        ORDER BY h.username, datetime(h.data_coleta) ASC, h.id ASC
     """)
     rows = cursor.fetchall()
 
@@ -44,7 +46,7 @@ def escanear_historico():
     auto_validados_organico = 0
 
     for r in rows:
-        rid, uname, data_coleta, segs, posts, inativo, tipo_janela, revisado = r
+        rid, uname, data_coleta, segs, posts, inativo, tipo_janela, revisado, meu_perfil = r
 
         if inativo == 1 or segs is None or segs == 0:
             continue
@@ -55,10 +57,13 @@ def escanear_historico():
             delta_posts = (posts or 0) - (posts_ant or 0)
             pct_delta_s = ((segs - seg_ant) / seg_ant * 100) if seg_ant > 0 else 0
 
-            precisa_analise = (pct_delta_s > LIMIAR_PERCENTUAL_MINIMO) and (delta_s > LIMIAR_DELTA_S_MINIMO)
+            precisa_analise = (pct_delta_s > LIMIAR_PERCENTUAL_MINIMO) and (delta_s >= LIMIAR_DELTA_S_MINIMO)
 
             if precisa_analise:
-                if revisado == 1:
+                ja_classificado = (revisado == 1) and (tipo_janela in ('ADS', 'VIRAL_ORGANICO'))
+                if meu_perfil == 1 and ja_classificado:
+                    ignorados_ja_revisados += 1
+                elif revisado == 1 and tipo_janela != 'ORGANICO':
                     ignorados_ja_revisados += 1
                 elif tipo_ant == 'VIRAL_ORGANICO' and rev_ant == 1:
                     cursor.execute("""
@@ -70,6 +75,16 @@ def escanear_historico():
                     revisado = 1
                     auto_validados_organico += 1
                     print(f"  🔥 Registro #{rid} | @{uname} | {data_coleta} | ΔS={int(delta_s):+d} | %ΔS={pct_delta_s:.1f}% → mantido VIRAL_ORGANICO (viralização ativa)")
+                elif meu_perfil == 1 and tipo_janela == 'ORGANICO':
+                    cursor.execute("""
+                        UPDATE perfis_historico
+                        SET tipo_janela = 'ADS', revisado_manualmente = 0
+                        WHERE id = ?
+                    """, (rid,))
+                    tipo_janela = 'ADS'
+                    revisado = 0
+                    marcados_analise += 1
+                    print(f"  🔴 Registro #{rid} | @{uname} (Meu Perfil) | {data_coleta} | ΔS={int(delta_s):+d} | %ΔS={pct_delta_s:.1f}% | Sem marcação Viral/ADS → enviado para verificação")
                 else:
                     cursor.execute("""
                         UPDATE perfis_historico

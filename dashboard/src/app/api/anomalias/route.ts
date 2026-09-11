@@ -227,7 +227,7 @@ export async function GET(request: NextRequest) {
       const pctMediaDiariaDeltaS = diasIntervalo > 1 ? Math.round((pctDeltaS / diasIntervalo) * 10) / 10 : Math.round(pctDeltaS * 10) / 10;
 
       const gatilhos: string[] = [];
-      if (pctDeltaS > 2.0 && deltaS > 10) {
+      if (pctDeltaS > 2.0 && deltaS >= 10) {
         gatilhos.push('CRESCIMENTO_ALTO');
       }
       if (deltaS > 150 && deltaPosts === 0) {
@@ -278,8 +278,8 @@ export async function GET(request: NextRequest) {
 // ─────────────────────────────────────────────
 // POST — Executa varrida retroativa no histórico de coletas
 // Regra:
-// - Variação > 2% e > 10 seguidores → enviado para análise/validação manual
-// - Dentro do parâmetro (<= 2% ou <= 10 seg) → automaticamente marcado como ORGANICO e validado
+// - Variação > 2% e >= 10 seguidores → enviado para análise/validação manual
+// - Dentro do parâmetro (<= 2% ou < 10 seg) → automaticamente marcado como ORGANICO e validado
 // ─────────────────────────────────────────────
 export async function POST() {
   try {
@@ -296,10 +296,12 @@ export async function POST() {
         FROM perfis_historico
         WHERE inativo = 0
       )
-      SELECT id, username, data_coleta, seguidores, total_posts, inativo, tipo_janela, revisado_manualmente
-      FROM ultimas_coletas_dia
-      WHERE rn_dia = 1
-      ORDER BY username, datetime(data_coleta) ASC, id ASC
+      SELECT h.id, h.username, h.data_coleta, h.seguidores, h.total_posts, h.inativo, h.tipo_janela, h.revisado_manualmente,
+             COALESCE(pm.meu_perfil, 0) as meu_perfil
+      FROM ultimas_coletas_dia h
+      LEFT JOIN perfis_monitorados pm ON LOWER(pm.username) = LOWER(h.username)
+      WHERE h.rn_dia = 1
+      ORDER BY h.username, datetime(h.data_coleta) ASC, h.id ASC
     `);
 
     const ultimoPorPerfil: { [u: string]: { seguidores: number; total_posts: number; tipo_janela?: string; revisado?: number } } = {};
@@ -317,12 +319,15 @@ export async function POST() {
         const deltaPosts = (r.total_posts || 0) - postsAnt;
         const pctDeltaS = segAnt > 0 ? ((r.seguidores - segAnt) / segAnt) * 100 : 0;
 
-        // Regra: variação > 2% e > 10 seguidores
-        const precisaAnalise = pctDeltaS > 2.0 && deltaS > 10;
+        // Regra: variação > 2% e ganho >= 10 seguidores
+        const precisaAnalise = pctDeltaS > 2.0 && deltaS >= 10;
 
         if (precisaAnalise) {
-          // Se ainda não foi revisado manualmente pelo usuário nem classificado como VIRAL/ADS manual
-          if (Number(r.revisado_manualmente || 0) === 0 && r.tipo_janela !== 'VIRAL_ORGANICO') {
+          // Se for "Meu Perfil" e já foi marcado/revisado como ADS ou VIRAL_ORGANICO, preserva como validado!
+          const jaClassificadoManualmente = (r.revisado_manualmente === 1) && (r.tipo_janela === 'ADS' || r.tipo_janela === 'VIRAL_ORGANICO');
+          if (r.meu_perfil === 1 && jaClassificadoManualmente) {
+            autoValidados++;
+          } else if (Number(r.revisado_manualmente || 0) === 0 && r.tipo_janela !== 'VIRAL_ORGANICO') {
             const ant = ultimoPorPerfil[r.username];
             // Se a leitura imediatamente anterior já estava validada como VIRAL_ORGANICO, a conta está em viralização ativa contínua
             if (ant?.tipo_janela === 'VIRAL_ORGANICO' && ant?.revisado === 1) {
@@ -342,6 +347,15 @@ export async function POST() {
               r.revisado_manualmente = 0;
               marcadosAnalise++;
             }
+          } else if (r.meu_perfil === 1 && r.tipo_janela === 'ORGANICO') {
+            // Se for meu perfil e está como ORGANICO (ou seja, não foi marcado como Viral ou ADS), deve ir para verificação!
+            await db.run(
+              `UPDATE perfis_historico SET tipo_janela = 'ADS', revisado_manualmente = 0 WHERE id = ?`,
+              [r.id]
+            );
+            r.tipo_janela = 'ADS';
+            r.revisado_manualmente = 0;
+            marcadosAnalise++;
           }
         } else {
           // Dentro do parâmetro normal: se não foi manualmente marcado como ADS/VIRAL, valida como ORGANICO

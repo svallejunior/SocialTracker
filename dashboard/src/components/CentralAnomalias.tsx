@@ -1033,7 +1033,7 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                             textAlign: 'right',
                             fontWeight: 800,
                             fontFamily: 'monospace',
-                            color: item.pct_delta_s >= 25 ? '#FF4444' : (item.pct_delta_s > 2.0 && item.delta_s > 10) ? '#FFB800' : '#8B949E'
+                            color: item.pct_delta_s >= 25 ? '#FF4444' : (item.pct_delta_s > 2.0 && item.delta_s >= 10) ? '#FFB800' : '#8B949E'
                           }}>
                             <div>{item.pct_delta_s > 0 ? '+' : ''}{item.pct_delta_s}%</div>
                           </td>
@@ -1049,7 +1049,7 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                               <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                                 {item.gatilhos.map((g, gi) => (
                                   <span key={gi} className="anomalias-gatilho-badge">
-                                    {g === 'CRESCIMENTO_ALTO' ? '📈 Var. > 2% (>10 seg)' : g === 'VOLUME_SEM_CONTEUDO' ? '📦 Sem Conteúdo' : '🔥 Explosão %'}
+                                    {g === 'CRESCIMENTO_ALTO' ? '📈 Var. > 2% (≥10 seg)' : g === 'VOLUME_SEM_CONTEUDO' ? '📦 Sem Conteúdo' : '🔥 Explosão %'}
                                   </span>
                                 ))}
                               </div>

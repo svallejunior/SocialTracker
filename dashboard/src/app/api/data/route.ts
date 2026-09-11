@@ -828,6 +828,13 @@ export async function PUT(request: NextRequest) {
         [cleanUsername, `${hojePrefix}%`, hojePrefix]
       );
 
+      // Busca se é perfil próprio
+      const perfilInfo = await db.get(
+        `SELECT meu_perfil FROM perfis_monitorados WHERE LOWER(username) = ?`,
+        [cleanUsername]
+      );
+      const isMeuPerfil = Number(perfilInfo?.meu_perfil || 0) === 1;
+
       // Busca último valor anterior ao dia de hoje para calcular variação real da janela
       const lastRow = await db.get(
         `SELECT seguindo, total_posts, seguidores, tipo_janela, revisado_manualmente FROM perfis_historico WHERE LOWER(username) = ? AND inativo = 0 AND data_coleta NOT LIKE ? ORDER BY data_coleta DESC LIMIT 1`,
@@ -837,17 +844,20 @@ export async function PUT(request: NextRequest) {
       const postsVal = lastRow ? (lastRow.total_posts || 0) : 0;
 
       // Verifica se a variação está dentro dos parâmetros de validação automática
-      // Regra: variação > 2% E > 10 seguidores → requer análise manual (ADS ou viral)
+      // Regra: variação > 2% E ganho >= 10 seguidores → requer análise manual (ADS ou viral)
       const segAnterior = lastRow ? (lastRow.seguidores || 0) : 0;
       const deltaS = Number(seguidores) - segAnterior;
       const pctDeltaS = segAnterior > 0 ? (deltaS / segAnterior) * 100 : 0;
-      const precisaAnalise = segAnterior > 0 && pctDeltaS > 2.0 && deltaS > 10;
+      const precisaAnalise = segAnterior > 0 && pctDeltaS > 2.0 && deltaS >= 10;
 
       let tipoJanelaInicial = 'ORGANICO';
       let revisadoInicial = 1;
 
-      // 1. Se já havia registro no dia de análise e já estava validado/classificado, preserva!
-      if (regHoje && (regHoje.revisado_manualmente === 1 || ['VIRAL_ORGANICO', 'ADS', 'IGNORAR'].includes(regHoje.tipo_janela))) {
+      // 1. Se for meu perfil e na data da ocorrência já estiver como ADS ou VIRAL_ORGANICO, preserva sem cair para verificação
+      if (isMeuPerfil && regHoje && (regHoje.tipo_janela === 'ADS' || regHoje.tipo_janela === 'VIRAL_ORGANICO')) {
+        tipoJanelaInicial = regHoje.tipo_janela;
+        revisadoInicial = 1;
+      } else if (regHoje && (regHoje.revisado_manualmente === 1 || ['VIRAL_ORGANICO', 'ADS', 'IGNORAR'].includes(regHoje.tipo_janela))) {
         tipoJanelaInicial = regHoje.tipo_janela;
         revisadoInicial = 1;
       } else if (precisaAnalise) {

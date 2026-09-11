@@ -394,7 +394,7 @@ def classificar_variacao_seguidores(c, registro_id, username, seguidores_atual, 
     delta_s = seguidores_atual - seg_anterior
     pct_delta_s = (delta_s / seg_anterior * 100) if seg_anterior > 0 else 0
 
-    if pct_delta_s > LIMIAR_PERCENTUAL_MINIMO and delta_s > LIMIAR_DELTA_S_MINIMO:
+    if pct_delta_s > LIMIAR_PERCENTUAL_MINIMO and delta_s >= LIMIAR_DELTA_S_MINIMO:
         # Se a conta já estava em viralização confirmada na leitura anterior, herda VIRAL_ORGANICO e valida automaticamente
         if tipo_janela_ant == 'VIRAL_ORGANICO' and revisado_ant == 1:
             c.execute("""
@@ -405,7 +405,7 @@ def classificar_variacao_seguidores(c, registro_id, username, seguidores_atual, 
             c.execute("""
                 UPDATE perfis_historico SET tipo_janela = 'ADS', revisado_manualmente = 0 WHERE id = ?
             """, (registro_id,))
-            print(f"  🔴 @{username}: variação > 2% e > 10 seg (ΔS={delta_s:+d}, %ΔS={pct_delta_s:.1f}%) → enviado para curadoria.")
+            print(f"  🔴 @{username}: variação > 2% e >= 10 seg (ΔS={delta_s:+d}, %ΔS={pct_delta_s:.1f}%) → enviado para curadoria.")
 
 
 def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str):
@@ -430,6 +430,10 @@ def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str):
         """, (username, f"{hoje_prefix}%", hoje_prefix))
         reg_hoje = c.fetchone()
 
+        c.execute("SELECT meu_perfil FROM perfis_monitorados WHERE LOWER(username) = LOWER(?)", (username,))
+        row_perfil = c.fetchone()
+        is_meu_perfil = bool(row_perfil and row_perfil[0] == 1)
+
         tipo_janela_inicial = 'ORGANICO'
         revisado_inicial = 1
         ja_validado_hoje = False
@@ -437,7 +441,12 @@ def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str):
         if reg_hoje:
             tipo_janela_ant = reg_hoje[0]
             revisado_ant = reg_hoje[1]
-            if revisado_ant == 1 or tipo_janela_ant in ('VIRAL_ORGANICO', 'ADS', 'IGNORAR'):
+            # Se for meu perfil e no dia já foi marcado como ADS ou VIRAL_ORGANICO, preserva como validado!
+            if is_meu_perfil and tipo_janela_ant in ('VIRAL_ORGANICO', 'ADS'):
+                tipo_janela_inicial = tipo_janela_ant
+                revisado_inicial = 1
+                ja_validado_hoje = True
+            elif revisado_ant == 1 or tipo_janela_ant in ('VIRAL_ORGANICO', 'ADS', 'IGNORAR'):
                 tipo_janela_inicial = tipo_janela_ant
                 revisado_inicial = 1
                 ja_validado_hoje = True
