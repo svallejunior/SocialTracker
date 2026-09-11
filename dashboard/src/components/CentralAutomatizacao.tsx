@@ -4,10 +4,10 @@ import AvatarModelo from './AvatarModelo';
 import {
   Bot, Play, CheckCircle2, RefreshCw, Trash2,
   Settings, HelpCircle, Bell, CreditCard, LayoutGrid, Shield,
-  Plus, ExternalLink, Sliders, Image as ImageIcon, Sparkles, Check,
+  Plus, ExternalLink, Sliders, Image as ImageIcon, Check,
   AlertCircle, ChevronDown, Zap, X, Calendar, Clock, Film, UploadCloud,
   FileText, Repeat, Shuffle, ArrowDownAZ, ListOrdered, Layers,
-  ChevronLeft, ChevronRight, Music, Link2, MapPin, AtSign, Info
+  ChevronLeft, ChevronRight, Info
 } from 'lucide-react';
 
 interface Profile {
@@ -253,28 +253,6 @@ export function deduplicatePublicacoes(pubs: Publicacao[]): Publicacao[] {
   }
 
   return result.sort((a, b) => (b.hora_local || '').localeCompare(a.hora_local || ''));
-}
-
-function formatDaemonTime(dateStr?: string) {
-  if (!dateStr) return 'Aguardando primeira verificação...';
-  try {
-    const [d, t] = dateStr.split(' ');
-    const [year, month, day] = d.split('-');
-    const [hour, min, sec] = t.split(':');
-    const dt = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(min), Number(sec));
-    const now = new Date();
-    const diffSec = Math.max(0, Math.floor((now.getTime() - dt.getTime()) / 1000));
-
-    let relative = '';
-    if (diffSec < 10) relative = 'agora mesmo';
-    else if (diffSec < 60) relative = `há ${diffSec}s atrás`;
-    else if (diffSec < 3600) relative = `há ${Math.floor(diffSec / 60)}min atrás`;
-    else relative = `há ${Math.floor(diffSec / 3600)}h atrás`;
-
-    return `${day}/${month}/${year} às ${hour}:${min}:${sec} (${relative})`;
-  } catch (e) {
-    return dateStr;
-  }
 }
 
 export interface ProximoEnvioDetalhe {
@@ -694,13 +672,9 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
     publicBaseUrl: '',
     webhookVerifyToken: ''
   });
-  const [daemonStatus, setDaemonStatus] = useState<{
-    ultima_verificacao?: string;
-    status_daemon?: string;
-    mensagem?: string;
-  } | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [agendaDia, setAgendaDia] = useState<Date>(new Date());
+  const [agendaFiltroUsername, setAgendaFiltroUsername] = useState<string>('');
 
   const fetchMetaConfig = async () => {
     try {
@@ -715,9 +689,6 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
             accessToken: data.config.access_token || prev.accessToken,
             publicBaseUrl: data.config.public_base_url || prev.publicBaseUrl
           }));
-        }
-        if (data.daemon_status) {
-          setDaemonStatus(data.daemon_status);
         }
       }
     } catch (e) {
@@ -1042,50 +1013,9 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
   // Todas as publicações dos perfis ativos
   const pubsMinhas = publicacoes.filter(p => meusUsernames.has(p.username.toLowerCase()));
 
-  // 1. Agendamentos Totais
-  const totalGeral = agsMeus.length;
-  const totalGeralReels = agsMeus.filter(a => a.tipo_postagem === 'REELS').length;
-  const totalGeralPost = agsMeus.filter(a => a.tipo_postagem === 'FEED').length;
-  const totalGeralStories = agsMeus.filter(a => a.tipo_postagem === 'STORIES').length;
-
-  // 2. Agendamentos Previstos (status 'AGENDADO' ou ativos)
-  const previstos = agsMeus.filter(a => a.status === 'AGENDADO');
-  const previstosTotal = previstos.length;
-  const previstosReels = previstos.filter(a => a.tipo_postagem === 'REELS').length;
-  const previstosPost = previstos.filter(a => a.tipo_postagem === 'FEED').length;
-  const previstosStories = previstos.filter(a => a.tipo_postagem === 'STORIES').length;
-
-  // 3. Agendamentos Postados (Histórico total de publicações com sucesso)
-  const postadosSucesso = pubsMinhas.filter(p => p.status === 'PUBLICADO');
-  const postadosTotal = Math.max(postadosSucesso.length, agsMeus.filter(a => a.status === 'PUBLICADO').length);
-  const postadosReels = postadosSucesso.filter(p => p.tipo_postagem === 'REELS').length;
-  const postadosPost = postadosSucesso.filter(p => p.tipo_postagem === 'FEED').length;
-  const postadosStories = postadosSucesso.filter(p => p.tipo_postagem === 'STORIES').length;
-
-  // 4. Agendamentos que Faltam pra Hoje (programados para hoje que ainda não foram concluídos hoje)
-  const agsHoje = agsMeus.filter(a => isAgendamentoNoDia(a, hojeDate));
-  const pubsHojeSucessoIds = new Set(
-    pubsMinhas.filter(p => p.data_local === hojeIso && p.status === 'PUBLICADO').map(p => p.agendamento_id).filter(Boolean)
-  );
-  const faltamHoje = agsHoje.filter(a => a.status === 'AGENDADO' && !pubsHojeSucessoIds.has(a.id));
-  const faltamHojeTotal = faltamHoje.length;
-  const faltamHojeReels = faltamHoje.filter(a => a.tipo_postagem === 'REELS').length;
-  const faltamHojePost = faltamHoje.filter(a => a.tipo_postagem === 'FEED').length;
-  const faltamHojeStories = faltamHoje.filter(a => a.tipo_postagem === 'STORIES').length;
-
-  // 5. Concluídos Hoje (publicados hoje com sucesso)
-  const concluidosHoje = pubsMinhas.filter(p => p.data_local === hojeIso && p.status === 'PUBLICADO');
-  const concluidosHojeTotal = concluidosHoje.length;
-  const concluidosHojeReels = concluidosHoje.filter(p => p.tipo_postagem === 'REELS').length;
-  const concluidosHojePost = concluidosHoje.filter(p => p.tipo_postagem === 'FEED').length;
-  const concluidosHojeStories = concluidosHoje.filter(p => p.tipo_postagem === 'STORIES').length;
-
-  // Próximo envio pendente em toda a automação
-  const proximoEnvio = getProximoEnvioInfo(agsMeus, pubsMinhas);
-
   // ─── CARD "AGENDA DO DIA" (navega entre dias, mostra os agendamentos daquela data) ───
   const agendaDiaIso = dataIsoLocal(agendaDia);
-  const agendaDiaItems = agsMeus
+  const agendaDiaItemsTodos = agsMeus
     .filter(ag => isAgendamentoNoDia(ag, agendaDia))
     .map(ag => {
       const horaOrdenavel = ag.modo_hora === 'ALEATORIA' ? (ag.hora_janela_inicio || '00:00') : (ag.hora_fixa || '00:00');
@@ -1095,6 +1025,10 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
       return { ag, horaOrdenavel, publicado, erro, perfil };
     })
     .sort((a, b) => a.horaOrdenavel.localeCompare(b.horaOrdenavel));
+
+  const agendaDiaItems = agendaFiltroUsername
+    ? agendaDiaItemsTodos.filter(item => item.ag.username.toLowerCase() === agendaFiltroUsername.toLowerCase())
+    : agendaDiaItemsTodos;
 
   const labelAgendaDia = (() => {
     const diffDias = Math.round((new Date(agendaDiaIso + 'T00:00:00').getTime() - new Date(hojeIso + 'T00:00:00').getTime()) / 86400000);
@@ -1222,411 +1156,6 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
         </div>
       </div>
 
-      {/* --- JANELA MOTOR DE PUBLICAÇÃO AUTOMÁTICA (DAEMON) --- */}
-      <div style={{
-        width: '100%',
-        marginBottom: 20,
-        background: 'linear-gradient(90deg, #354e36ff 0%, #161B22 100%)',
-        border: '1px solid #119238ff',
-        borderRadius: 12,
-        padding: '12px 18px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: 14,
-        boxShadow: '0 4px 14px rgba(0, 0, 0, 0.25)'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          {/* Ponto Pulsante de Status do Daemon */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: 38,
-            height: 38,
-            borderRadius: '50%',
-            background: (daemonStatus?.status_daemon === 'ATIVO' || !daemonStatus?.status_daemon) ? 'rgba(34, 197, 94, 0.12)' : 'rgba(239, 68, 68, 0.12)',
-            border: `1px solid ${(daemonStatus?.status_daemon === 'ATIVO' || !daemonStatus?.status_daemon) ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
-            flexShrink: 0
-          }}>
-            <span style={{
-              width: 10,
-              height: 10,
-              borderRadius: '50%',
-              background: (daemonStatus?.status_daemon === 'ATIVO' || !daemonStatus?.status_daemon) ? '#22C55E' : '#EF4444',
-              boxShadow: (daemonStatus?.status_daemon === 'ATIVO' || !daemonStatus?.status_daemon) ? '0 0 10px #22C55E' : '0 0 10px #EF4444'
-            }} />
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {/* Linha 1: Título + Badge de Status */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: '#F0F6FC' }}>
-                Motor de Publicação Automática (Daemon)
-              </span>
-              <span style={{
-                fontSize: 10,
-                fontWeight: 700,
-                color: (daemonStatus?.status_daemon === 'ATIVO' || !daemonStatus?.status_daemon) ? '#4ADE80' : '#F87171',
-                background: (daemonStatus?.status_daemon === 'ATIVO' || !daemonStatus?.status_daemon) ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                border: `1px solid ${(daemonStatus?.status_daemon === 'ATIVO' || !daemonStatus?.status_daemon) ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
-                padding: '2px 8px',
-                borderRadius: 12
-              }}>
-                ● {(daemonStatus?.status_daemon === 'ATIVO' || !daemonStatus?.status_daemon) ? 'ATIVO (Varredura a cada 30s)' : daemonStatus.status_daemon}
-              </span>
-            </div>
-
-            {/* Linha 2: Última verificação */}
-            <div style={{ fontSize: 12, color: '#8B949E' }}>
-              Última verificação de agendamentos:{' '}
-              <strong style={{ color: '#58A6FF', fontFamily: 'monospace', fontSize: 12 }}>
-                {formatDaemonTime(daemonStatus?.ultima_verificacao)}
-              </strong>
-            </div>
-
-            {/* Linha 3: Próximo envio */}
-            <div style={{ fontSize: 12, color: '#8B949E', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <span>Próximo envio:</span>
-              {proximoEnvio ? (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{
-                    fontSize: 10,
-                    fontWeight: 800,
-                    padding: '1px 6px',
-                    borderRadius: 4,
-                    background: proximoEnvio.tipo === 'REELS' ? 'rgba(239, 68, 68, 0.2)' : proximoEnvio.tipo === 'POST' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(245, 158, 11, 0.2)',
-                    color: proximoEnvio.tipo === 'REELS' ? '#F87171' : proximoEnvio.tipo === 'POST' ? '#60A5FA' : '#FBBF24'
-                  }}>
-                    {proximoEnvio.tipo === 'REELS' ? '🎬 REELS' : proximoEnvio.tipo === 'POST' ? '🖼️ POST' : '📱 STORIES'}
-                  </span>
-                  <span style={{ color: '#E6EDF3', fontWeight: 600 }}>@{proximoEnvio.username}</span>
-                  <strong style={{ color: '#7EE787', fontWeight: 700 }}>
-                    {proximoEnvio.textoTempo}
-                  </strong>
-                </span>
-              ) : (
-                <span style={{ color: '#6E7681', fontStyle: 'italic' }}>
-                  Nenhum agendamento pendente
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button
-            type="button"
-            onClick={() => {
-              fetchMetaConfig();
-              fetchAgendamentos();
-              showToast("Status e agendamentos atualizados!");
-            }}
-            style={{
-              background: '#21262D',
-              border: '1px solid #30363D',
-              borderRadius: 8,
-              color: '#C9D1D9',
-              fontSize: 12,
-              fontWeight: 600,
-              padding: '7px 14px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              transition: 'all 0.15s'
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = '#30363D';
-              e.currentTarget.style.borderColor = '#58A6FF';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = '#21262D';
-              e.currentTarget.style.borderColor = '#30363D';
-            }}
-          >
-            <RefreshCw size={13} />
-            Atualizar Status
-          </button>
-        </div>
-      </div>
-
-      {/* =========================================================================
-          SCORE / TOTALIZADORES GERAIS DA AUTOMAÇÃO (5 CARDS COM REELS/POST/STORIES)
-      ========================================================================= */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
-        gap: 14,
-        marginBottom: 20
-      }}>
-        {/* 1. Agendamentos Totais */}
-        <div style={{
-          background: '#161B22',
-          border: '1px solid #30363D',
-          borderRadius: 12,
-          padding: '14px 16px',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          transition: 'all 0.2s ease',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.25)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{
-              width: 40,
-              height: 40,
-              borderRadius: 10,
-              background: 'rgba(168, 85, 247, 0.15)',
-              border: '1px solid rgba(168, 85, 247, 0.3)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#A855F7',
-              flexShrink: 0
-            }}>
-              <Layers size={19} />
-            </div>
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Agendamentos Totais
-              </div>
-              <div style={{ fontSize: 22, fontWeight: 800, color: '#F0F6FC', marginTop: 2, lineHeight: 1.1 }}>
-                {totalGeral}
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, marginTop: 10, borderTop: '1px solid #21262D', paddingTop: 8 }}>
-            <div title="Reels Totais" style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 9, fontWeight: 700, color: '#F87171' }}>🎬</span>
-              <span style={{ fontSize: 16, fontWeight: 800, color: '#EF4444' }}>{totalGeralReels}</span>
-            </div>
-            <div title="Posts Totais" style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 9, fontWeight: 700, color: '#60A5FA' }}>🖼️</span>
-              <span style={{ fontSize: 16, fontWeight: 800, color: '#60A5FA' }}>{totalGeralPost}</span>
-            </div>
-            <div title="Stories Totais" style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 9, fontWeight: 700, color: '#FBBF24' }}>📱</span>
-              <span style={{ fontSize: 16, fontWeight: 800, color: '#FBBF24' }}>{totalGeralStories}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* 2. Agendamentos Previstos */}
-        <div style={{
-          background: '#161B22',
-          border: '1px solid #30363D',
-          borderRadius: 12,
-          padding: '14px 16px',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          transition: 'all 0.2s ease',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.25)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{
-              width: 40,
-              height: 40,
-              borderRadius: 10,
-              background: 'rgba(56, 139, 253, 0.15)',
-              border: '1px solid rgba(56, 139, 253, 0.3)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#388BFD',
-              flexShrink: 0
-            }}>
-              <Clock size={19} />
-            </div>
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Agendamentos Previstos
-              </div>
-              <div style={{ fontSize: 22, fontWeight: 800, color: '#58A6FF', marginTop: 2, lineHeight: 1.1 }}>
-                {previstosTotal}
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, marginTop: 10, borderTop: '1px solid #21262D', paddingTop: 8 }}>
-            <div title="Reels Previstos" style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 9, fontWeight: 700, color: '#F87171' }}>🎬</span>
-              <span style={{ fontSize: 16, fontWeight: 800, color: '#EF4444' }}>{previstosReels}</span>
-            </div>
-            <div title="Posts Previstos" style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 9, fontWeight: 700, color: '#60A5FA' }}>🖼️</span>
-              <span style={{ fontSize: 16, fontWeight: 800, color: '#60A5FA' }}>{previstosPost}</span>
-            </div>
-            <div title="Stories Previstos" style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 9, fontWeight: 700, color: '#FBBF24' }}>📱</span>
-              <span style={{ fontSize: 16, fontWeight: 800, color: '#FBBF24' }}>{previstosStories}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* 3. Agendamentos Postados */}
-        <div style={{
-          background: '#161B22',
-          border: '1px solid #30363D',
-          borderRadius: 12,
-          padding: '14px 16px',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          transition: 'all 0.2s ease',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.25)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{
-              width: 40,
-              height: 40,
-              borderRadius: 10,
-              background: 'rgba(34, 197, 94, 0.15)',
-              border: '1px solid rgba(34, 197, 94, 0.3)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#22C55E',
-              flexShrink: 0
-            }}>
-              <CheckCircle2 size={19} />
-            </div>
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Agendamentos Postados
-              </div>
-              <div style={{ fontSize: 22, fontWeight: 800, color: '#4ADE80', marginTop: 2, lineHeight: 1.1 }}>
-                {postadosTotal}
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, marginTop: 10, borderTop: '1px solid #21262D', paddingTop: 8 }}>
-            <div title="Reels Postados" style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 9, fontWeight: 700, color: '#F87171' }}>🎬</span>
-              <span style={{ fontSize: 16, fontWeight: 800, color: '#EF4444' }}>{postadosReels}</span>
-            </div>
-            <div title="Posts Postados" style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 9, fontWeight: 700, color: '#60A5FA' }}>🖼️</span>
-              <span style={{ fontSize: 16, fontWeight: 800, color: '#60A5FA' }}>{postadosPost}</span>
-            </div>
-            <div title="Stories Postados" style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 9, fontWeight: 700, color: '#FBBF24' }}>📱</span>
-              <span style={{ fontSize: 16, fontWeight: 800, color: '#FBBF24' }}>{postadosStories}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* 4. Faltam pra Hoje */}
-        <div style={{
-          background: '#161B22',
-          border: '1px solid #30363D',
-          borderRadius: 12,
-          padding: '14px 16px',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          transition: 'all 0.2s ease',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.25)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{
-              width: 40,
-              height: 40,
-              borderRadius: 10,
-              background: 'rgba(245, 158, 11, 0.15)',
-              border: '1px solid rgba(245, 158, 11, 0.3)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#F59E0B',
-              flexShrink: 0
-            }}>
-              <AlertCircle size={19} />
-            </div>
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Faltam pra Hoje
-              </div>
-              <div style={{ fontSize: 22, fontWeight: 800, color: '#FBBF24', marginTop: 2, lineHeight: 1.1 }}>
-                {faltamHojeTotal}
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, marginTop: 10, borderTop: '1px solid #21262D', paddingTop: 8 }}>
-            <div title="Reels Restantes Hoje" style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 9, fontWeight: 700, color: '#F87171' }}>🎬</span>
-              <span style={{ fontSize: 16, fontWeight: 800, color: '#EF4444' }}>{faltamHojeReels}</span>
-            </div>
-            <div title="Posts Restantes Hoje" style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 9, fontWeight: 700, color: '#60A5FA' }}>🖼️</span>
-              <span style={{ fontSize: 16, fontWeight: 800, color: '#60A5FA' }}>{faltamHojePost}</span>
-            </div>
-            <div title="Stories Restantes Hoje" style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 9, fontWeight: 700, color: '#FBBF24' }}>📱</span>
-              <span style={{ fontSize: 16, fontWeight: 800, color: '#FBBF24' }}>{faltamHojeStories}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* 5. Concluídos Hoje */}
-        <div style={{
-          background: '#161B22',
-          border: '1px solid #30363D',
-          borderRadius: 12,
-          padding: '14px 16px',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          transition: 'all 0.2s ease',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.25)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{
-              width: 40,
-              height: 40,
-              borderRadius: 10,
-              background: 'rgba(16, 185, 129, 0.15)',
-              border: '1px solid rgba(16, 185, 129, 0.3)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#10B981',
-              flexShrink: 0
-            }}>
-              <Sparkles size={19} />
-            </div>
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Concluídos Hoje
-              </div>
-              <div style={{ fontSize: 22, fontWeight: 800, color: '#34D399', marginTop: 2, lineHeight: 1.1 }}>
-                {concluidosHojeTotal}
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, marginTop: 10, borderTop: '1px solid #21262D', paddingTop: 8 }}>
-            <div title="Reels Concluídos Hoje" style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 9, fontWeight: 700, color: '#F87171' }}>🎬</span>
-              <span style={{ fontSize: 16, fontWeight: 800, color: '#EF4444' }}>{concluidosHojeReels}</span>
-            </div>
-            <div title="Posts Concluídos Hoje" style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 9, fontWeight: 700, color: '#60A5FA' }}>🖼️</span>
-              <span style={{ fontSize: 16, fontWeight: 800, color: '#60A5FA' }}>{concluidosHojePost}</span>
-            </div>
-            <div title="Stories Concluídos Hoje" style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: 6, padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 9, fontWeight: 700, color: '#FBBF24' }}>📱</span>
-              <span style={{ fontSize: 16, fontWeight: 800, color: '#FBBF24' }}>{concluidosHojeStories}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* --- CARD "AGENDA DO DIA": lista os agendamentos de uma data, navegável --- */}
       <div style={{
         width: '100%',
@@ -1685,12 +1214,49 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
           </div>
         </div>
 
+        {/* Filtro por perfil: clique mostra só os agendamentos daquele perfil no dia */}
+        {agendaDiaItemsTodos.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+            <button
+              type="button"
+              onClick={() => setAgendaFiltroUsername('')}
+              style={{
+                padding: '5px 10px', borderRadius: 999, fontSize: 11.5, fontWeight: 700, cursor: 'pointer',
+                border: `1px solid ${agendaFiltroUsername === '' ? 'rgba(56, 139, 253, 0.5)' : '#30363D'}`,
+                background: agendaFiltroUsername === '' ? 'rgba(56, 139, 253, 0.15)' : 'rgba(0, 0, 0, 0.2)',
+                color: agendaFiltroUsername === '' ? '#58A6FF' : '#8B949E'
+              }}
+            >
+              Todos ({agendaDiaItemsTodos.length})
+            </button>
+            {Array.from(new Set(agendaDiaItemsTodos.map(item => item.ag.username))).map(username => {
+              const count = agendaDiaItemsTodos.filter(item => item.ag.username === username).length;
+              const isActive = agendaFiltroUsername.toLowerCase() === username.toLowerCase();
+              return (
+                <button
+                  key={username}
+                  type="button"
+                  onClick={() => setAgendaFiltroUsername(prev => prev.toLowerCase() === username.toLowerCase() ? '' : username)}
+                  style={{
+                    padding: '5px 10px', borderRadius: 999, fontSize: 11.5, fontWeight: 700, cursor: 'pointer',
+                    border: `1px solid ${isActive ? 'rgba(56, 139, 253, 0.5)' : '#30363D'}`,
+                    background: isActive ? 'rgba(56, 139, 253, 0.15)' : 'rgba(0, 0, 0, 0.2)',
+                    color: isActive ? '#58A6FF' : '#8B949E'
+                  }}
+                >
+                  @{username} ({count})
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {agendaDiaItems.length === 0 ? (
           <div style={{ padding: '18px 0', textAlign: 'center', color: '#6E7681', fontSize: 12.5, fontStyle: 'italic' }}>
-            Nenhuma publicação agendada para este dia.
+            {agendaDiaItemsTodos.length === 0 ? 'Nenhuma publicação agendada para este dia.' : 'Nenhum agendamento deste perfil neste dia.'}
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 8 }}>
             {agendaDiaItems.map(({ ag, horaOrdenavel, publicado, erro, perfil }) => {
               const tema = TIPO_POSTAGEM_TEMA[ag.tipo_postagem] || TIPO_POSTAGEM_TEMA.FEED;
               const statusInfo = publicado
@@ -1721,87 +1287,6 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
             })}
           </div>
         )}
-      </div>
-
-      {/* --- CARD DE LIMITAÇÕES DA API DA META (LARGURA TOTAL DA LINHA) --- */}
-      <div style={{
-        width: '100%',
-        marginBottom: 16,
-        background: 'linear-gradient(90deg, #0D1117 0%, #161B22 100%)',
-        border: '1px solid rgba(245, 158, 11, 0.3)',
-        borderRadius: 12,
-        padding: '14px 20px',
-        boxShadow: '0 4px 14px rgba(0, 0, 0, 0.25)'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: 38,
-            height: 38,
-            borderRadius: '50%',
-            background: 'rgba(245, 158, 11, 0.12)',
-            border: '1px solid rgba(245, 158, 11, 0.3)',
-            flexShrink: 0
-          }}>
-            <Info size={18} color="#F59E0B" />
-          </div>
-
-          <div style={{ flex: 1, minWidth: 240 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: '#F0F6FC' }}>
-                Limitações da Publicação Automática
-              </span>
-              <span style={{
-                fontSize: 10,
-                fontWeight: 700,
-                color: '#FBBF24',
-                background: 'rgba(245, 158, 11, 0.15)',
-                border: '1px solid rgba(245, 158, 11, 0.3)',
-                padding: '2px 8px',
-                borderRadius: 12
-              }}>
-                RESTRIÇÕES DA META API
-              </span>
-            </div>
-            <div style={{ fontSize: 12, color: '#8B949E', marginTop: 4 }}>
-              Recursos abaixo <strong style={{ color: '#C9D1D9' }}>não</strong> estão disponíveis via API e precisam ser feitos manualmente pelo app do Instagram:
-            </div>
-
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-              gap: 8,
-              marginTop: 12
-            }}>
-              {[
-                { icon: Music, texto: 'Escolher músicas da biblioteca do Instagram' },
-                { icon: Link2, texto: 'Inserir links na publicação ou no Story' },
-                { icon: MapPin, texto: 'Definir a localização da publicação' },
-                { icon: AtSign, texto: 'Marcar outras pessoas na publicação' }
-              ].map(({ icon: Icone, texto }) => (
-                <div
-                  key={texto}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    background: '#0D1117',
-                    border: '1px solid #21262D',
-                    borderRadius: 8,
-                    padding: '8px 12px'
-                  }}
-                >
-                  <Icone size={14} color="#F59E0B" style={{ flexShrink: 0 }} />
-                  <span style={{ fontSize: 11.5, color: '#C9D1D9', lineHeight: 1.35 }}>
-                    {texto}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* --- BARRA DE ORDENAÇÃO DE PERFIS --- */}
