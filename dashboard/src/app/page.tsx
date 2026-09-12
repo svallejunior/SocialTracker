@@ -4620,12 +4620,72 @@ export default function Dashboard() {
                         </span>
                       </div>
                       <div className="metric-box">
-                        <span className="metric-lbl">🔥 Média Posts Virais</span>
-                        <span className="metric-val">
-                          {perfil.mediaPostsVirais > 0 ? formatNumber(perfil.mediaPostsVirais) : (topPost ? formatNumber(topPost.likes + topPost.comentarios) : '0')}
+                        <span
+                          className="metric-lbl"
+                          title={topPost?.legenda ? `Legenda do post: "${topPost.legenda}"` : 'Post viral em destaque'}
+                          style={{ cursor: topPost?.legenda ? 'help' : 'default' }}
+                        >
+                          🔥 POST VIRAL
                         </span>
-                        <span className="metric-sub">
-                          Média conta: {formatNumber(Math.round(perfil.mediaHistoricaConta || 0))}
+                        <span className="metric-val" style={{ color: '#FFFFFF', fontSize: '18px', display: 'inline-flex', alignItems: 'baseline', flexWrap: 'wrap' }}>
+                          <span
+                            className="metric-tooltip-wrap"
+                            title={`Visualizações deste post hoje: ${formatNumber(topPost?.views_dia || 0)}${topPost?.legenda ? ` • Legenda: "${topPost.legenda}"` : ''}`}
+                          >
+                            <span>{formatNumber(topPost?.views_dia || 0)}</span>
+                            <span className="metric-tooltip-box">
+                              Visualizações deste post hoje: {formatNumber(topPost?.views_dia || 0)}
+                              {topPost?.legenda && (
+                                <span style={{ display: 'block', marginTop: '4px', paddingTop: '4px', borderTop: '1px solid rgba(255,255,255,0.12)', fontSize: '10px', color: '#8B949E', maxWidth: '220px', whiteSpace: 'normal', fontWeight: 400 }}>
+                                  "{topPost.legenda.slice(0, 90)}{topPost.legenda.length > 90 ? '...' : ''}"
+                                </span>
+                              )}
+                            </span>
+                          </span>
+
+                          <span style={{ color: '#8B949E', margin: '0 3px', fontWeight: 600, fontSize: '15px', userSelect: 'none' }}>/</span>
+
+                          <span
+                            className="metric-tooltip-wrap"
+                            title={`Total acumulado de visualizações deste post: ${formatNumber(topPost?.views || 0)}${topPost?.legenda ? ` • Legenda: "${topPost.legenda}"` : ''}`}
+                          >
+                            <span>{formatNumber(topPost?.views || 0)}</span>
+                            <span className="metric-tooltip-box">
+                              Total acumulado do post: {formatNumber(topPost?.views || 0)}
+                            </span>
+                          </span>
+
+                          {(topPost && topPost.delta_views_coleta !== undefined && topPost.delta_views_coleta !== null) ? (
+                            <span
+                              className="metric-tooltip-wrap"
+                              style={{ marginLeft: '5px' }}
+                              title={`Acréscimo deste post nesta atualização: ${(topPost.delta_views_coleta || 0) >= 0 ? `+${formatNumber(topPost.delta_views_coleta || 0)}` : formatNumber(topPost.delta_views_coleta || 0)}`}
+                            >
+                              <span style={{
+                                color: (topPost.delta_views_coleta || 0) < 0 ? '#F85149' : '#00FF66',
+                                fontSize: '14px',
+                                fontWeight: 700
+                              }}>
+                                ({(topPost.delta_views_coleta || 0) >= 0 ? `+${formatNumber(topPost.delta_views_coleta || 0)}` : formatNumber(topPost.delta_views_coleta || 0)})
+                              </span>
+                              <span className="metric-tooltip-box align-right">
+                                Acréscimo nesta atualização: {(topPost.delta_views_coleta || 0) >= 0 ? `+${formatNumber(topPost.delta_views_coleta || 0)}` : formatNumber(topPost.delta_views_coleta || 0)}
+                              </span>
+                            </span>
+                          ) : (
+                            <span
+                              className="metric-tooltip-wrap"
+                              style={{ marginLeft: '5px' }}
+                              title={`Acréscimo deste post hoje: +${formatNumber(topPost?.views_dia || 0)}`}
+                            >
+                              <span style={{ color: '#00FF66', fontSize: '14px', fontWeight: 700 }}>
+                                (+{formatNumber(topPost?.views_dia || 0)})
+                              </span>
+                              <span className="metric-tooltip-box align-right">
+                                Acréscimo do post: +{formatNumber(topPost?.views_dia || 0)}
+                              </span>
+                            </span>
+                          )}
                         </span>
                       </div>
                       <div className="metric-box">
@@ -4635,7 +4695,7 @@ export default function Dashboard() {
                             className="metric-tooltip-wrap"
                             title={`Visualizações ganhas hoje nesta publicação em destaque: ${formatNumber(topPost?.views_dia || 0)}`}
                           >
-                            <span style={{ textDecoration: 'underline dotted rgba(255,255,255,0.35)', textUnderlineOffset: '3px' }}>
+                            <span>
                               {formatNumber(topPost?.views_dia || 0)}
                             </span>
                             <span className="metric-tooltip-box">
@@ -4649,7 +4709,7 @@ export default function Dashboard() {
                             className="metric-tooltip-wrap"
                             title={`Total de visualizações ganhas hoje em todas as mídias da conta: ${formatNumber(perfil.views_dia || 0)}`}
                           >
-                            <span style={{ textDecoration: 'underline dotted rgba(255,255,255,0.35)', textUnderlineOffset: '3px' }}>
+                            <span>
                               {formatNumber(perfil.views_dia || 0)}
                             </span>
                             <span className="metric-tooltip-box">
