@@ -67,24 +67,31 @@ LIMIAR_DELTA_S_MINIMO = 10         # ΔS mínimo para acionar análise
 LIMIAR_PERCENTUAL_MINIMO = 2.0     # %ΔS mínimo para acionar análise (> 2%)
 
 
-def avaliar_anomalia(cursor, registro_id, username, seguidores_atual, posts_atual, ja_validado_hoje=False):
+def avaliar_anomalia(cursor, registro_id, username, seguidores_atual, posts_atual, hoje_prefix, ja_validado_hoje=False):
     """
     Avalia se a coleta recém-inserida requer análise manual:
     - Se já validado/classificado no mesmo dia de análise, mantém a classificação e validação prévias.
     - Se a leitura anterior válida já era VIRAL_ORGANICO e validada, mantém VIRAL_ORGANICO e valida automaticamente.
     - Variação de seguidores > 2% E > 10 seguidores: marcada como 'ADS' e revisado_manualmente = 0 (pendente de análise).
     - Dentro do parâmetro normal (<= 2% ou <= 10 seg): marcada como 'ORGANICO' e revisado_manualmente = 1 (validado automaticamente).
+
+    A comparação é sempre feita contra o fechamento (última leitura) do dia anterior,
+    nunca contra o registro imediatamente anterior — perfis coletados várias vezes ao dia
+    (ex: "meu perfil", a cada 15 min) nunca acumulariam >2%/10 seguidores num intervalo
+    tão curto, o que mascarava crescimento real do dia inteiro. Ver também a mesma
+    comparação em dashboard/src/app/api/anomalias/route.ts (LAG por dia).
     """
     if ja_validado_hoje:
         return
 
-    # Busca o registro anterior mais recente (excluindo o recém-inserido e inativos)
+    # Busca a última leitura válida de um dia estritamente anterior ao de hoje
     cursor.execute("""
         SELECT seguidores, total_posts, tipo_janela, revisado_manualmente FROM perfis_historico
         WHERE LOWER(username) = LOWER(?) AND id < ? AND inativo = 0
+          AND SUBSTR(data_coleta, 1, 10) < ?
         ORDER BY data_coleta DESC, id DESC
         LIMIT 1
-    """, (username, registro_id))
+    """, (username, registro_id, hoje_prefix))
     anterior = cursor.fetchone()
 
     if not anterior:
@@ -209,7 +216,7 @@ def salvar_no_banco(username, dados, inativo=0):
 
     # Avalia anomalia apenas para leituras ativas com dados válidos
     if inativo == 0 and dados and followers > 0:
-        avaliar_anomalia(cursor, registro_id, username, followers, posts, ja_validado_hoje=ja_validado_hoje)
+        avaliar_anomalia(cursor, registro_id, username, followers, posts, hoje_prefix, ja_validado_hoje=ja_validado_hoje)
         cursor.execute("UPDATE perfis_monitorados SET status = 'ATIVO' WHERE username = ?", (username,))
 
     conn.commit()

@@ -470,21 +470,28 @@ LIMIAR_DELTA_S_MINIMO = 10
 LIMIAR_PERCENTUAL_MINIMO = 2.0
 
 
-def classificar_variacao_seguidores(c, registro_id, username, seguidores_atual, ja_validado_hoje=False):
+def classificar_variacao_seguidores(c, registro_id, username, seguidores_atual, hoje_prefix, ja_validado_hoje=False):
     """Classifica o registro recém-inserido como ORGANICO (validado) ou ADS
-    (pendente de curadoria), comparando com a leitura válida anterior.
+    (pendente de curadoria), comparando com o fechamento (última leitura) do dia anterior.
     Se já validado no dia de análise (mesmo dia), não altera a classificação/revisão.
     Se a leitura anterior válida já era VIRAL_ORGANICO validada, herda VIRAL_ORGANICO
-    e valida automaticamente (conta em processo de viralização contínua)."""
+    e valida automaticamente (conta em processo de viralização contínua).
+
+    Perfis "meu perfil" são coletados a cada ~15 min por este pipeline, então a
+    comparação precisa ser sempre com o fechamento do dia anterior — nunca com o
+    registro imediatamente anterior (15 min atrás), senão o crescimento acumulado
+    do dia nunca ultrapassa os limiares. Ver a mesma comparação (LAG por dia) em
+    dashboard/src/app/api/anomalias/route.ts."""
     if ja_validado_hoje:
         return
 
     c.execute("""
         SELECT seguidores, tipo_janela, revisado_manualmente FROM perfis_historico
         WHERE LOWER(username) = LOWER(?) AND id < ? AND inativo = 0
+          AND SUBSTR(data_coleta, 1, 10) < ?
         ORDER BY data_coleta DESC, id DESC
         LIMIT 1
-    """, (username, registro_id))
+    """, (username, registro_id, hoje_prefix))
     anterior = c.fetchone()
 
     if not anterior:
@@ -556,7 +563,7 @@ def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str, ac
                 username, data_coleta, seguidores, seguindo, total_posts, inativo, tipo_janela, revisado_manualmente, data_carga
             ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)
         """, (username, data_carga_str, seguidores, seguindo, total_posts, tipo_janela_inicial, revisado_inicial, data_carga_str))
-        classificar_variacao_seguidores(c, c.lastrowid, username, seguidores, ja_validado_hoje=ja_validado_hoje)
+        classificar_variacao_seguidores(c, c.lastrowid, username, seguidores, hoje_prefix, ja_validado_hoje=ja_validado_hoje)
 
         # Atualiza também seguidores_historico para gráficos legados
         c.execute("""
