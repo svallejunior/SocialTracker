@@ -11,6 +11,41 @@ const SUPABASE_BUCKET = process.env.NEXT_PUBLIC_SUPABASE_BUCKET || process.env.S
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+function gerarNomeCameraAleatorio(ext: string, isVideo: boolean): string {
+  const agora = new Date();
+  const yyyy = agora.getFullYear();
+  const mm = String(agora.getMonth() + 1).padStart(2, '0');
+  const dd = String(agora.getDate()).padStart(2, '0');
+  const hh = String(agora.getHours()).padStart(2, '0');
+  const min = String(agora.getMinutes()).padStart(2, '0');
+  const ss = String(agora.getSeconds()).padStart(2, '0');
+  const randNum = Math.floor(1000 + Math.random() * 9000);
+  const randSeq = Math.floor(100 + Math.random() * 900);
+
+  const dataCompacta = `${yyyy}${mm}${dd}`;
+  const horaCompacta = `${hh}${min}${ss}`;
+
+  if (isVideo) {
+    const videoExt = ext.toLowerCase() || '.mp4';
+    const estilosVideo = [
+      `VID_${dataCompacta}_${horaCompacta}_${randNum}${videoExt}`,
+      `MOV_${dataCompacta}_${randNum}${videoExt}`,
+      `${dataCompacta}_${horaCompacta}_${randSeq}${videoExt}`
+    ];
+    return estilosVideo[Math.floor(Math.random() * estilosVideo.length)];
+  }
+
+  // Fotos são convertidas e padronizadas como .jpg para a Meta Graph API
+  const estilosFoto = [
+    `IMG_${dataCompacta}_${randNum}.jpg`,
+    `IMG_${randNum}_${randSeq}.jpg`,
+    `${dataCompacta}_${horaCompacta}_${randSeq}.jpg`,
+    `PXL_${dataCompacta}_${horaCompacta}${randSeq}.jpg`
+  ];
+
+  return estilosFoto[Math.floor(Math.random() * estilosFoto.length)];
+}
+
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
@@ -22,9 +57,6 @@ export async function POST(req: NextRequest) {
     }
 
     // Diretório de destino local de backup: C:\Projetos\SocialTracker\automacao\<ID_CONTA_META>
-    // IMPORTANTE: usar o ID sem sanitização agressiva para que o nome da pasta seja
-    // idêntico ao usado pelo publicador Python (que usa str(meta_account_id) diretamente).
-    // Apenas bloqueamos traversal de diretório por segurança.
     const baseAutomacaoDir = path.resolve(process.cwd(), '..', 'automacao');
     const safeAccountId = (metaAccountId || 'geral').replace(/[/\\\.]/g, '_');
     const targetDir = path.join(baseAutomacaoDir, safeAccountId);
@@ -40,15 +72,15 @@ export async function POST(req: NextRequest) {
       const file = files[i];
       const buffer = Buffer.from(await file.arrayBuffer());
 
-      // Nome limpo preservando extensão
+      // Nome original preservado para exibição do usuário no dashboard
       const originalName = file.name || `arquivo_${Date.now()}_${i}`;
       const ext = path.extname(originalName);
-      const nameWithoutExt = path.basename(originalName, ext).replace(/[^a-zA-Z0-9_-]/g, '_');
-      const safeFileName = `${Date.now()}_${i}_${nameWithoutExt}${ext}`;
+      const isVideo = ext.toLowerCase() === '.mp4' || ext.toLowerCase() === '.mov' || Boolean(file.type?.startsWith('video/'));
+
+      // Nome físico 100% anônimo e aleatório estilo câmera nativa (iPhone / Galaxy / Pixel)
+      const finalSafeFileName = gerarNomeCameraAleatorio(ext, isVideo);
       let finalBuffer = buffer;
-      let finalSafeFileName = safeFileName;
-      let finalMimeType = file.type || 'application/octet-stream';
-      const isVideo = ext.toLowerCase() === '.mp4' || ext.toLowerCase() === '.mov' || (file.type && file.type.startsWith('video/'));
+      let finalMimeType = isVideo ? (file.type || 'application/octet-stream') : 'image/jpeg';
 
       // Se for imagem (PNG, JPG, JPEG, WEBP, etc.), limpa metadados e injeta EXIF de celular real
       if (!isVideo && (ext.toLowerCase() in { '.jpg': 1, '.jpeg': 1, '.png': 1, '.webp': 1 } || (file.type && file.type.startsWith('image/')))) {
@@ -65,9 +97,8 @@ export async function POST(req: NextRequest) {
 
             if (pyRes.status === 0 && pyRes.stdout && pyRes.stdout.length > 0) {
               finalBuffer = Buffer.from(pyRes.stdout);
-              finalSafeFileName = `${Date.now()}_${i}_${nameWithoutExt}.jpg`;
               finalMimeType = 'image/jpeg';
-              console.log(`[Upload] 📸 Imagem sanitizada com EXIF de celular: ${finalSafeFileName}`);
+              console.log(`[Upload] 📸 Imagem sanitizada com EXIF e nome aleatório de câmera: ${finalSafeFileName}`);
             }
           }
         } catch (procErr) {

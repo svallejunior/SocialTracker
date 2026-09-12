@@ -104,6 +104,33 @@ def gerar_exif_celular(perfil=None):
         return None, perfil
 
 
+def gerar_nome_arquivo_celular(perfil=None, extensao=".jpg"):
+    """
+    Gera nome de arquivo aleatório idêntico ao padrão de câmeras nativas de smartphones:
+    - Apple iPhone: IMG_YYYYMMDD_XXXX.jpg
+    - Samsung Galaxy: YYYYMMDD_HHMMSS_XXX.jpg
+    - Google Pixel: PXL_YYYYMMDD_HHMMSSXXX.jpg
+    """
+    agora = datetime.now()
+    data_compacta = agora.strftime("%Y%m%d")
+    hora_compacta = agora.strftime("%H%M%S")
+    rand4 = random.randint(1000, 9999)
+    rand3 = random.randint(100, 999)
+
+    make = (perfil.get("make", "") if perfil else "").lower()
+    if not make:
+        make = random.choice(["apple", "samsung", "google"])
+
+    if "apple" in make:
+        return f"IMG_{data_compacta}_{rand4}{extensao}"
+    elif "samsung" in make:
+        return f"{data_compacta}_{hora_compacta}_{rand3}{extensao}"
+    elif "google" in make:
+        return f"PXL_{data_compacta}_{hora_compacta}{rand3}{extensao}"
+    else:
+        return f"IMG_{data_compacta}_{hora_compacta}_{rand4}{extensao}"
+
+
 def processar_imagem_para_celular(caminho_ou_buffer_in, caminho_out=None, qualidade=95):
     """
     1. Abre imagem (PNG, JPG, WEBP, etc.)

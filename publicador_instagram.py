@@ -1339,10 +1339,22 @@ def publicar_item_meta(agendamento, config, dry_run=False):
                 orig_local = item.get("path")
 
             if orig_local and os.path.exists(orig_local):
-                # Se for PNG ou se o JPG ainda não foi processado com EXIF
-                base_stem = os.path.splitext(saved_name)[0]
-                # Padroniza para .jpg com metadados de celular
-                jpg_name = base_stem if ext in (".jpg", ".jpeg") else f"{base_stem}.jpg"
+                # Se for PNG, WEBP ou se o nome não for estilo câmera nativa, gera nome de celular
+                is_camera_name = saved_name.startswith(("IMG_", "PXL_", "VID_", "MOV_")) or (len(saved_name) > 8 and saved_name[:8].isdigit())
+                if ext in (".png", ".webp") or not is_camera_name:
+                    if HAS_PROCESSADOR_IMAGEM:
+                        try:
+                            from processar_imagem import gerar_nome_arquivo_celular
+                            jpg_name = gerar_nome_arquivo_celular(extensao=".jpg")
+                        except Exception:
+                            base_stem = os.path.splitext(saved_name)[0]
+                            jpg_name = f"{base_stem}.jpg"
+                    else:
+                        base_stem = os.path.splitext(saved_name)[0]
+                        jpg_name = f"{base_stem}.jpg"
+                else:
+                    jpg_name = saved_name if ext in (".jpg", ".jpeg") else f"{os.path.splitext(saved_name)[0]}.jpg"
+
                 jpg_path = os.path.join(automacao_dir, jpg_name)
                 
                 try:
