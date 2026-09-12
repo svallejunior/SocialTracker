@@ -16,7 +16,9 @@ import sys
 import json
 import sqlite3
 import argparse
+import time
 import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 
@@ -285,12 +287,26 @@ def extrair_dados_perfil(account_id, token):
         return None
 
 
+# Códigos de erro da Graph API que indicam limite de requisições (throttling
+# por app/usuário/página), não falha real do post ou da métrica — não devem
+# ser tratados como "post sem suporte a essa métrica".
+# Ver: https://developers.facebook.com/docs/graph-api/guides/error-handling
+_CODIGOS_RATE_LIMIT = (4, 17, 32, 613)
+
+
 def extrair_insights_post(media_id, media_type, media_product_type, token):
     """
     Tenta obter métricas avançadas (insights) de uma postagem específica.
+
+    Retorna:
+    - dict com as métricas (podendo ter zeros legítimos, ex: post antigo sem
+      suporte a uma métrica) quando a chamada respondeu normalmente;
+    - None quando a falha foi transitória (rate limit da Meta, timeout,
+      erro de conexão) — sinal para o chamador tentar de novo mais tarde em
+      vez de gravar zeros por cima de valores válidos já salvos.
     """
     url = f"{graph_api_base(token)}/{media_id}/insights"
-    
+
     # Define as métricas apropriadas para cada tipo de mídia
     metrics = ["reach", "saved", "total_interactions"]
     if media_product_type == "REELS" or media_type == "VIDEO":
@@ -302,7 +318,7 @@ def extrair_insights_post(media_id, media_type, media_product_type, token):
         "metric": ",".join(metrics),
         "access_token": token
     }
-    
+
     insights = {
         "reach": 0,
         "saved": 0,
@@ -310,7 +326,7 @@ def extrair_insights_post(media_id, media_type, media_product_type, token):
         "views": 0,
         "total_interactions": 0
     }
-    
+
     try:
         res = requests.get(url, params=params, timeout=10)
         if res.status_code == 200:
@@ -321,11 +337,75 @@ def extrair_insights_post(media_id, media_type, media_product_type, token):
                 val = values[0].get("value", 0) if values else 0
                 if name in insights:
                     insights[name] = int(val)
-        # Se falhar (ex: post muito antigo ou sem suporte), retorna zeros sem travar o fluxo
+            return insights
+
+        if res.status_code == 429:
+            return None
+
+        try:
+            erro = res.json().get("error", {})
+        except Exception:
+            erro = {}
+        if erro.get("code") in _CODIGOS_RATE_LIMIT:
+            return None
+
+        # Outro erro (ex: post muito antigo ou métrica sem suporte) — zeros é a resposta real
+        return insights
+    except requests.exceptions.RequestException:
+        # Timeout/erro de conexão: transitório, não "sem suporte à métrica"
+        return None
     except Exception:
-        pass
-        
-    return insights
+        return insights
+
+
+def buscar_insights_em_lote(posts, token, max_workers=6, max_tentativas=3, backoff_base=3):
+    """
+    Busca os insights de todos os posts em paralelo — são chamadas de rede
+    independentes (I/O-bound), então não há motivo pra esperar uma terminar
+    para começar a próxima, como o loop sequencial antigo fazia.
+
+    Posts que voltam com falha transitória (rate limit da Meta, timeout) não
+    são descartados nem zerados: entram numa fila de retentativa com backoff
+    e concorrência reduzida a cada rodada. Os que ainda falharem depois de
+    `max_tentativas` ficam com post["insights"] = None — salvar_dados_no_banco
+    interpreta isso como "sem novidade" e preserva os valores já gravados no
+    banco, e o próprio cron (a cada 15 min) tenta de novo no próximo ciclo.
+    """
+    pendentes = list(posts)
+    workers = max_workers
+
+    for tentativa in range(1, max_tentativas + 1):
+        if not pendentes:
+            break
+
+        proxima_rodada = []
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futuros = {
+                executor.submit(
+                    extrair_insights_post,
+                    p.get("id"), p.get("media_type"), p.get("media_product_type"), token
+                ): p
+                for p in pendentes
+            }
+            for futuro in as_completed(futuros):
+                p = futuros[futuro]
+                resultado = futuro.result()
+                if resultado is None:
+                    proxima_rodada.append(p)
+                else:
+                    p["insights"] = resultado
+
+        pendentes = proxima_rodada
+        if pendentes and tentativa < max_tentativas:
+            espera = backoff_base * tentativa
+            print(f"  ⏳ {len(pendentes)} post(s) com limite de requisições da Meta — nova tentativa em {espera}s...")
+            time.sleep(espera)
+            workers = max(2, workers // 2)  # reduz concorrência nas próximas tentativas
+
+    if pendentes:
+        print(f"  ⚠️ {len(pendentes)} post(s) sem insights atualizados neste ciclo (limite da Meta) — mantendo valores anteriores; nova tentativa no próximo ciclo.")
+        for p in pendentes:
+            p["insights"] = None
 
 
 def extrair_posts_perfil(account_id, token, limite=50):
@@ -617,23 +697,38 @@ def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str, ac
         comentarios = int(p.get("comments_count", 0))
         
         # Insights do post
-        insights = p.get("insights", {})
-        views = int(insights.get("views", 0))
-        reach = int(insights.get("reach", 0))
-        saved = int(insights.get("saved", 0))
-        shares = int(insights.get("shares", 0))
-        total_interactions = int(insights.get("total_interactions", (likes + comentarios + saved + shares)))
+        insights = p.get("insights")
 
-        # Proteção contra oscilação transitória da Meta API (quando insights vem temporariamente vazio/zero)
-        if views == 0:
-            c.execute("SELECT views, reach FROM posts_historico WHERE post_id = ?", (post_id,))
+        if insights is None:
+            # buscar_insights_em_lote não conseguiu buscar (rate limit/timeout
+            # persistente) — preserva TODOS os valores já gravados em vez de
+            # zerar; próximo ciclo do cron tenta buscar de novo.
+            c.execute("""
+                SELECT views, reach, saved, shares, total_interactions
+                FROM posts_historico WHERE post_id = ?
+            """, (post_id,))
             row_prev = c.fetchone()
             if row_prev:
-                prev_v, prev_r = row_prev
-                if prev_v and prev_v > 0:
-                    views = prev_v
-                if reach == 0 and prev_r and prev_r > 0:
-                    reach = prev_r
+                views, reach, saved, shares, total_interactions = row_prev
+            else:
+                views = reach = saved = shares = total_interactions = 0
+        else:
+            views = int(insights.get("views", 0))
+            reach = int(insights.get("reach", 0))
+            saved = int(insights.get("saved", 0))
+            shares = int(insights.get("shares", 0))
+            total_interactions = int(insights.get("total_interactions", (likes + comentarios + saved + shares)))
+
+            # Proteção contra oscilação transitória da Meta API (quando a resposta veio OK mas com valor pontualmente vazio/zero)
+            if views == 0:
+                c.execute("SELECT views, reach FROM posts_historico WHERE post_id = ?", (post_id,))
+                row_prev = c.fetchone()
+                if row_prev:
+                    prev_v, prev_r = row_prev
+                    if prev_v and prev_v > 0:
+                        views = prev_v
+                    if reach == 0 and prev_r and prev_r > 0:
+                        reach = prev_r
 
         # Taxa de engajamento baseada em seguidores
         taxa_engajamento = 0.0
@@ -823,13 +918,9 @@ def rodar_ingestao_meta(username_filtro=None, buscar_insights_posts=True, limite
         posts = extrair_posts_perfil(account_id, token, limite=limite_posts)
         print(f"  📸 {len(posts)} publicações baixadas.")
 
-        # 3. Extrai insights por post se habilitado
+        # 3. Extrai insights por post se habilitado (em paralelo — ver buscar_insights_em_lote)
         if buscar_insights_posts and posts:
-            for p in posts:
-                media_id = p.get("id")
-                media_type = p.get("media_type")
-                product_type = p.get("media_product_type")
-                p["insights"] = extrair_insights_post(media_id, media_type, product_type, token)
+            buscar_insights_em_lote(posts, token)
 
         # 4. Salva no banco e grava snapshots
         posts_salvos, snapshots_salvos, posts_removidos = salvar_dados_no_banco(username, dados_perfil, posts, data_carga_str, account_id=account_id, token=token)
