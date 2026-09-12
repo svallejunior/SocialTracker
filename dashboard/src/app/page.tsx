@@ -3274,11 +3274,11 @@ export default function Dashboard() {
                             </div>
                           </div>
 
-                          {/* CARD VISUALIZAÇÕES NO DIA */}
+                          {/* CARD ACESSOS HJ */}
                           <div className="modelo-stat-box">
                             <div className="modelo-stat-header">
                               <Eye size={13} color="#8B949E" />
-                              <span>VISUALIZAÇÕES NO DIA</span>
+                              <span>ACESSOS HJ</span>
                             </div>
                             <div className="modelo-stat-val-row">
                               <span className="modelo-stat-number">{viewsDia > 0 ? formatNumber(viewsDia) : '0'}</span>

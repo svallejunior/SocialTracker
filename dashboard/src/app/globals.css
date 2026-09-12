@@ -2245,6 +2245,8 @@ body::after {
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  text-align: center;
   gap: 6px;
   transition: all 0.15s ease;
 }
@@ -2301,6 +2303,7 @@ body::after {
 .modelo-hoje-val-wrap {
   display: flex;
   align-items: baseline;
+  justify-content: center;
   gap: 4px;
 }
 

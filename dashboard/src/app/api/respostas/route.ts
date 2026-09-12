@@ -372,9 +372,13 @@ export async function POST(request: NextRequest) {
 
       // 1. Tenta enviar pela Meta API se houver remetente_id e credenciais
       let metaSendSuccess = false;
-      let metaError = null;
+      let metaError: string | null = null;
 
-      if (creds.access_token && remetente_id) {
+      if (!creds.access_token) {
+        metaError = `Perfil @${cleanModelo} não possui Access Token configurado — a mensagem não pôde ser entregue no Instagram.`;
+      } else if (!remetente_id) {
+        metaError = 'ID do destinatário desconhecido (conversa não sincronizada via Meta API) — a mensagem não pôde ser entregue no Instagram.';
+      } else {
         try {
           const sendUrl = `${GRAPH_API_BASE}/me/messages`;
           const metaRes = await fetch(sendUrl, {

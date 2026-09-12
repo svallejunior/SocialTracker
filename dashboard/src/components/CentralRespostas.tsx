@@ -44,6 +44,8 @@ interface Mensagem {
   timestamp: string;
   lida: number;
   respondida: number;
+  falhou_envio?: boolean;
+  meta_error?: string;
 }
 
 interface CentralRespostasProps {
@@ -247,9 +249,30 @@ export default function CentralRespostas({ profiles = [], onRefresh }: CentralRe
               : c
           )
         );
+
+        // Se a Meta API não confirmou a entrega, a mensagem NÃO chegou de fato no Instagram —
+        // marca a bolha como falha e avisa, em vez de deixar parecer que foi enviada com sucesso.
+        if (!data.meta_sent) {
+          setMensagens(prev => prev.map(m =>
+            m.id === tempId ? { ...m, falhou_envio: true, meta_error: data.meta_error } : m
+          ));
+          setSyncStatusMsg({
+            text: `⚠️ Mensagem NÃO entregue no Instagram: ${data.meta_error || 'falha desconhecida na Meta API'}`,
+            type: 'error'
+          });
+        }
+      } else {
+        setMensagens(prev => prev.map(m =>
+          m.id === tempId ? { ...m, falhou_envio: true, meta_error: data.error } : m
+        ));
+        setSyncStatusMsg({ text: `⚠️ Erro ao enviar: ${data.error}`, type: 'error' });
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erro ao enviar mensagem:', err);
+      setMensagens(prev => prev.map(m =>
+        m.id === tempId ? { ...m, falhou_envio: true, meta_error: err.message } : m
+      ));
+      setSyncStatusMsg({ text: `⚠️ Erro de conexão ao enviar: ${err.message}`, type: 'error' });
     } finally {
       setEnviando(false);
       textareaRef.current?.focus();
@@ -1039,18 +1062,22 @@ export default function CentralRespostas({ profiles = [], onRefresh }: CentralRe
                         }}
                       >
                         <div style={{
-                          background: isMinha
-                            ? 'linear-gradient(135deg, #7100E2 0%, #00F0FF 100%)'
-                            : '#161B22',
-                          color: isMinha ? '#FFFFFF' : '#E6EDF3',
-                          border: isMinha ? 'none' : '1px solid #30363D',
+                          background: msg.falhou_envio
+                            ? 'rgba(248, 81, 73, 0.12)'
+                            : isMinha
+                              ? 'linear-gradient(135deg, #7100E2 0%, #00F0FF 100%)'
+                              : '#161B22',
+                          color: msg.falhou_envio ? '#F85149' : isMinha ? '#FFFFFF' : '#E6EDF3',
+                          border: msg.falhou_envio ? '1px solid rgba(248, 81, 73, 0.4)' : isMinha ? 'none' : '1px solid #30363D',
                           borderRadius: isMinha ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
                           padding: '10px 14px',
                           fontSize: 13,
                           lineHeight: 1.5,
-                          boxShadow: isMinha
-                            ? '0 4px 16px rgba(113, 0, 226, 0.35)'
-                            : '0 2px 8px rgba(0,0,0,0.3)',
+                          boxShadow: msg.falhou_envio
+                            ? 'none'
+                            : isMinha
+                              ? '0 4px 16px rgba(113, 0, 226, 0.35)'
+                              : '0 2px 8px rgba(0,0,0,0.3)',
                           wordBreak: 'break-word'
                         }}>
                           {msg.texto}
@@ -1061,12 +1088,21 @@ export default function CentralRespostas({ profiles = [], onRefresh }: CentralRe
                           alignItems: 'center',
                           gap: 4,
                           fontSize: 10,
-                          color: '#8B949E',
+                          color: msg.falhou_envio ? '#F85149' : '#8B949E',
                           marginTop: 4,
                           padding: '0 4px'
                         }}>
-                          <span>{formatHoraRelativa(msg.timestamp)}</span>
-                          {isMinha && <CheckCheck size={12} color="#00F0FF" />}
+                          {msg.falhou_envio ? (
+                            <>
+                              <AlertCircle size={12} color="#F85149" />
+                              <span title={msg.meta_error || ''}>Não entregue no Instagram</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>{formatHoraRelativa(msg.timestamp)}</span>
+                              {isMinha && <CheckCheck size={12} color="#00F0FF" />}
+                            </>
+                          )}
                         </div>
                       </div>
                     );

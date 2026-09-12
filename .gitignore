@@ -10,6 +10,7 @@ node_modules/
 *.db-journal
 *.db-wal
 *.db-shm
+*.bak*
 backups_locais/
 
 # Mídia de automação: uploads/backup local por conta, recriado sob demanda pelo app.
