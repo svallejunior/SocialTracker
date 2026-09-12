@@ -2173,9 +2173,16 @@ export default function Dashboard() {
             ? prof.curva_views_dia
             : (prevProf?.curva_views_dia && prevProf.curva_views_dia.length > 2 ? prevProf.curva_views_dia : (prof.curva_views_dia || [0, 0]));
 
+          const viewsSempreEfetivo = (prof.views_sempre !== undefined && Number(prof.views_sempre) > 0)
+            ? Number(prof.views_sempre)
+            : (profPosts.length > 0
+                ? profPosts.reduce((acc: number, p: any) => acc + (Number(p.views) || 0), 0)
+                : (prevProf?.views_sempre && Number(prevProf.views_sempre) > 0 ? Number(prevProf.views_sempre) : 0));
+
           return {
             ...prof,
             views_dia: viewsDiaEfetivo,
+            views_sempre: viewsSempreEfetivo,
             views_delta_ultima_carga: viewsDeltaEfetivo,
             curva_views_dia: curvaViewsEfetiva,
             postMaisViral,
@@ -2783,6 +2790,12 @@ export default function Dashboard() {
     } else if (sortField === 'views') {
       aVal = Number(a.viewsEfetivas) || 0;
       bVal = Number(b.viewsEfetivas) || 0;
+    } else if (sortField === 'views_dia') {
+      aVal = Number(a.views_dia) || 0;
+      bVal = Number(b.views_dia) || 0;
+    } else if (sortField === 'delta_views_coleta') {
+      aVal = Number(a.delta_views_coleta) || 0;
+      bVal = Number(b.delta_views_coleta) || 0;
     } else if (['likes', 'comentarios'].includes(sortField)) {
       aVal = Number(aVal) || 0;
       bVal = Number(bVal) || 0;
@@ -4689,22 +4702,8 @@ export default function Dashboard() {
                         </span>
                       </div>
                       <div className="metric-box">
-                        <span className="metric-lbl">👁️ Visualizações no Dia</span>
+                        <span className="metric-lbl">👁️ Visualizações</span>
                         <span className="metric-val" style={{ color: '#FFFFFF', fontSize: '18px', display: 'inline-flex', alignItems: 'baseline', flexWrap: 'wrap' }}>
-                          <span
-                            className="metric-tooltip-wrap"
-                            title={`Visualizações ganhas hoje nesta publicação em destaque: ${formatNumber(topPost?.views_dia || 0)}`}
-                          >
-                            <span>
-                              {formatNumber(topPost?.views_dia || 0)}
-                            </span>
-                            <span className="metric-tooltip-box">
-                              Visualizações hoje nesta mídia: {formatNumber(topPost?.views_dia || 0)}
-                            </span>
-                          </span>
-
-                          <span style={{ color: '#8B949E', margin: '0 3px', fontWeight: 600, fontSize: '15px', userSelect: 'none' }}>/</span>
-
                           <span
                             className="metric-tooltip-wrap"
                             title={`Total de visualizações ganhas hoje em todas as mídias da conta: ${formatNumber(perfil.views_dia || 0)}`}
@@ -4713,7 +4712,21 @@ export default function Dashboard() {
                               {formatNumber(perfil.views_dia || 0)}
                             </span>
                             <span className="metric-tooltip-box">
-                              Total de visualizações hoje na conta: {formatNumber(perfil.views_dia || 0)}
+                              Visualizações hoje na conta: {formatNumber(perfil.views_dia || 0)}
+                            </span>
+                          </span>
+
+                          <span style={{ color: '#8B949E', margin: '0 3px', fontWeight: 600, fontSize: '15px', userSelect: 'none' }}>/</span>
+
+                          <span
+                            className="metric-tooltip-wrap"
+                            title={`Total acumulado de visualizações de todas as publicações da conta: ${formatNumber(perfil.views_sempre || 0)}`}
+                          >
+                            <span>
+                              {formatNumber(perfil.views_sempre || 0)}
+                            </span>
+                            <span className="metric-tooltip-box">
+                              Visualizações sempre na conta: {formatNumber(perfil.views_sempre || 0)}
                             </span>
                           </span>
 
@@ -5973,6 +5986,20 @@ export default function Dashboard() {
                     >
                       👁️ {sortField === 'views' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                     </th>
+                    <th
+                      className={`sortable ${sortField === 'views_dia' ? 'active' : ''}`}
+                      onClick={() => handleSort('views_dia')}
+                      title="Evolução no Dia (Visualizações ganhas hoje)"
+                    >
+                      D 👁️ {sortField === 'views_dia' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                    </th>
+                    <th
+                      className={`sortable ${sortField === 'delta_views_coleta' ? 'active' : ''}`}
+                      onClick={() => handleSort('delta_views_coleta')}
+                      title="Acréscimo no último carregamento"
+                    >
+                      ⚡ 👁️ {sortField === 'delta_views_coleta' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                    </th>
                     <th className={`sortable ${sortField === 'taxa_engajamento' ? 'active' : ''}`} onClick={() => handleSort('taxa_engajamento')}>
                       Engajamento {sortField === 'taxa_engajamento' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                     </th>
@@ -6042,6 +6069,44 @@ export default function Dashboard() {
                             </span>
                           ) : (
                             <span style={{ color: '#8B949E', opacity: 0.6 }}>-</span>
+                          )}
+                        </td>
+                        <td>
+                          {(Number(post.views_dia) || 0) > 0 ? (
+                            <span
+                              title={`Visualizações ganhas hoje: +${formatNumber(post.views_dia)}`}
+                              style={{ color: '#00FF66', fontWeight: 700 }}
+                            >
+                              +{formatNumber(post.views_dia)}
+                            </span>
+                          ) : (Number(post.views_dia) || 0) < 0 ? (
+                            <span
+                              title={`Variação hoje: ${formatNumber(post.views_dia)}`}
+                              style={{ color: '#F85149', fontWeight: 700 }}
+                            >
+                              {formatNumber(post.views_dia)}
+                            </span>
+                          ) : (
+                            <span style={{ color: '#8B949E', opacity: 0.6 }}>0</span>
+                          )}
+                        </td>
+                        <td>
+                          {(Number(post.delta_views_coleta) || 0) > 0 ? (
+                            <span
+                              title={`Acréscimo no último carregamento: +${formatNumber(post.delta_views_coleta)}`}
+                              style={{ color: '#00FF66', fontWeight: 700 }}
+                            >
+                              +{formatNumber(post.delta_views_coleta)}
+                            </span>
+                          ) : (Number(post.delta_views_coleta) || 0) < 0 ? (
+                            <span
+                              title={`Variação no último carregamento: ${formatNumber(post.delta_views_coleta)}`}
+                              style={{ color: '#F85149', fontWeight: 700 }}
+                            >
+                              {formatNumber(post.delta_views_coleta)}
+                            </span>
+                          ) : (
+                            <span style={{ color: '#8B949E', opacity: 0.6 }}>0</span>
                           )}
                         </td>
                         <td style={{ fontWeight: '600' }}>

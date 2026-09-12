@@ -76,6 +76,7 @@ export async function GET() {
     const postViewsDeltaMap: Record<string, number> = {};
     const postViewsDiaMap: Record<string, number> = {};
     const curvaViewsDiaMap: Record<string, number[]> = {};
+    const viewsSempreMap: Record<string, number> = {};
 
     try {
       // Data de hoje no fuso oficial de Brasília (America/Sao_Paulo)
@@ -270,6 +271,11 @@ export async function GET() {
         views_dia: postViewsDiaMap[p.post_id] || 0
       };
     });
+
+    for (const p of rawPosts) {
+      const u = (p.username || '').toLowerCase();
+      viewsSempreMap[u] = (viewsSempreMap[u] || 0) + (Number(p.views) || 0);
+    }
 
 
     // Mapeia status de cada perfil para saber se morreu/inativo
@@ -639,6 +645,7 @@ export async function GET() {
         total_pendencias: totalPend,
         tem_pendencias: totalPend > 0,
         views_dia: viewsDiaMap[u] || 0,
+        views_sempre: viewsSempreMap[u] || 0,
         views_delta_ultima_carga: viewsDeltaMap[u] || 0,
         hoje_post_pub: statsHojeMap[u]?.postPub || 0,
         hoje_post_ag: statsHojeMap[u]?.postAg || 0,
