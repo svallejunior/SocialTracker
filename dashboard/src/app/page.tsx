@@ -4630,17 +4630,51 @@ export default function Dashboard() {
                       </div>
                       <div className="metric-box">
                         <span className="metric-lbl">👁️ Visualizações no Dia</span>
-                        <span className="metric-val" style={{ color: '#FFFFFF' }}>
-                          {formatNumber(perfil.views_dia || 0)}
-                          {(perfil.views_delta_ultima_carga || 0) > 0 && (
-                            <span style={{ color: '#00FF66', fontSize: '15px', fontWeight: 700, marginLeft: '6px' }}>
-                              (+{formatNumber(perfil.views_delta_ultima_carga)})
+                        <span className="metric-val" style={{ color: '#FFFFFF', fontSize: '18px', display: 'inline-flex', alignItems: 'baseline', flexWrap: 'wrap' }}>
+                          <span
+                            className="metric-tooltip-wrap"
+                            title={`Visualizações ganhas hoje nesta publicação em destaque: ${formatNumber(topPost?.views_dia || 0)}`}
+                          >
+                            <span style={{ textDecoration: 'underline dotted rgba(255,255,255,0.35)', textUnderlineOffset: '3px' }}>
+                              {formatNumber(topPost?.views_dia || 0)}
+                            </span>
+                            <span className="metric-tooltip-box">
+                              Visualizações hoje nesta mídia: {formatNumber(topPost?.views_dia || 0)}
+                            </span>
+                          </span>
+
+                          <span style={{ color: '#8B949E', margin: '0 3px', fontWeight: 600, fontSize: '15px', userSelect: 'none' }}>/</span>
+
+                          <span
+                            className="metric-tooltip-wrap"
+                            title={`Total de visualizações ganhas hoje em todas as mídias da conta: ${formatNumber(perfil.views_dia || 0)}`}
+                          >
+                            <span style={{ textDecoration: 'underline dotted rgba(255,255,255,0.35)', textUnderlineOffset: '3px' }}>
+                              {formatNumber(perfil.views_dia || 0)}
+                            </span>
+                            <span className="metric-tooltip-box">
+                              Total de visualizações hoje na conta: {formatNumber(perfil.views_dia || 0)}
+                            </span>
+                          </span>
+
+                          {(perfil.views_delta_ultima_carga !== undefined && perfil.views_delta_ultima_carga !== null) && (
+                            <span
+                              className="metric-tooltip-wrap"
+                              style={{ marginLeft: '5px' }}
+                              title={`Acréscimo de visualizações da conta nesta atualização: ${(perfil.views_delta_ultima_carga || 0) >= 0 ? `+${formatNumber(perfil.views_delta_ultima_carga || 0)}` : formatNumber(perfil.views_delta_ultima_carga || 0)}`}
+                            >
+                              <span style={{
+                                color: (perfil.views_delta_ultima_carga || 0) < 0 ? '#F85149' : '#00FF66',
+                                fontSize: '14px',
+                                fontWeight: 700
+                              }}>
+                                ({(perfil.views_delta_ultima_carga || 0) >= 0 ? `+${formatNumber(perfil.views_delta_ultima_carga || 0)}` : formatNumber(perfil.views_delta_ultima_carga || 0)})
+                              </span>
+                              <span className="metric-tooltip-box align-right">
+                                Acréscimo nesta atualização: {(perfil.views_delta_ultima_carga || 0) >= 0 ? `+${formatNumber(perfil.views_delta_ultima_carga || 0)}` : formatNumber(perfil.views_delta_ultima_carga || 0)}
+                              </span>
                             </span>
                           )}
-                        </span>
-                        <span className="metric-sub">
-                          Post: {topPost && topPost.views > 0 ? formatNumber(topPost.views) : '—'}
-                          {topPost && (topPost.views_dia || 0) > 0 && ` (+${formatNumber(topPost.views_dia)} hoje)`}
                         </span>
                       </div>
                     </div>
