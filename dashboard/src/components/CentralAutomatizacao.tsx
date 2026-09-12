@@ -2006,7 +2006,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                         pubsDoDiaSelecionado.map((pub, pIdx) => {
                           const arquivosPub = Array.isArray(pub.arquivos) ? pub.arquivos : [];
                           const instaLink = arquivosPub.find(a => typeof a?.url === 'string' && a.url.includes('instagram.com/'))?.url;
-                          const permalink = instaLink || arquivosPub[0]?.url || (pub.meta_media_id ? `https://www.instagram.com/p/${pub.meta_media_id}/` : '');
+                          const permalink = instaLink || (pub.tipo_postagem === 'STORIES' ? (pub.username ? `https://www.instagram.com/stories/${pub.username}/` : '') : (arquivosPub[0]?.url || (pub.meta_media_id ? `https://www.instagram.com/p/${pub.meta_media_id}/` : '')));
                           return (
                             <div
                               key={pub.id || pIdx}
@@ -2048,10 +2048,10 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                                   padding: '3px 7px',
                                   borderRadius: 5,
                                   flexShrink: 0,
-                                  background: pub.tipo_postagem === 'REELS' ? 'rgba(239,68,68,0.2)' : 'rgba(59,130,246,0.2)',
-                                  color: pub.tipo_postagem === 'REELS' ? '#F87171' : '#60A5FA'
+                                  background: pub.tipo_postagem === 'REELS' ? 'rgba(239,68,68,0.2)' : pub.tipo_postagem === 'STORIES' ? 'rgba(245,158,11,0.2)' : 'rgba(59,130,246,0.2)',
+                                  color: pub.tipo_postagem === 'REELS' ? '#F87171' : pub.tipo_postagem === 'STORIES' ? '#FBBF24' : '#60A5FA'
                                 }}>
-                                  {pub.tipo_postagem === 'REELS' ? '🎬 Reels' : (arquivosPub.length > 1 ? `🖼️ Carrossel (${arquivosPub.length})` : '🖼️ Feed')}
+                                  {pub.tipo_postagem === 'REELS' ? '🎬 Reels' : pub.tipo_postagem === 'STORIES' ? '📱 Stories' : (arquivosPub.length > 1 ? `🖼️ Carrossel (${arquivosPub.length})` : '🖼️ Feed')}
                                 </span>
 
                                 {/* Miniaturas das mídias com hover zoom na lista */}
@@ -2153,7 +2153,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                           {pubsDoDiaSelecionado.map((pub, pIdx) => {
                             const arquivosPub = Array.isArray(pub.arquivos) ? pub.arquivos : [];
                             const instaLink = arquivosPub.find(a => typeof a?.url === 'string' && a.url.includes('instagram.com/'))?.url;
-                            const permalink = instaLink || arquivosPub[0]?.url || (pub.meta_media_id ? `https://www.instagram.com/p/${pub.meta_media_id}/` : '');
+                            const permalink = instaLink || (pub.tipo_postagem === 'STORIES' ? (pub.username ? `https://www.instagram.com/stories/${pub.username}/` : '') : (arquivosPub[0]?.url || (pub.meta_media_id ? `https://www.instagram.com/p/${pub.meta_media_id}/` : '')));
                             return (
                               <div
                                 key={pub.id || pIdx}
@@ -2194,10 +2194,10 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                                     padding: '3px 7px',
                                     borderRadius: 5,
                                     flexShrink: 0,
-                                    background: pub.tipo_postagem === 'REELS' ? 'rgba(239,68,68,0.2)' : 'rgba(59,130,246,0.2)',
-                                    color: pub.tipo_postagem === 'REELS' ? '#F87171' : '#60A5FA'
+                                    background: pub.tipo_postagem === 'REELS' ? 'rgba(239,68,68,0.2)' : pub.tipo_postagem === 'STORIES' ? 'rgba(245,158,11,0.2)' : 'rgba(59,130,246,0.2)',
+                                    color: pub.tipo_postagem === 'REELS' ? '#F87171' : pub.tipo_postagem === 'STORIES' ? '#FBBF24' : '#60A5FA'
                                   }}>
-                                    {pub.tipo_postagem === 'REELS' ? '🎬 Reels' : (arquivosPub.length > 1 ? `🖼️ Carrossel (${arquivosPub.length})` : '🖼️ Feed')}
+                                    {pub.tipo_postagem === 'REELS' ? '🎬 Reels' : pub.tipo_postagem === 'STORIES' ? '📱 Stories' : (arquivosPub.length > 1 ? `🖼️ Carrossel (${arquivosPub.length})` : '🖼️ Feed')}
                                   </span>
 
                                   {/* Miniaturas das mídias com hover zoom na lista para posts publicados hoje */}
@@ -3004,7 +3004,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
               color: globalHoverMedia.isVideo ? '#F87171' : '#58A6FF',
               whiteSpace: 'nowrap'
             }}>
-              {globalHoverMedia.isVideo ? '🎬 Vídeo (Reels)' : '📸 Foto (Feed)'}
+              {globalHoverMedia.isVideo ? '🎬 Vídeo' : '📸 Foto'}
             </span>
           </div>
 
@@ -3574,7 +3574,7 @@ function CalendarioAgendamentos({
                 <div key={`pub-${idx}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#7EE787', fontSize: 11, gap: 6 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: 1 }}>
                     <span style={{ whiteSpace: 'nowrap' }}>
-                      {pub.tipo_postagem === 'REELS' ? '🎬 Reels' : (arquivosPub.length > 1 ? `🖼️ Carrossel (${arquivosPub.length})` : '🖼️ Feed')}
+                      {pub.tipo_postagem === 'REELS' ? '🎬 Reels' : pub.tipo_postagem === 'STORIES' ? '📱 Stories' : (arquivosPub.length > 1 ? `🖼️ Carrossel (${arquivosPub.length})` : '🖼️ Feed')}
                       <span style={{ color: '#8B949E', marginLeft: 4 }}>({pub.hora_local || 'Publicado'})</span>
                     </span>
                     {pub.legenda && (
@@ -5021,7 +5021,7 @@ function FormularioAgendamento({
               color: hoverMedia.isVideo ? '#F87171' : '#58A6FF',
               whiteSpace: 'nowrap'
             }}>
-              {hoverMedia.isVideo ? '🎬 Vídeo (Reels)' : '📸 Foto (Feed)'}
+              {hoverMedia.isVideo ? '🎬 Vídeo' : '📸 Foto'}
             </span>
           </div>
 

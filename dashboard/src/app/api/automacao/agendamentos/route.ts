@@ -190,8 +190,10 @@ export async function GET(req: NextRequest) {
           if (legChave) seenFallback.add(fallbackKey);
 
           const fmt = (h.formato || '').toUpperCase();
-          const tipoPub = fmt.includes('REEL') || fmt.includes('VÍDEO') || fmt.includes('VIDEO') ? 'REELS' : 'FEED';
-          const linkPost = h.permalink || (metaId ? `https://www.instagram.com/p/${metaId}/` : '');
+          const tipoPub = fmt.includes('REEL') || fmt.includes('VÍDEO') || fmt.includes('VIDEO')
+            ? 'REELS'
+            : (fmt.includes('STOR') ? 'STORIES' : 'FEED');
+          const linkPost = h.permalink || (tipoPub === 'STORIES' && h.username ? `https://www.instagram.com/stories/${h.username}/` : (metaId ? `https://www.instagram.com/p/${metaId}/` : ''));
           const thumb = h.thumbnail_url || h.media_url || '';
 
           rawPubs.push({

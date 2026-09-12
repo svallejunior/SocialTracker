@@ -371,6 +371,7 @@ export async function GET() {
 
       const histReelsMap: Record<string, number> = {};
       const histPostMap: Record<string, number> = {};
+      const histStoriesMap: Record<string, number> = {};
 
       for (const ph of postsHistoricoHoje) {
         const u = ph.uname;
@@ -378,6 +379,8 @@ export async function GET() {
         const mptUpper = (ph.media_product_type || '').toUpperCase();
         if (fUpper === 'REELS' || mptUpper === 'REELS' || fUpper === 'VIDEO') {
           histReelsMap[u] = (histReelsMap[u] || 0) + 1;
+        } else if (fUpper === 'STORIES' || fUpper === 'STORY' || mptUpper === 'STORY' || mptUpper === 'STORIES') {
+          histStoriesMap[u] = (histStoriesMap[u] || 0) + 1;
         } else {
           histPostMap[u] = (histPostMap[u] || 0) + 1;
         }
@@ -465,7 +468,7 @@ export async function GET() {
       }
 
       const allUsers = new Set([
-        ...Object.keys(histReelsMap), ...Object.keys(histPostMap),
+        ...Object.keys(histReelsMap), ...Object.keys(histPostMap), ...Object.keys(histStoriesMap),
         ...Object.keys(autoReelsMap), ...Object.keys(autoPostMap), ...Object.keys(autoStoriesMap),
         ...Object.keys(agReelsMap), ...Object.keys(agPostMap), ...Object.keys(agStoriesMap)
       ]);
@@ -474,7 +477,7 @@ export async function GET() {
         const st = getStatsModelo(u);
         st.postPub = Math.max(histPostMap[u] || 0, autoPostMap[u] || 0);
         st.reelsPub = Math.max(histReelsMap[u] || 0, autoReelsMap[u] || 0);
-        st.storiesPub = autoStoriesMap[u] || 0;
+        st.storiesPub = Math.max(histStoriesMap[u] || 0, autoStoriesMap[u] || 0);
 
         st.postAg = agPostMap[u] || 0;
         st.reelsAg = agReelsMap[u] || 0;
