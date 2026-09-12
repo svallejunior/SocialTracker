@@ -233,12 +233,46 @@ export async function GET(req: NextRequest) {
         console.warn('Erro ao consultar posts_historico:', e);
       }
 
-      publicacoes = rawPubs.map((p: any) => ({
-        ...p,
-        arquivos: (() => {
-          try { return JSON.parse(p.arquivos || '[]'); } catch { return []; }
-        })()
-      }));
+      // Mapa de agendamentos por id, meta_media_id e username+data para recuperar arquivos originais completos (ex: carrossel com todas as fotos)
+      const agMapPorId = new Map<string, any[]>();
+      const agMapPorMetaId = new Map<string, any[]>();
+      const agMapPorUserDate = new Map<string, any[]>();
+
+      for (const ag of parsed) {
+        const arqs = Array.isArray(ag.arquivos) ? ag.arquivos : [];
+        if (arqs.length > 0) {
+          if (ag.id) agMapPorId.set(ag.id, arqs);
+          if (ag.meta_media_id) agMapPorMetaId.set(ag.meta_media_id, arqs);
+          const uKey = `${(ag.username || '').toLowerCase()}|${ag.data_especifica || (ag.publicado_em ? ag.publicado_em.split('T')[0] : '')}`;
+          if (!agMapPorUserDate.has(uKey) || arqs.length > agMapPorUserDate.get(uKey)!.length) {
+            agMapPorUserDate.set(uKey, arqs);
+          }
+        }
+      }
+
+      publicacoes = rawPubs.map((p: any) => {
+        let pArqs: any[] = [];
+        try {
+          pArqs = typeof p.arquivos === 'string' ? JSON.parse(p.arquivos || '[]') : (p.arquivos || []);
+        } catch {
+          pArqs = [];
+        }
+
+        const metaId = (p.meta_media_id || '').toString().trim();
+        const agId = (p.agendamento_id || '').toString().trim();
+        const uKey = `${(p.username || '').toLowerCase()}|${p.data_local}`;
+
+        // Se o agendamento correspondente tiver mais fotos (ex: carrossel cadastrado), usa a lista completa!
+        const agArqs = (agId && agMapPorId.get(agId)) || (metaId && agMapPorMetaId.get(metaId)) || agMapPorUserDate.get(uKey);
+        if (agArqs && agArqs.length > pArqs.length) {
+          pArqs = agArqs;
+        }
+
+        return {
+          ...p,
+          arquivos: pArqs
+        };
+      });
     } catch (histErr) {
       console.warn('Histórico de publicações indisponível:', histErr);
     }

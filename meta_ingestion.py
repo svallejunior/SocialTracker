@@ -332,7 +332,7 @@ def extrair_posts_perfil(account_id, token, limite=50):
     """Obtém as publicações recentes da conta com métricas e paginação."""
     url = f"{graph_api_base(token)}/{account_id}/media"
     params = {
-        "fields": "id,caption,media_type,media_product_type,permalink,timestamp,like_count,comments_count,shortcode,media_url,thumbnail_url",
+        "fields": "id,caption,media_type,media_product_type,permalink,timestamp,like_count,comments_count,shortcode,media_url,thumbnail_url,children{id,media_type,media_url}",
         "limit": min(limite, 50),
         "access_token": token
     }
@@ -693,12 +693,27 @@ def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str, ac
         hora_local = partes_dt[1] if len(partes_dt) > 1 else "12:00:00"
         tipo_pub = "REELS" if product_type == "REELS" or formato == "VIDEO" else "FEED"
         pub_id = f"meta_{post_id}"
-        arquivos_json = json.dumps([{"url": permalink, "tipo": formato, "previewUrl": thumbnail_url or media_url}])
+        
+        # Se for carrossel com children, extrai todas as fotos/vídeos filhos
+        children_data = p.get("children", {}).get("data", [])
+        if raw_formato == "CAROUSEL_ALBUM" and children_data:
+            carrossel_items = []
+            for c_item in children_data:
+                c_url = c_item.get("media_url") or ""
+                c_tipo = c_item.get("media_type") or "IMAGE"
+                carrossel_items.append({
+                    "url": permalink,
+                    "previewUrl": c_url,
+                    "tipo": c_tipo
+                })
+            arquivos_json = json.dumps(carrossel_items)
+        else:
+            arquivos_json = json.dumps([{"url": permalink, "tipo": formato, "previewUrl": thumbnail_url or media_url}])
 
         # Evita duplicação: se a publicação já existe (ex: criada pelo AGENDADOR ou MANUAL com este meta_media_id),
         # atualiza os dados/links oficiais mantendo o registro original.
         row_existente = c.execute("""
-            SELECT id, agendamento_id, origem
+            SELECT id, agendamento_id, origem, arquivos
             FROM automacao_publicacoes
             WHERE (meta_media_id = ? AND meta_media_id IS NOT NULL AND meta_media_id != '')
                OR id = ?
@@ -708,6 +723,17 @@ def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str, ac
 
         if row_existente:
             existente_id = row_existente[0]
+            arquivos_existentes_str = row_existente[3] if len(row_existente) > 3 else "[]"
+            try:
+                arqs_existentes = json.loads(arquivos_existentes_str or "[]")
+            except Exception:
+                arqs_existentes = []
+
+            # Preserva arquivos originais se o registro existente tiver mais de 1 (ex: carrossel pelo agendador)
+            arqs_para_salvar = arquivos_json
+            if len(arqs_existentes) > 1 and len(json.loads(arquivos_json or "[]")) <= 1:
+                arqs_para_salvar = arquivos_existentes_str
+
             c.execute("""
                 UPDATE automacao_publicacoes
                 SET username = ?,
@@ -724,7 +750,7 @@ def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str, ac
             """, (
                 username, (dados_perfil.get("id") or ""), tipo_pub,
                 data_local, hora_local, data_postagem,
-                str(post_id), arquivos_json, legenda, legenda, existente_id
+                str(post_id), arqs_para_salvar, legenda, legenda, existente_id
             ))
         else:
             c.execute("""

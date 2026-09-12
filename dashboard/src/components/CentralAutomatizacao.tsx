@@ -1534,7 +1534,14 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
             );
 
             const idsPublicados = new Set(pubsDoDiaSelecionado.map(p => p.agendamento_id).filter(Boolean));
-            const agsPendentesHoje = agendamentosDoDia.filter(a => a.status !== 'PUBLICADO' && !idsPublicados.has(a.id));
+            const metaIdsPublicados = new Set(pubsDoDiaSelecionado.map(p => p.meta_media_id).filter(Boolean));
+            const agsPendentesHoje = agendamentosDoDia.filter(a => {
+              if (a.status === 'PUBLICADO') return false;
+              if (idsPublicados.has(a.id)) return false;
+              if (a.meta_media_id && metaIdsPublicados.has(a.meta_media_id)) return false;
+              return true;
+            });
+            const agsExibicao = isDiaHoje ? agsPendentesHoje : agendamentosDoDia;
 
             const totalReels = isDiaPassado
               ? pubsDoDiaSelecionado.filter(p => p.tipo_postagem === 'REELS').length
@@ -2044,13 +2051,13 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                                   background: pub.tipo_postagem === 'REELS' ? 'rgba(239,68,68,0.2)' : 'rgba(59,130,246,0.2)',
                                   color: pub.tipo_postagem === 'REELS' ? '#F87171' : '#60A5FA'
                                 }}>
-                                  {pub.tipo_postagem === 'REELS' ? '🎬 Reels' : '🖼️ Feed'}
+                                  {pub.tipo_postagem === 'REELS' ? '🎬 Reels' : (arquivosPub.length > 1 ? `🖼️ Carrossel (${arquivosPub.length})` : '🖼️ Feed')}
                                 </span>
 
                                 {/* Miniaturas das mídias com hover zoom na lista */}
                                 {arquivosPub.length > 0 && (
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
-                                    {arquivosPub.slice(0, 2).map((arq, aIdx) => {
+                                    {arquivosPub.slice(0, 4).map((arq, aIdx) => {
                                       const url = getMediaUrl(arq, pub.meta_account_id);
                                       const isVid = isVideoFile(arq) || pub.tipo_postagem === 'REELS';
                                       return (
@@ -2190,13 +2197,13 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                                     background: pub.tipo_postagem === 'REELS' ? 'rgba(239,68,68,0.2)' : 'rgba(59,130,246,0.2)',
                                     color: pub.tipo_postagem === 'REELS' ? '#F87171' : '#60A5FA'
                                   }}>
-                                    {pub.tipo_postagem === 'REELS' ? '🎬 Reels' : '🖼️ Feed'}
+                                    {pub.tipo_postagem === 'REELS' ? '🎬 Reels' : (arquivosPub.length > 1 ? `🖼️ Carrossel (${arquivosPub.length})` : '🖼️ Feed')}
                                   </span>
 
                                   {/* Miniaturas das mídias com hover zoom na lista para posts publicados hoje */}
                                   {arquivosPub.length > 0 && (
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
-                                      {arquivosPub.slice(0, 2).map((arq, aIdx) => {
+                                      {arquivosPub.slice(0, 4).map((arq, aIdx) => {
                                         const url = getMediaUrl(arq, pub.meta_account_id);
                                         const isVid = isVideoFile(arq) || pub.tipo_postagem === 'REELS';
                                         return (
@@ -2238,8 +2245,8 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                                           </div>
                                         );
                                       })}
-                                      {arquivosPub.length > 2 && (
-                                        <span style={{ fontSize: 9, color: '#8B949E' }}>+{arquivosPub.length - 2}</span>
+                                      {arquivosPub.length > 4 && (
+                                        <span style={{ fontSize: 9, color: '#8B949E' }}>+{arquivosPub.length - 4}</span>
                                       )}
                                     </div>
                                   )}
@@ -2283,7 +2290,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                       )}
 
                       {/* Botão de criar agendamento caso ainda não exista nenhuma atividade */}
-                      {pubsDoDiaSelecionado.length === 0 && agendamentosDoDia.length === 0 && (
+                      {pubsDoDiaSelecionado.length === 0 && agsExibicao.length === 0 && (
                         <button
                           type="button"
                           onClick={() => {
@@ -2328,7 +2335,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                       )}
 
                       {/* Botão compacto para adicionar agendamento se já houver posts publicados hoje mas nenhum agendamento pendente */}
-                      {pubsDoDiaSelecionado.length > 0 && agendamentosDoDia.length === 0 && (
+                      {pubsDoDiaSelecionado.length > 0 && agsExibicao.length === 0 && (
                         <button
                           type="button"
                           onClick={() => {
@@ -2365,9 +2372,9 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                         </button>
                       )}
 
-                      {agendamentosDoDia.length > 0 && (
+                      {agsExibicao.length > 0 && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 6 }}>
-                      {agendamentosDoDia.map(ag => (
+                      {agsExibicao.map(ag => (
                         <div
                           key={ag.id}
                           style={{
@@ -2493,7 +2500,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                             {/* Miniaturas das mídias com hover zoom na lista */}
                             {ag.arquivos && ag.arquivos.length > 0 && (
                               <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
-                                {ag.arquivos.slice(0, 2).map((arq, aIdx) => {
+                                {ag.arquivos.slice(0, 4).map((arq, aIdx) => {
                                   const url = getMediaUrl(arq, ag.meta_account_id);
                                   const isVid = isVideoFile(arq);
                                   return (
@@ -2531,8 +2538,8 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                                     </div>
                                   );
                                 })}
-                                {ag.arquivos.length > 2 && (
-                                  <span style={{ fontSize: 9, color: '#8B949E' }}>+{ag.arquivos.length - 2}</span>
+                                {ag.arquivos.length > 4 && (
+                                  <span style={{ fontSize: 9, color: '#8B949E' }}>+{ag.arquivos.length - 4}</span>
                                 )}
                               </div>
                             )}
@@ -3444,7 +3451,13 @@ function CalendarioAgendamentos({
                     // Evita duplicação: postagens que já foram publicadas aparecem em 'publicados'.
                     // Não devem aparecer novamente como agendamento pendente/mídia em 'posts'.
                     const idsPublicados = new Set(pubs.map(p => p.agendamento_id).filter(Boolean));
-                    const agsPendentes = ags.filter(a => a.status !== 'PUBLICADO' && !idsPublicados.has(a.id));
+                    const metaIdsPublicados = new Set(pubs.map(p => p.meta_media_id).filter(Boolean));
+                    const agsPendentes = ags.filter(a => {
+                      if (a.status === 'PUBLICADO') return false;
+                      if (idsPublicados.has(a.id)) return false;
+                      if (a.meta_media_id && metaIdsPublicados.has(a.meta_media_id)) return false;
+                      return true;
+                    });
 
                     setSelectedDayInfo({
                       dateStr: `${String(c.dia).padStart(2, '0')}/${String(c.mes + 1).padStart(2, '0')}/${c.ano}`,
@@ -3561,7 +3574,7 @@ function CalendarioAgendamentos({
                 <div key={`pub-${idx}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#7EE787', fontSize: 11, gap: 6 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: 1 }}>
                     <span style={{ whiteSpace: 'nowrap' }}>
-                      {pub.tipo_postagem === 'REELS' ? '🎬 Reels' : '🖼️ Feed'}
+                      {pub.tipo_postagem === 'REELS' ? '🎬 Reels' : (arquivosPub.length > 1 ? `🖼️ Carrossel (${arquivosPub.length})` : '🖼️ Feed')}
                       <span style={{ color: '#8B949E', marginLeft: 4 }}>({pub.hora_local || 'Publicado'})</span>
                     </span>
                     {pub.legenda && (
@@ -3573,7 +3586,7 @@ function CalendarioAgendamentos({
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                     {arquivosPub.length > 0 && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        {arquivosPub.slice(0, 3).map((arq, aIdx) => {
+                        {arquivosPub.slice(0, 4).map((arq, aIdx) => {
                           const url = getMediaUrl(arq, pub.meta_account_id);
                           const isVid = isVideoFile(arq) || pub.tipo_postagem === 'REELS';
                           return (
@@ -3615,6 +3628,9 @@ function CalendarioAgendamentos({
                             </div>
                           );
                         })}
+                        {arquivosPub.length > 4 && (
+                          <span style={{ fontSize: 9, color: '#8B949E' }}>+{arquivosPub.length - 4}</span>
+                        )}
                       </div>
                     )}
                     <span style={{ color: '#34D399', fontSize: 9, fontWeight: 700, background: 'rgba(52, 211, 153, 0.12)', padding: '1px 5px', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 2 }}>
@@ -3640,14 +3656,14 @@ function CalendarioAgendamentos({
               <div key={`post-${idx}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#C9D1D9', gap: 6 }}>
                 <span>
                   {post.tipo_postagem === 'REELS' && '🎬 Reels'}
-                  {post.tipo_postagem === 'FEED' && '🖼️ Feed'}
+                  {post.tipo_postagem === 'FEED' && (post.arquivos && post.arquivos.length > 1 ? `🖼️ Carrossel (${post.arquivos.length})` : '🖼️ Feed')}
                   {post.tipo_postagem === 'STORIES' && '📱 Stories'}
                   {' '}({post.modo_hora === 'FIXA' ? post.hora_fixa : `${post.hora_janela_inicio} ~ ${post.hora_janela_fim}`})
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   {post.arquivos && post.arquivos.length > 0 && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                      {post.arquivos.slice(0, 3).map((arq, aIdx) => {
+                      {post.arquivos.slice(0, 4).map((arq, aIdx) => {
                         const url = getMediaUrl(arq, post.meta_account_id);
                         const isVid = isVideoFile(arq);
                         return (
