@@ -134,6 +134,20 @@ export async function GET(request: NextRequest) {
     // Nesta aba, exibe APENAS o maior registro do dia (maior datetime).
     // O ganho diário (seguidores, posts) e gatilhos são calculados comparando
     // o último registro do dia com o último registro do dia anterior via LAG().
+    //
+    // Quando um perfil específico é pedido, pagina por dias (15 por página):
+    // o filtro de username entra já na CTE base (evita rodar as window
+    // functions sobre perfis_historico inteira, de todos os perfis) e o LAG
+    // é calculado sobre a série completa daquele perfil ANTES do corte de
+    // página, então a comparação com o dia anterior continua correta mesmo
+    // no primeiro registro de uma página. "Apenas pendentes" ignora a
+    // paginação — pendências são raras, vale continuar buscando em todo o
+    // histórico do perfil em vez de limitar por página.
+    const diasPorPagina = 15;
+    const paginaParam = parseInt(searchParams.get('pagina') || '0', 10);
+    const pagina = Number.isFinite(paginaParam) && paginaParam > 0 ? paginaParam : 0;
+    const apenasPendentesQuery = mode === 'pendentes';
+
     let query = `
       WITH ultimas_coletas_dia AS (
         SELECT *,
@@ -143,6 +157,7 @@ export async function GET(request: NextRequest) {
           ) as rn_dia
         FROM perfis_historico
         WHERE inativo = 0
+        ${filterUsername ? 'AND LOWER(username) = LOWER(?)' : ''}
       ),
       historico_diario AS (
         SELECT *
@@ -154,7 +169,8 @@ export async function GET(request: NextRequest) {
           h.*,
           LAG(h.seguidores) OVER (PARTITION BY h.username ORDER BY h.data_coleta, h.id) AS seguidores_anterior,
           LAG(h.total_posts) OVER (PARTITION BY h.username ORDER BY h.data_coleta, h.id) AS total_posts_anterior,
-          LAG(h.data_coleta) OVER (PARTITION BY h.username ORDER BY h.data_coleta, h.id) AS data_coleta_anterior
+          LAG(h.data_coleta) OVER (PARTITION BY h.username ORDER BY h.data_coleta, h.id) AS data_coleta_anterior,
+          ROW_NUMBER() OVER (PARTITION BY h.username ORDER BY h.data_coleta DESC, h.id DESC) AS ordem_dia_desc
         FROM historico_diario h
       )
       SELECT
@@ -179,15 +195,26 @@ export async function GET(request: NextRequest) {
     const params: any[] = [];
 
     if (filterUsername) {
+      params.push(filterUsername); // filtro dentro da CTE base
+    }
+
+    if (filterUsername) {
       query += ` AND LOWER(h.username) = LOWER(?)`;
       params.push(filterUsername);
-    } else if (mode === 'pendentes') {
+    }
+
+    if (apenasPendentesQuery) {
       query += ` AND COALESCE(h.revisado_manualmente, 0) = 0`;
     }
 
     if (filterTipoJanela && filterTipoJanela !== 'TODOS') {
       query += ` AND h.tipo_janela = ?`;
       params.push(filterTipoJanela);
+    }
+
+    if (filterUsername && !apenasPendentesQuery) {
+      query += ` AND h.ordem_dia_desc > ? AND h.ordem_dia_desc <= ?`;
+      params.push(pagina * diasPorPagina, (pagina + 1) * diasPorPagina);
     }
 
     query += ` ORDER BY h.data_coleta DESC, h.id DESC`;
@@ -264,7 +291,9 @@ export async function GET(request: NextRequest) {
       stats,
       perfis_sumario,
       items: resultado,
-      total_pendentes: stats.pendentes_validacao
+      total_pendentes: stats.pendentes_validacao,
+      pagina,
+      dias_por_pagina: diasPorPagina
     }, {
       headers: { 'Cache-Control': 'no-store' }
     });

@@ -187,6 +187,10 @@ def inicializar_estrutura_banco():
             print(f"Aviso ao adicionar data_carga em perfis_historico: {e}")
 
     c.execute("CREATE INDEX IF NOT EXISTS idx_perfis_historico_user_data ON perfis_historico(username, data_coleta)")
+    # Índice por expressão: as consultas do dashboard filtram com LOWER(username) = LOWER(?)
+    # (usernames podem vir com case inconsistente da API/Apify) — sem esse índice, o filtro
+    # cai em varredura completa mesmo com o índice acima, que é sobre a coluna crua.
+    c.execute("CREATE INDEX IF NOT EXISTS idx_perfis_historico_lower_user_inativo_data ON perfis_historico(LOWER(username), inativo, data_coleta)")
 
     # 4. Tabela de Seguidores Histórico
     c.execute("""

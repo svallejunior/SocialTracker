@@ -85,6 +85,10 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
   const [tipoJanelaFilter, setTipoJanelaFilter] = useState<string>('TODOS');
   const [apenasPendentesTable, setApenasPendentesTable] = useState<boolean>(false);
 
+  // Paginação do histórico por janelas de 15 dias (0 = os 15 dias mais recentes)
+  const [paginaHistorico, setPaginaHistorico] = useState<number>(0);
+  const DIAS_POR_PAGINA_HISTORICO = 15;
+
   // Estados de busca de post viral sob demanda
   const [viralSearchingId, setViralSearchingId] = useState<number | null>(null);
   const [viralModalItem, setViralModalItem] = useState<AnomaliaItem | null>(null);
@@ -220,12 +224,20 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
     }
   }, [onCountUpdate]);
 
-  // Busca registros específicos do perfil selecionado
-  const fetchProfileItems = useCallback(async (username: string) => {
+  // Busca registros específicos do perfil selecionado. "Apenas Pendentes" busca
+  // em todo o histórico do perfil (pendências são raras, consulta continua barata);
+  // caso contrário, busca só a janela de 15 dias indicada por `pagina`.
+  const fetchProfileItems = useCallback(async (username: string, pagina: number, apenasPendentes: boolean) => {
     if (!username) return;
     setItemsLoading(true);
     try {
-      const url = `/api/anomalias?username=${encodeURIComponent(username)}&_t=${Date.now()}`;
+      const params = new URLSearchParams({ username, _t: String(Date.now()) });
+      if (apenasPendentes) {
+        params.set('mode', 'pendentes');
+      } else {
+        params.set('pagina', String(pagina));
+      }
+      const url = `/api/anomalias?${params.toString()}`;
       const res = await fetch(url, { cache: 'no-store' });
       const json = await res.json();
       if (json.success) {
@@ -244,11 +256,16 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
     fetchOverview();
   }, [fetchOverview]);
 
+  // Volta pra janela mais recente sempre que o perfil selecionado muda
+  useEffect(() => {
+    setPaginaHistorico(0);
+  }, [selectedUsername]);
+
   useEffect(() => {
     if (selectedUsername) {
-      fetchProfileItems(selectedUsername);
+      fetchProfileItems(selectedUsername, paginaHistorico, apenasPendentesTable);
     }
-  }, [selectedUsername, fetchProfileItems]);
+  }, [selectedUsername, paginaHistorico, apenasPendentesTable, fetchProfileItems]);
 
   // Executa varrida histórica de anomalias
   const handleScanHistorico = async () => {
@@ -260,7 +277,7 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
       if (json.success) {
         setScanMessage(`⚡ Varrida concluída! ${json.auto_validados || 0} coletas validadas automaticamente como Orgânico e ${json.marcados || 0} nova(s) coleta(s) enviadas para análise (> 2% e > 10 seg).`);
         await fetchOverview(true);
-        if (selectedUsername) await fetchProfileItems(selectedUsername);
+        if (selectedUsername) await fetchProfileItems(selectedUsername, paginaHistorico, apenasPendentesTable);
         setTimeout(() => setScanMessage(null), 8000);
       }
     } catch (e: any) {
@@ -347,6 +364,12 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
   const activeProfile = useMemo(() => {
     return perfis.find(p => p.username === selectedUsername) || null;
   }, [perfis, selectedUsername]);
+
+  // Total de janelas de 15 dias disponíveis pro perfil selecionado
+  const totalPaginasHistorico = useMemo(() => {
+    if (!activeProfile) return 1;
+    return Math.max(1, Math.ceil(activeProfile.total_coletas / DIAS_POR_PAGINA_HISTORICO));
+  }, [activeProfile]);
 
   // Lista de perfis filtrados para a barra de seleção
   const perfisFiltrados = useMemo(() => {
@@ -520,7 +543,7 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
             className="anomalias-refresh-btn"
             onClick={() => {
               fetchOverview(true);
-              if (selectedUsername) fetchProfileItems(selectedUsername);
+              if (selectedUsername) fetchProfileItems(selectedUsername, paginaHistorico, apenasPendentesTable);
             }}
             title="Atualizar dados"
           >
@@ -820,10 +843,35 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                 <button
                   onClick={() => setApenasPendentesTable(prev => !prev)}
                   className={`anomalias-pendentes-toggle-btn ${apenasPendentesTable ? 'active' : ''}`}
-                  title="Exibir somente coletas pendentes de validação"
+                  title="Exibir somente coletas pendentes de validação (busca em todo o histórico)"
                 >
                   ⚠️ Apenas Pendentes
                 </button>
+
+                {/* Navegação por janela de 15 dias no histórico */}
+                {!apenasPendentesTable && (
+                  <div className="anomalias-nav-btns" title="Navegar por janelas de 15 dias">
+                    <button
+                      onClick={() => setPaginaHistorico(p => Math.min(totalPaginasHistorico - 1, p + 1))}
+                      className="anomalias-nav-btn"
+                      disabled={itemsLoading || paginaHistorico >= totalPaginasHistorico - 1}
+                      title="15 dias mais antigos"
+                    >
+                      <ChevronLeft size={16} />
+                    </button>
+                    <span className="anomalias-nav-index">
+                      {paginaHistorico + 1} / {totalPaginasHistorico}
+                    </span>
+                    <button
+                      onClick={() => setPaginaHistorico(p => Math.max(0, p - 1))}
+                      className="anomalias-nav-btn"
+                      disabled={itemsLoading || paginaHistorico === 0}
+                      title="15 dias mais recentes"
+                    >
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
+                )}
 
                 {/* Botões de Navegação entre perfis */}
                 <div className="anomalias-nav-btns">
