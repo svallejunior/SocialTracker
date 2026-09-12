@@ -7,7 +7,7 @@ import {
   Plus, ExternalLink, Sliders, Image as ImageIcon, Check,
   AlertCircle, ChevronDown, Zap, X, Calendar, Clock, Film, UploadCloud,
   FileText, Repeat, Shuffle, ArrowDownAZ, ListOrdered, Layers,
-  ChevronLeft, ChevronRight, Info
+  ChevronLeft, ChevronRight, Info, Maximize2
 } from 'lucide-react';
 
 interface Profile {
@@ -92,6 +92,32 @@ export interface Publicacao {
   arquivos?: AgendamentoArquivo[];
   legenda?: string;
   origem?: string;
+}
+
+export function getMediaUrl(arq?: AgendamentoArquivo | null, metaAccountId?: string): string {
+  if (!arq) return '';
+  if (arq.url && (arq.url.startsWith('http://') || arq.url.startsWith('https://') || arq.url.startsWith('/'))) {
+    return arq.url;
+  }
+  if (arq.previewUrl && (arq.previewUrl.startsWith('http://') || arq.previewUrl.startsWith('https://') || arq.previewUrl.startsWith('data:') || arq.previewUrl.startsWith('/'))) {
+    return arq.previewUrl;
+  }
+  if (arq.savedName) {
+    const acc = metaAccountId || 'geral';
+    return `/api/automacao/media/${acc}/${encodeURIComponent(arq.savedName)}`;
+  }
+  if (arq.name) {
+    const acc = metaAccountId || 'geral';
+    return `/api/automacao/media/${acc}/${encodeURIComponent(arq.name)}`;
+  }
+  return '';
+}
+
+export function isVideoFile(arq?: AgendamentoArquivo | null): boolean {
+  if (!arq) return false;
+  if (arq.type && arq.type.startsWith('video/')) return true;
+  const testStr = (arq.name || arq.savedName || arq.url || arq.path || '').toLowerCase();
+  return testStr.endsWith('.mp4') || testStr.endsWith('.mov') || testStr.endsWith('.m4v') || testStr.endsWith('.webm');
 }
 
 // Opção de Reels na Grade default DESABILITADA
@@ -675,6 +701,60 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [agendaDia, setAgendaDia] = useState<Date>(new Date());
   const [agendaFiltroUsername, setAgendaFiltroUsername] = useState<string>('');
+
+  // Estados globais para hover de mídia e modal lightbox em tela cheia na listagem
+  const [globalHoverMedia, setGlobalHoverMedia] = useState<{
+    url: string;
+    name: string;
+    isVideo: boolean;
+    x: number;
+    y: number;
+  } | null>(null);
+
+  const [globalLightboxMedia, setGlobalLightboxMedia] = useState<{
+    url: string;
+    name: string;
+    isVideo: boolean;
+  } | null>(null);
+
+  const handleGlobalMediaHover = (e: React.MouseEvent, arq: AgendamentoArquivo, metaAccId?: string) => {
+    const url = getMediaUrl(arq, metaAccId);
+    if (!url) return;
+    const isVideo = isVideoFile(arq);
+    const cardW = 280;
+    const cardH = 340;
+
+    let x = e.clientX + 16;
+    if (x + cardW > window.innerWidth - 12) {
+      x = e.clientX - cardW - 16;
+    }
+    if (x < 12) x = 12;
+
+    let y = e.clientY - cardH / 2;
+    if (y < 12) y = 12;
+    if (y + cardH > window.innerHeight - 12) {
+      y = window.innerHeight - cardH - 12;
+    }
+
+    setGlobalHoverMedia({
+      url,
+      name: arq.name || 'Mídia agendada',
+      isVideo,
+      x,
+      y
+    });
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setGlobalLightboxMedia(null);
+        setGlobalHoverMedia(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const fetchMetaConfig = async () => {
     try {
@@ -1712,6 +1792,9 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                       return { ...prev, [perfil.username]: d };
                     });
                   }}
+                  onMediaHover={handleGlobalMediaHover}
+                  onMediaLeave={() => setGlobalHoverMedia(null)}
+                  onMediaClick={setGlobalLightboxMedia}
                 />
 
                 {/* =========================================================================
@@ -2165,6 +2248,53 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                               {ag.tipo_postagem === 'FEED' ? (ag.arquivos && ag.arquivos.length > 1 ? `🖼️ Carrossel (${ag.arquivos.length})` : '🖼️ Feed') : ag.tipo_postagem === 'REELS' ? '🎬 Reels' : '📱 Stories'}
                             </span>
 
+                            {/* Miniaturas das mídias com hover zoom na lista */}
+                            {ag.arquivos && ag.arquivos.length > 0 && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+                                {ag.arquivos.slice(0, 2).map((arq, aIdx) => {
+                                  const url = getMediaUrl(arq, ag.meta_account_id);
+                                  const isVid = isVideoFile(arq);
+                                  return (
+                                    <div
+                                      key={aIdx}
+                                      onMouseEnter={(e) => handleGlobalMediaHover(e, arq, ag.meta_account_id)}
+                                      onMouseMove={(e) => handleGlobalMediaHover(e, arq, ag.meta_account_id)}
+                                      onMouseLeave={() => setGlobalHoverMedia(null)}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (url) setGlobalLightboxMedia({ url, name: arq.name || 'Mídia agendada', isVideo: isVid });
+                                      }}
+                                      style={{
+                                        width: 22,
+                                        height: 22,
+                                        borderRadius: 4,
+                                        overflow: 'hidden',
+                                        border: '1px solid #30363D',
+                                        cursor: 'pointer',
+                                        background: '#010409',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        position: 'relative'
+                                      }}
+                                      title="Passe o mouse para ver a mídia"
+                                    >
+                                      {isVid ? (
+                                        <Film size={11} color="#F87171" />
+                                      ) : url ? (
+                                        <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                      ) : (
+                                        <ImageIcon size={11} color="#60A5FA" />
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                                {ag.arquivos.length > 2 && (
+                                  <span style={{ fontSize: 9, color: '#8B949E' }}>+{ag.arquivos.length - 2}</span>
+                                )}
+                              </div>
+                            )}
+
                             <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11, color: '#C9D1D9' }}>
                               <span>{formatarHorarioAgendado(ag)}</span>
                             </div>
@@ -2554,6 +2684,192 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
         </div>
       )}
 
+      {/* CARD FLUTUANTE DE PRÉ-VISUALIZAÇÃO EM HOVER GLOBAL */}
+      {globalHoverMedia && (
+        <div
+          style={{
+            position: 'fixed',
+            left: globalHoverMedia.x,
+            top: globalHoverMedia.y,
+            zIndex: 99999,
+            pointerEvents: 'none',
+            width: 280,
+            background: '#0D1117',
+            border: '1px solid rgba(56, 139, 253, 0.6)',
+            boxShadow: '0 16px 40px rgba(0, 0, 0, 0.9), 0 0 20px rgba(56, 139, 253, 0.3)',
+            borderRadius: 12,
+            overflow: 'hidden',
+            padding: 10,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+            animation: 'fadeInScale 0.15s ease-out'
+          }}
+        >
+          <div style={{
+            width: '100%',
+            height: 280,
+            background: '#010409',
+            borderRadius: 8,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            overflow: 'hidden',
+            border: '1px solid rgba(255,255,255,0.06)'
+          }}>
+            {globalHoverMedia.isVideo ? (
+              <video
+                src={globalHoverMedia.url}
+                autoPlay
+                loop
+                muted
+                playsInline
+                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              />
+            ) : (
+              <img
+                src={globalHoverMedia.url}
+                alt={globalHoverMedia.name}
+                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              />
+            )}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#F0F6FC', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {globalHoverMedia.name}
+            </span>
+            <span style={{
+              fontSize: 9,
+              fontWeight: 800,
+              padding: '2px 6px',
+              borderRadius: 4,
+              background: globalHoverMedia.isVideo ? 'rgba(239, 68, 68, 0.2)' : 'rgba(56, 139, 253, 0.2)',
+              color: globalHoverMedia.isVideo ? '#F87171' : '#58A6FF',
+              whiteSpace: 'nowrap'
+            }}>
+              {globalHoverMedia.isVideo ? '🎬 Vídeo (Reels)' : '📸 Foto (Feed)'}
+            </span>
+          </div>
+
+          <div style={{
+            fontSize: 9,
+            color: '#8B949E',
+            textAlign: 'center',
+            borderTop: '1px solid rgba(255,255,255,0.08)',
+            paddingTop: 6,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 4
+          }}>
+            <span>🔍 Clique para abrir em tela cheia</span>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL LIGHTBOX GLOBAL */}
+      {globalLightboxMedia && (
+        <div
+          onClick={() => setGlobalLightboxMedia(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 100000,
+            background: 'rgba(0, 0, 0, 0.85)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 20,
+            animation: 'fadeIn 0.2s ease-out'
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              position: 'relative',
+              maxWidth: '90vw',
+              maxHeight: '90vh',
+              background: '#161B22',
+              border: '1px solid #30363D',
+              borderRadius: 14,
+              padding: 16,
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.95)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 12
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#F0F6FC', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {globalLightboxMedia.name}
+                </span>
+                <span style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  padding: '2px 6px',
+                  borderRadius: 4,
+                  background: globalLightboxMedia.isVideo ? 'rgba(239, 68, 68, 0.2)' : 'rgba(56, 139, 253, 0.2)',
+                  color: globalLightboxMedia.isVideo ? '#F87171' : '#58A6FF',
+                  flexShrink: 0
+                }}>
+                  {globalLightboxMedia.isVideo ? '🎬 Vídeo' : '📸 Imagem'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setGlobalLightboxMedia(null)}
+                style={{
+                  background: '#21262D',
+                  border: '1px solid #30363D',
+                  borderRadius: '50%',
+                  width: 28,
+                  height: 28,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#C9D1D9',
+                  cursor: 'pointer',
+                  flexShrink: 0
+                }}
+                title="Fechar (Esc)"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              maxWidth: 850,
+              maxHeight: '75vh',
+              overflow: 'hidden',
+              borderRadius: 8,
+              background: '#010409'
+            }}>
+              {globalLightboxMedia.isVideo ? (
+                <video
+                  src={globalLightboxMedia.url}
+                  controls
+                  autoPlay
+                  playsInline
+                  style={{ maxWidth: '100%', maxHeight: '75vh', objectFit: 'contain' }}
+                />
+              ) : (
+                <img
+                  src={globalLightboxMedia.url}
+                  alt={globalLightboxMedia.name}
+                  style={{ maxWidth: '100%', maxHeight: '75vh', objectFit: 'contain' }}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
@@ -2567,9 +2883,20 @@ interface CalendarioAgendamentosProps {
   publicacoes?: Publicacao[];
   selectedDate?: Date;
   onSelectDate?: (date: Date) => void;
+  onMediaHover?: (e: React.MouseEvent, arq: AgendamentoArquivo, metaAccId?: string) => void;
+  onMediaLeave?: () => void;
+  onMediaClick?: (media: { url: string; name: string; isVideo: boolean }) => void;
 }
 
-function CalendarioAgendamentos({ agendamentos, publicacoes = [], selectedDate, onSelectDate }: CalendarioAgendamentosProps) {
+function CalendarioAgendamentos({
+  agendamentos,
+  publicacoes = [],
+  selectedDate,
+  onSelectDate,
+  onMediaHover,
+  onMediaLeave,
+  onMediaClick
+}: CalendarioAgendamentosProps) {
   const [dataVisualizacao, setDataVisualizacao] = useState(() => {
     const base = selectedDate || new Date();
     return new Date(base.getFullYear(), base.getMonth(), 1);
@@ -2984,16 +3311,60 @@ function CalendarioAgendamentos({ agendamentos, publicacoes = [], selectedDate, 
               </div>
             ))}
             {selectedDayInfo.posts.map((post, idx) => (
-              <div key={`post-${idx}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#C9D1D9' }}>
+              <div key={`post-${idx}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#C9D1D9', gap: 6 }}>
                 <span>
                   {post.tipo_postagem === 'REELS' && '🎬 Reels'}
                   {post.tipo_postagem === 'FEED' && '🖼️ Feed'}
                   {post.tipo_postagem === 'STORIES' && '📱 Stories'}
                   {' '}({post.modo_hora === 'FIXA' ? post.hora_fixa : `${post.hora_janela_inicio} ~ ${post.hora_janela_fim}`})
                 </span>
-                <span style={{ color: '#8B949E', fontSize: 10 }}>
-                  {post.arquivos?.length || 0} mídia(s)
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  {post.arquivos && post.arquivos.length > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                      {post.arquivos.slice(0, 3).map((arq, aIdx) => {
+                        const url = getMediaUrl(arq, post.meta_account_id);
+                        const isVid = isVideoFile(arq);
+                        return (
+                          <div
+                            key={aIdx}
+                            onMouseEnter={(e) => onMediaHover?.(e, arq, post.meta_account_id)}
+                            onMouseMove={(e) => onMediaHover?.(e, arq, post.meta_account_id)}
+                            onMouseLeave={() => onMediaLeave?.()}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (url) onMediaClick?.({ url, name: arq.name || 'Mídia agendada', isVideo: isVid });
+                            }}
+                            style={{
+                              width: 18,
+                              height: 18,
+                              borderRadius: 3,
+                              overflow: 'hidden',
+                              border: '1px solid #30363D',
+                              background: '#010409',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              position: 'relative'
+                            }}
+                            title="Passe o mouse para ver"
+                          >
+                            {isVid ? (
+                              <Film size={10} color="#F87171" />
+                            ) : url ? (
+                              <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            ) : (
+                              <ImageIcon size={10} color="#60A5FA" />
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <span style={{ color: '#8B949E', fontSize: 10 }}>
+                    {post.arquivos?.length || 0} mídia(s)
+                  </span>
+                </div>
               </div>
             ))}
           </div>
@@ -3039,6 +3410,60 @@ function FormularioAgendamento({
   const [ordemArquivos, setOrdemArquivos] = useState<'ALEATORIA' | 'ALFANUMERICA' | 'ORDEM_SELECAO'>(
     initialData?.ordem_arquivos || 'ORDEM_SELECAO'
   );
+
+  // Estados para hover de mídia (tamanho maior / zoom) e modal lightbox em tela cheia
+  const [hoverMedia, setHoverMedia] = useState<{
+    url: string;
+    name: string;
+    isVideo: boolean;
+    x: number;
+    y: number;
+  } | null>(null);
+
+  const [lightboxMedia, setLightboxMedia] = useState<{
+    url: string;
+    name: string;
+    isVideo: boolean;
+  } | null>(null);
+
+  const handleMediaHover = (e: React.MouseEvent, arq: AgendamentoArquivo) => {
+    const url = getMediaUrl(arq, metaAccountId);
+    if (!url) return;
+    const isVideo = isVideoFile(arq);
+    const cardW = 280;
+    const cardH = 340;
+
+    let x = e.clientX + 16;
+    if (x + cardW > window.innerWidth - 12) {
+      x = e.clientX - cardW - 16;
+    }
+    if (x < 12) x = 12;
+
+    let y = e.clientY - cardH / 2;
+    if (y < 12) y = 12;
+    if (y + cardH > window.innerHeight - 12) {
+      y = window.innerHeight - cardH - 12;
+    }
+
+    setHoverMedia({
+      url,
+      name: arq.name || 'Mídia agendada',
+      isVideo,
+      x,
+      y
+    });
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setLightboxMedia(null);
+        setHoverMedia(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // 3. SELEÇÃO: DATA ESPECÍFICA vs RECORRENTE
   const [tipoAgendamento, setTipoAgendamento] = useState<'DATA_ESPECIFICA' | 'RECORRENTE'>(() => {
@@ -3401,41 +3826,131 @@ function FormularioAgendamento({
 
         {/* Preview dos Arquivos Selecionados */}
         {arquivos.length > 0 && (
-          <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {arquivos.map((arq, idx) => (
-              <div
-                key={idx}
-                style={{
-                  background: '#0D1117',
-                  border: '1px solid #30363D',
-                  borderRadius: 6,
-                  padding: '4px 8px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 8,
-                  fontSize: 10
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
-                  {arq.previewUrl ? (
-                    <img src={arq.previewUrl} alt="" style={{ width: 20, height: 20, borderRadius: 3, objectFit: 'cover' }} />
-                  ) : (
-                    <Film size={12} color="#60A5FA" />
-                  )}
-                  <span style={{ color: '#C9D1D9', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {idx + 1}. {arq.name}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveArquivo(idx)}
-                  style={{ background: 'none', border: 'none', color: '#F87171', cursor: 'pointer', padding: 2 }}
+          <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {arquivos.map((arq, idx) => {
+              const url = getMediaUrl(arq, metaAccountId);
+              const isVideo = isVideoFile(arq);
+
+              return (
+                <div
+                  key={idx}
+                  style={{
+                    background: '#0D1117',
+                    border: '1px solid #30363D',
+                    borderRadius: 6,
+                    padding: '5px 8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 8,
+                    fontSize: 11,
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => handleMediaHover(e, arq)}
+                  onMouseMove={(e) => handleMediaHover(e, arq)}
+                  onMouseLeave={() => setHoverMedia(null)}
                 >
-                  <X size={11} />
-                </button>
-              </div>
-            ))}
+                  <div
+                    onClick={() => {
+                      if (url) setLightboxMedia({ url, name: arq.name || 'Mídia agendada', isVideo });
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      overflow: 'hidden',
+                      cursor: 'pointer',
+                      flex: 1
+                    }}
+                    title="Passe o mouse para pré-visualizar ou clique para expandir"
+                  >
+                    {/* Miniatura Interativa */}
+                    <div
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 5,
+                        overflow: 'hidden',
+                        background: '#010409',
+                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        position: 'relative'
+                      }}
+                    >
+                      {isVideo ? (
+                        url ? (
+                          <>
+                            <video src={url} muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <Film size={12} color="#EF4444" />
+                            </div>
+                          </>
+                        ) : (
+                          <Film size={14} color="#EF4444" />
+                        )
+                      ) : url ? (
+                        <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <ImageIcon size={14} color="#60A5FA" />
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: 1 }}>
+                      <span style={{ color: '#E6EDF3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>
+                        {idx + 1}. {arq.name}
+                      </span>
+                      <span style={{
+                        fontSize: 9,
+                        padding: '1px 5px',
+                        borderRadius: 4,
+                        background: isVideo ? 'rgba(239, 68, 68, 0.18)' : 'rgba(56, 139, 253, 0.18)',
+                        color: isVideo ? '#F87171' : '#58A6FF',
+                        fontWeight: 700,
+                        flexShrink: 0
+                      }}>
+                        {isVideo ? 'Vídeo' : 'Foto'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                    {url && (
+                      <button
+                        type="button"
+                        onClick={() => setLightboxMedia({ url, name: arq.name || 'Mídia agendada', isVideo })}
+                        title="Ver em tamanho real"
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#8B949E',
+                          cursor: 'pointer',
+                          padding: 3,
+                          display: 'flex',
+                          borderRadius: 4
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.color = '#58A6FF'}
+                        onMouseLeave={e => e.currentTarget.style.color = '#8B949E'}
+                      >
+                        <Maximize2 size={12} />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      title="Remover arquivo"
+                      onClick={() => handleRemoveArquivo(idx)}
+                      style={{ background: 'none', border: 'none', color: '#8B949E', cursor: 'pointer', padding: 3, display: 'flex', borderRadius: 4 }}
+                      onMouseEnter={e => e.currentTarget.style.color = '#F87171'}
+                      onMouseLeave={e => e.currentTarget.style.color = '#8B949E'}
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -4099,6 +4614,192 @@ function FormularioAgendamento({
           {saving ? 'Salvando...' : (initialData ? '💾 Atualizar Agendamento' : '💾 Salvar Agendamento')}
         </button>
       </div>
+
+      {/* CARD FLUTUANTE DE PRÉ-VISUALIZAÇÃO EM HOVER (TAMANHO MAIOR / ZOOM) */}
+      {hoverMedia && (
+        <div
+          style={{
+            position: 'fixed',
+            left: hoverMedia.x,
+            top: hoverMedia.y,
+            zIndex: 99999,
+            pointerEvents: 'none',
+            width: 280,
+            background: '#0D1117',
+            border: '1px solid rgba(56, 139, 253, 0.6)',
+            boxShadow: '0 16px 40px rgba(0, 0, 0, 0.9), 0 0 20px rgba(56, 139, 253, 0.3)',
+            borderRadius: 12,
+            overflow: 'hidden',
+            padding: 10,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+            animation: 'fadeInScale 0.15s ease-out'
+          }}
+        >
+          <div style={{
+            width: '100%',
+            height: 280,
+            background: '#010409',
+            borderRadius: 8,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            overflow: 'hidden',
+            border: '1px solid rgba(255,255,255,0.06)'
+          }}>
+            {hoverMedia.isVideo ? (
+              <video
+                src={hoverMedia.url}
+                autoPlay
+                loop
+                muted
+                playsInline
+                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              />
+            ) : (
+              <img
+                src={hoverMedia.url}
+                alt={hoverMedia.name}
+                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              />
+            )}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#F0F6FC', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {hoverMedia.name}
+            </span>
+            <span style={{
+              fontSize: 9,
+              fontWeight: 800,
+              padding: '2px 6px',
+              borderRadius: 4,
+              background: hoverMedia.isVideo ? 'rgba(239, 68, 68, 0.2)' : 'rgba(56, 139, 253, 0.2)',
+              color: hoverMedia.isVideo ? '#F87171' : '#58A6FF',
+              whiteSpace: 'nowrap'
+            }}>
+              {hoverMedia.isVideo ? '🎬 Vídeo (Reels)' : '📸 Foto (Feed)'}
+            </span>
+          </div>
+
+          <div style={{
+            fontSize: 9,
+            color: '#8B949E',
+            textAlign: 'center',
+            borderTop: '1px solid rgba(255,255,255,0.08)',
+            paddingTop: 6,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 4
+          }}>
+            <span>🔍 Clique na mídia para abrir em tela cheia</span>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL LIGHTBOX EM TELA CHEIA AO CLICAR */}
+      {lightboxMedia && (
+        <div
+          onClick={() => setLightboxMedia(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 100000,
+            background: 'rgba(0, 0, 0, 0.85)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 20,
+            animation: 'fadeIn 0.2s ease-out'
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              position: 'relative',
+              maxWidth: '90vw',
+              maxHeight: '90vh',
+              background: '#161B22',
+              border: '1px solid #30363D',
+              borderRadius: 14,
+              padding: 16,
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.95)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 12
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#F0F6FC', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {lightboxMedia.name}
+                </span>
+                <span style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  padding: '2px 6px',
+                  borderRadius: 4,
+                  background: lightboxMedia.isVideo ? 'rgba(239, 68, 68, 0.2)' : 'rgba(56, 139, 253, 0.2)',
+                  color: lightboxMedia.isVideo ? '#F87171' : '#58A6FF',
+                  flexShrink: 0
+                }}>
+                  {lightboxMedia.isVideo ? '🎬 Vídeo' : '📸 Imagem'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLightboxMedia(null)}
+                style={{
+                  background: '#21262D',
+                  border: '1px solid #30363D',
+                  borderRadius: '50%',
+                  width: 28,
+                  height: 28,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#C9D1D9',
+                  cursor: 'pointer',
+                  flexShrink: 0
+                }}
+                title="Fechar (Esc)"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              maxWidth: 850,
+              maxHeight: '75vh',
+              overflow: 'hidden',
+              borderRadius: 8,
+              background: '#010409'
+            }}>
+              {lightboxMedia.isVideo ? (
+                <video
+                  src={lightboxMedia.url}
+                  controls
+                  autoPlay
+                  playsInline
+                  style={{ maxWidth: '100%', maxHeight: '75vh', objectFit: 'contain' }}
+                />
+              ) : (
+                <img
+                  src={lightboxMedia.url}
+                  alt={lightboxMedia.name}
+                  style={{ maxWidth: '100%', maxHeight: '75vh', objectFit: 'contain' }}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </form>
   );
 }
