@@ -15,9 +15,9 @@ if hasattr(sys.stderr, 'reconfigure'):
     sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
 # Configurações padrão da VPS
-VPS_HOST = os.environ.get("VPS_HOST", "146.235.54.162")
+VPS_HOST = os.environ.get("VPS_HOST", "137.131.202.56")
 VPS_USER = os.environ.get("VPS_USER", "ubuntu")
-SSH_KEY = os.environ.get("SSH_KEY", r"C:\Users\sergi\Downloads\ssh-key-2026-08-29.key")
+SSH_KEY = os.environ.get("SSH_KEY", r"C:\Users\sergi\Downloads\ssh-key-2026-09-07.key")
 REMOTE_DB_PATH = "/var/www/socialtracker/instagram_tracker.db"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
