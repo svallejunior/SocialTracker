@@ -1861,6 +1861,22 @@ export default function Dashboard() {
   const [postsPerPage, setPostsPerPage] = useState<number>(20);
   const [refreshingFeed, setRefreshingFeed] = useState<boolean>(false);
   const [refreshingCards, setRefreshingCards] = useState<boolean>(false);
+  const [ocultarMinhasModelosVirais, setOcultarMinhasModelosVirais] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('socialtracker_ocultar_minhas_modelos_virais') === 'true';
+    }
+    return false;
+  });
+
+  const handleToggleOcultarMinhasModelos = () => {
+    setOcultarMinhasModelosVirais(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('socialtracker_ocultar_minhas_modelos_virais', String(next));
+      } catch {}
+      return next;
+    });
+  };
   const [modalPostEvolucao, setModalPostEvolucao] = useState<any | null>(null);
   const [searchAcompanhados, setSearchAcompanhados] = useState('');
   const [acompStatusFilter, setAcompStatusFilter] = useState<'TODOS' | 'ATIVO' | 'INATIVO' | 'INDISPONIVEL' | 'MORREU'>('TODOS');
@@ -4676,36 +4692,157 @@ export default function Dashboard() {
             )}
           </div>
 
+          {/* Atalho e Filtro: Minhas Modelos com botão para excluir da listagem logo após o nome delas */}
+          {profiles.some(p => Number(p.meu_perfil) === 1 && p.exibir !== 0) && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              flexWrap: 'wrap',
+              marginBottom: '18px',
+              padding: '10px 14px',
+              background: 'rgba(22, 27, 34, 0.7)',
+              border: '1px solid #30363D',
+              borderRadius: '10px'
+            }}>
+              <span style={{ color: '#F5C518', fontSize: '11px', fontWeight: 800, letterSpacing: '0.04em', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                ⭐ MINHAS MODELOS:
+              </span>
+              {[...profiles]
+                .filter(p => Number(p.meu_perfil) === 1 && p.exibir !== 0)
+                .sort((a, b) => a.username.localeCompare(b.username))
+                .map(p => (
+                  <span
+                    key={p.username}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '3px 8px',
+                      borderRadius: '999px',
+                      background: ocultarMinhasModelosVirais ? 'rgba(255, 255, 255, 0.04)' : 'rgba(245, 197, 24, 0.1)',
+                      border: `1px solid ${ocultarMinhasModelosVirais ? '#30363D' : 'rgba(245, 197, 24, 0.3)'}`,
+                      color: ocultarMinhasModelosVirais ? '#8B949E' : '#F0F6FC',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      textDecoration: ocultarMinhasModelosVirais ? 'line-through' : 'none',
+                      opacity: ocultarMinhasModelosVirais ? 0.55 : 1
+                    }}
+                  >
+                    @{p.username}
+                  </span>
+                ))}
+
+              {/* Botão para excluir minhas modelos da listagem - logo após o nome delas */}
+              <button
+                type="button"
+                onClick={handleToggleOcultarMinhasModelos}
+                title={ocultarMinhasModelosVirais ? "Clique para reexibir minhas modelos na listagem" : "Clique para excluir minhas modelos da listagem de posts virais"}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  marginLeft: '4px',
+                  padding: '4px 12px',
+                  borderRadius: '8px',
+                  border: ocultarMinhasModelosVirais
+                    ? '1px solid rgba(0, 240, 255, 0.45)'
+                    : '1px solid rgba(248, 81, 73, 0.45)',
+                  background: ocultarMinhasModelosVirais
+                    ? 'rgba(0, 240, 255, 0.12)'
+                    : 'rgba(248, 81, 73, 0.12)',
+                  color: ocultarMinhasModelosVirais ? '#00F0FF' : '#F85149',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.background = ocultarMinhasModelosVirais ? 'rgba(0, 240, 255, 0.22)' : 'rgba(248, 81, 73, 0.22)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.background = ocultarMinhasModelosVirais ? 'rgba(0, 240, 255, 0.12)' : 'rgba(248, 81, 73, 0.12)';
+                }}
+              >
+                {ocultarMinhasModelosVirais ? (
+                  <>👁️ Reexibir Minhas Modelos ({profiles.filter(p => Number(p.meu_perfil) === 1 && p.exibir !== 0).length})</>
+                ) : (
+                  <>🚫 Excluir Minhas Modelos da Listagem</>
+                )}
+              </button>
+            </div>
+          )}
+
           <div className="cards-grid">
-            {[...profiles]
-              .filter(p => p.exibir !== 0)
-              .sort((a, b) => {
-                const isMeA = Number(a.meu_perfil) === 1 ? 1 : 0;
-                const isMeB = Number(b.meu_perfil) === 1 ? 1 : 0;
-                if (isMeA !== isMeB) {
-                  return isMeB - isMeA; // 1º Meus perfis
-                }
-                // Prioriza perfis que têm a publicação gerando mais visualizações NO DIA
-                const viewsDiaA = Number(a.postMaisViral?.views_dia) || 0;
-                const viewsDiaB = Number(b.postMaisViral?.views_dia) || 0;
-                if (viewsDiaB !== viewsDiaA) {
-                  return viewsDiaB - viewsDiaA;
-                }
-                // Critério secundário: maior ganho no momento (diferença da leitura anterior)
-                const viewsMomentoA = Number(a.postMaisViral?.delta_views_coleta) || 0;
-                const viewsMomentoB = Number(b.postMaisViral?.delta_views_coleta) || 0;
-                if (viewsMomentoB !== viewsMomentoA) {
-                  return viewsMomentoB - viewsMomentoA;
-                }
-                // Depois o que estiver com a última postagem viralizada e assim por diante
-                const dateA = a.latestViralTimestamp || 0;
-                const dateB = b.latestViralTimestamp || 0;
-                if (dateB !== dateA) {
-                  return dateB - dateA;
-                }
-                return (b.seguidores || 0) - (a.seguidores || 0);
-              })
-              .map(perfil => {
+            {(() => {
+              const cardsFiltrados = [...profiles]
+                .filter(p => p.exibir !== 0 && (!ocultarMinhasModelosVirais || Number(p.meu_perfil) !== 1))
+                .sort((a, b) => {
+                  const isMeA = Number(a.meu_perfil) === 1 ? 1 : 0;
+                  const isMeB = Number(b.meu_perfil) === 1 ? 1 : 0;
+                  if (isMeA !== isMeB) {
+                    return isMeB - isMeA; // 1º Meus perfis
+                  }
+                  // Prioriza perfis que têm a publicação gerando mais visualizações NO DIA
+                  const viewsDiaA = Number(a.postMaisViral?.views_dia) || 0;
+                  const viewsDiaB = Number(b.postMaisViral?.views_dia) || 0;
+                  if (viewsDiaB !== viewsDiaA) {
+                    return viewsDiaB - viewsDiaA;
+                  }
+                  // Critério secundário: maior ganho no momento (diferença da leitura anterior)
+                  const viewsMomentoA = Number(a.postMaisViral?.delta_views_coleta) || 0;
+                  const viewsMomentoB = Number(b.postMaisViral?.delta_views_coleta) || 0;
+                  if (viewsMomentoB !== viewsMomentoA) {
+                    return viewsMomentoB - viewsMomentoA;
+                  }
+                  // Depois o que estiver com a última postagem viralizada e assim por diante
+                  const dateA = a.latestViralTimestamp || 0;
+                  const dateB = b.latestViralTimestamp || 0;
+                  if (dateB !== dateA) {
+                    return dateB - dateA;
+                  }
+                  return (b.seguidores || 0) - (a.seguidores || 0);
+                });
+
+              if (cardsFiltrados.length === 0) {
+                return (
+                  <div style={{
+                    gridColumn: '1 / -1',
+                    padding: '40px 20px',
+                    textAlign: 'center',
+                    background: 'var(--background-card)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '12px',
+                    color: 'var(--text-secondary)'
+                  }}>
+                    <p style={{ fontSize: '15px', marginBottom: '8px' }}>
+                      Nenhum perfil disponível para exibição nesta listagem.
+                    </p>
+                    {ocultarMinhasModelosVirais && (
+                      <button
+                        type="button"
+                        onClick={handleToggleOcultarMinhasModelos}
+                        style={{
+                          background: 'rgba(0, 240, 255, 0.12)',
+                          border: '1px solid rgba(0, 240, 255, 0.4)',
+                          borderRadius: '8px',
+                          color: '#00F0FF',
+                          padding: '6px 14px',
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                          fontSize: '12px'
+                        }}
+                      >
+                        👁️ Reexibir Minhas Modelos
+                      </button>
+                    )}
+                  </div>
+                );
+              }
+
+              return cardsFiltrados.map(perfil => {
                 // Pegar a publicação da modelo trazendo mais visualizações no momento (diferença entre a leitura anterior)
                 const topPost = perfil.postMaisViral;
                 const hasViral = topPost && topPost.viralStatus === 'Viralizando';
@@ -4746,9 +4883,41 @@ export default function Dashboard() {
                           <span className="user-handle">@{perfil.username}</span>
                         </div>
                         {Number(perfil.meu_perfil) === 1 && (
-                          <span title="Meu perfil" style={{ fontSize: '16px', marginLeft: '4px', cursor: 'default', userSelect: 'none' }}>
-                            ⭐
-                          </span>
+                          <>
+                            <span title="Meu perfil" style={{ fontSize: '16px', marginLeft: '4px', cursor: 'default', userSelect: 'none' }}>
+                              ⭐
+                            </span>
+                            <button
+                              type="button"
+                              onClick={handleToggleOcultarMinhasModelos}
+                              title="Excluir minhas modelos da listagem de posts virais"
+                              style={{
+                                marginLeft: '8px',
+                                padding: '3px 8px',
+                                background: 'rgba(248, 81, 73, 0.12)',
+                                border: '1px solid rgba(248, 81, 73, 0.35)',
+                                borderRadius: '6px',
+                                color: '#F85149',
+                                fontSize: '10px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                transition: 'all 0.15s ease'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = 'rgba(248, 81, 73, 0.22)';
+                                e.currentTarget.style.borderColor = '#F85149';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = 'rgba(248, 81, 73, 0.12)';
+                                e.currentTarget.style.borderColor = 'rgba(248, 81, 73, 0.35)';
+                              }}
+                            >
+                              ✕ Excluir da listagem
+                            </button>
+                          </>
                         )}
                       </div>
                       <div className="badges-group">
@@ -5022,7 +5191,8 @@ export default function Dashboard() {
                     </div>
                   </div>
                 );
-              })}
+              });
+            })()}
           </div>
         </div>
       )}
