@@ -233,20 +233,16 @@ export async function GET(req: NextRequest) {
         console.warn('Erro ao consultar posts_historico:', e);
       }
 
-      // Mapa de agendamentos por id, meta_media_id e username+data para recuperar arquivos originais completos (ex: carrossel com todas as fotos)
-      const agMapPorId = new Map<string, any[]>();
-      const agMapPorMetaId = new Map<string, any[]>();
-      const agMapPorUserDate = new Map<string, any[]>();
+      // Mapa de agendamentos por id e meta_media_id para recuperar arquivos originais completos (ex: carrossel cadastrado com todas as fotos)
+      const agMapPorId = new Map<string, { tipo: string; arquivos: any[] }>();
+      const agMapPorMetaId = new Map<string, { tipo: string; arquivos: any[] }>();
 
       for (const ag of parsed) {
         const arqs = Array.isArray(ag.arquivos) ? ag.arquivos : [];
         if (arqs.length > 0) {
-          if (ag.id) agMapPorId.set(ag.id, arqs);
-          if (ag.meta_media_id) agMapPorMetaId.set(ag.meta_media_id, arqs);
-          const uKey = `${(ag.username || '').toLowerCase()}|${ag.data_especifica || (ag.publicado_em ? ag.publicado_em.split('T')[0] : '')}`;
-          if (!agMapPorUserDate.has(uKey) || arqs.length > agMapPorUserDate.get(uKey)!.length) {
-            agMapPorUserDate.set(uKey, arqs);
-          }
+          const entry = { tipo: (ag.tipo_postagem || 'FEED').toUpperCase(), arquivos: arqs };
+          if (ag.id) agMapPorId.set(ag.id, entry);
+          if (ag.meta_media_id) agMapPorMetaId.set(ag.meta_media_id, entry);
         }
       }
 
@@ -258,14 +254,24 @@ export async function GET(req: NextRequest) {
           pArqs = [];
         }
 
+        // NUNCA altera nem substitui mídias de REELS por carrossel ou fotos de outros posts!
+        const pTipo = (p.tipo_postagem || '').toUpperCase();
+        if (pTipo === 'REELS') {
+          return {
+            ...p,
+            arquivos: pArqs
+          };
+        }
+
         const metaId = (p.meta_media_id || '').toString().trim();
         const agId = (p.agendamento_id || '').toString().trim();
-        const uKey = `${(p.username || '').toLowerCase()}|${p.data_local}`;
 
-        // Se o agendamento correspondente tiver mais fotos (ex: carrossel cadastrado), usa a lista completa!
-        const agArqs = (agId && agMapPorId.get(agId)) || (metaId && agMapPorMetaId.get(metaId)) || agMapPorUserDate.get(uKey);
-        if (agArqs && agArqs.length > pArqs.length) {
-          pArqs = agArqs;
+        // Encontra o agendamento correspondente APENAS por ID do agendamento ou Meta Media ID específico deste post
+        const matchedAg = (agId && agMapPorId.get(agId)) || (metaId && agMapPorMetaId.get(metaId));
+
+        // Só enriquece se o agendamento for do mesmo formato (FEED/Carrossel) e tiver mais arquivos
+        if (matchedAg && matchedAg.tipo !== 'REELS' && matchedAg.arquivos.length > pArqs.length) {
+          pArqs = matchedAg.arquivos;
         }
 
         return {
