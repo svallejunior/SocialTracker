@@ -40,6 +40,7 @@ export interface AgendamentoArquivo {
   url?: string;
   size?: number;
   type?: string;
+  tipo?: string;
   previewUrl?: string | null;
 }
 
@@ -96,11 +97,17 @@ export interface Publicacao {
 
 export function getMediaUrl(arq?: AgendamentoArquivo | null, metaAccountId?: string): string {
   if (!arq) return '';
-  if (arq.url && (arq.url.startsWith('http://') || arq.url.startsWith('https://') || arq.url.startsWith('/'))) {
-    return arq.url;
-  }
+  // 1. Se tiver previewUrl válida (CDN de imagem do Instagram, base64 ou miniatura direta), prioriza para exibição de imagem
   if (arq.previewUrl && (arq.previewUrl.startsWith('http://') || arq.previewUrl.startsWith('https://') || arq.previewUrl.startsWith('data:') || arq.previewUrl.startsWith('/'))) {
     return arq.previewUrl;
+  }
+  // 2. Se a URL for um link direto de arquivo de mídia
+  if (arq.url && (arq.url.startsWith('http://') || arq.url.startsWith('https://') || arq.url.startsWith('/'))) {
+    // Páginas web do Instagram (ex: instagram.com/p/... ou /reel/...) não são imagens/vídeos diretos
+    if (arq.url.includes('instagram.com/p/') || arq.url.includes('instagram.com/reel/')) {
+      return arq.previewUrl || '';
+    }
+    return arq.url;
   }
   if (arq.savedName) {
     const acc = metaAccountId || 'geral';
@@ -115,9 +122,10 @@ export function getMediaUrl(arq?: AgendamentoArquivo | null, metaAccountId?: str
 
 export function isVideoFile(arq?: AgendamentoArquivo | null): boolean {
   if (!arq) return false;
+  if (arq.tipo && (arq.tipo.toLowerCase().includes('reel') || arq.tipo.toLowerCase().includes('vid') || arq.tipo.toLowerCase().includes('vídeo'))) return true;
   if (arq.type && arq.type.startsWith('video/')) return true;
   const testStr = (arq.name || arq.savedName || arq.url || arq.path || '').toLowerCase();
-  return testStr.endsWith('.mp4') || testStr.endsWith('.mov') || testStr.endsWith('.m4v') || testStr.endsWith('.webm');
+  return testStr.endsWith('.mp4') || testStr.endsWith('.mov') || testStr.endsWith('.m4v') || testStr.endsWith('.webm') || testStr.includes('/dashinit.mp4');
 }
 
 // Opção de Reels na Grade default DESABILITADA
@@ -2010,7 +2018,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                               <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
                                 {/* 1. STATUS À FRENTE DE TUDO: "v" verde */}
                                 <span
-                                  title="Post publicado no Instagram oficial via Meta Graph API"
+                                  title="Post publicado no Instagram oficial"
                                   style={{
                                     width: 24,
                                     height: 24,
@@ -2038,6 +2046,57 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                                 }}>
                                   {pub.tipo_postagem === 'REELS' ? '🎬 Reels' : '🖼️ Feed'}
                                 </span>
+
+                                {/* Miniaturas das mídias com hover zoom na lista */}
+                                {arquivosPub.length > 0 && (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+                                    {arquivosPub.slice(0, 2).map((arq, aIdx) => {
+                                      const url = getMediaUrl(arq, pub.meta_account_id);
+                                      const isVid = isVideoFile(arq) || pub.tipo_postagem === 'REELS';
+                                      return (
+                                        <div
+                                          key={aIdx}
+                                          onMouseEnter={(e) => handleGlobalMediaHover(e, arq, pub.meta_account_id)}
+                                          onMouseMove={(e) => handleGlobalMediaHover(e, arq, pub.meta_account_id)}
+                                          onMouseLeave={() => setGlobalHoverMedia(null)}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (url) {
+                                              setGlobalLightboxMedia({ url, name: arq.name || `Post @${pub.username}`, isVideo: isVid });
+                                            } else if (permalink) {
+                                              window.open(permalink, '_blank');
+                                            }
+                                          }}
+                                          style={{
+                                            width: 22,
+                                            height: 22,
+                                            borderRadius: 4,
+                                            overflow: 'hidden',
+                                            border: '1px solid rgba(46, 160, 67, 0.45)',
+                                            cursor: 'pointer',
+                                            background: '#010409',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            position: 'relative'
+                                          }}
+                                          title="Passe o mouse para ver ou clique para abrir"
+                                        >
+                                          {url ? (
+                                            <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                          ) : isVid ? (
+                                            <Film size={11} color="#F87171" />
+                                          ) : (
+                                            <ImageIcon size={11} color="#60A5FA" />
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                    {arquivosPub.length > 2 && (
+                                      <span style={{ fontSize: 9, color: '#8B949E' }}>+{arquivosPub.length - 2}</span>
+                                    )}
+                                  </div>
+                                )}
 
                                 <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11, color: '#C9D1D9' }}>
                                   <span style={{ fontWeight: 600, color: '#7EE787', marginRight: 6 }}>{pub.hora_local || 'Publicado'}</span>
@@ -2078,53 +2137,236 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                     </div>
                   )}
 
-                  {/* Se for hoje ou futuro: exibe o botão de agendamento e a lista de agendamentos */}
-                  {!isDiaPassado && agendamentosDoDia.length === 0 && !isFormOpen && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingAgendamentoMap(prev => ({ ...prev, [perfil.username]: null }));
-                        setFormOpenMap(prev => ({ ...prev, [perfil.username]: true }));
-                      }}
-                      style={{
-                        width: '100%',
-                        padding: '12px 14px',
-                        borderRadius: 8,
-                        border: '1px dashed #3B82F6',
-                        background: 'rgba(59, 130, 246, 0.08)',
-                        color: '#60A5FA',
-                        fontWeight: 700,
-                        fontSize: 12,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 4,
-                        transition: 'all 0.2s',
-                        marginBottom: 4
-                      }}
-                      onMouseEnter={e => {
-                        e.currentTarget.style.background = 'rgba(59, 130, 246, 0.16)';
-                        e.currentTarget.style.borderColor = '#60A5FA';
-                      }}
-                      onMouseLeave={e => {
-                        e.currentTarget.style.background = 'rgba(59, 130, 246, 0.08)';
-                        e.currentTarget.style.borderColor = '#3B82F6';
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <Plus size={15} />
-                        <span>AGENDAR POSTAGEM</span>
-                      </div>
-                      <span style={{ fontSize: 9, color: '#8B949E', fontWeight: 500 }}>
-                        (ou arraste a mídia direto nesta janela)
-                      </span>
-                    </button>
-                  )}
-
-                  {!isDiaPassado && agendamentosDoDia.length > 0 && !isFormOpen && (
+                  {/* Se for hoje ou futuro: exibe publicações já realizadas hoje no Instagram + agendamentos */}
+                  {!isDiaPassado && !isFormOpen && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 6 }}>
+                      {/* Publicações já realizadas no Instagram hoje */}
+                      {pubsDoDiaSelecionado.length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {pubsDoDiaSelecionado.map((pub, pIdx) => {
+                            const arquivosPub = Array.isArray(pub.arquivos) ? pub.arquivos : [];
+                            const instaLink = arquivosPub.find(a => typeof a?.url === 'string' && a.url.includes('instagram.com/'))?.url;
+                            const permalink = instaLink || arquivosPub[0]?.url || (pub.meta_media_id ? `https://www.instagram.com/p/${pub.meta_media_id}/` : '');
+                            return (
+                              <div
+                                key={pub.id || pIdx}
+                                style={{
+                                  background: '#161B22',
+                                  border: '1px solid rgba(46, 160, 67, 0.35)',
+                                  borderRadius: 8,
+                                  padding: '9px 12px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  gap: 8,
+                                  transition: 'all 0.15s ease'
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
+                                  <span
+                                    title="Publicado no Instagram hoje com sucesso!"
+                                    style={{
+                                      width: 24,
+                                      height: 24,
+                                      borderRadius: 6,
+                                      background: 'rgba(52, 211, 153, 0.15)',
+                                      border: '1px solid rgba(52, 211, 153, 0.35)',
+                                      color: '#34D399',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      flexShrink: 0
+                                    }}
+                                  >
+                                    <Check size={13} strokeWidth={2.8} />
+                                  </span>
+
+                                  <span style={{
+                                    fontSize: 10,
+                                    fontWeight: 800,
+                                    padding: '3px 7px',
+                                    borderRadius: 5,
+                                    flexShrink: 0,
+                                    background: pub.tipo_postagem === 'REELS' ? 'rgba(239,68,68,0.2)' : 'rgba(59,130,246,0.2)',
+                                    color: pub.tipo_postagem === 'REELS' ? '#F87171' : '#60A5FA'
+                                  }}>
+                                    {pub.tipo_postagem === 'REELS' ? '🎬 Reels' : '🖼️ Feed'}
+                                  </span>
+
+                                  {/* Miniaturas das mídias com hover zoom na lista para posts publicados hoje */}
+                                  {arquivosPub.length > 0 && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+                                      {arquivosPub.slice(0, 2).map((arq, aIdx) => {
+                                        const url = getMediaUrl(arq, pub.meta_account_id);
+                                        const isVid = isVideoFile(arq) || pub.tipo_postagem === 'REELS';
+                                        return (
+                                          <div
+                                            key={aIdx}
+                                            onMouseEnter={(e) => handleGlobalMediaHover(e, arq, pub.meta_account_id)}
+                                            onMouseMove={(e) => handleGlobalMediaHover(e, arq, pub.meta_account_id)}
+                                            onMouseLeave={() => setGlobalHoverMedia(null)}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              if (url) {
+                                                setGlobalLightboxMedia({ url, name: arq.name || `Post @${pub.username}`, isVideo: isVid });
+                                              } else if (permalink) {
+                                                window.open(permalink, '_blank');
+                                              }
+                                            }}
+                                            style={{
+                                              width: 22,
+                                              height: 22,
+                                              borderRadius: 4,
+                                              overflow: 'hidden',
+                                              border: '1px solid rgba(46, 160, 67, 0.45)',
+                                              cursor: 'pointer',
+                                              background: '#010409',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              justifyContent: 'center',
+                                              position: 'relative'
+                                            }}
+                                            title="Passe o mouse para ver ou clique para abrir"
+                                          >
+                                            {url ? (
+                                              <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                            ) : isVid ? (
+                                              <Film size={11} color="#F87171" />
+                                            ) : (
+                                              <ImageIcon size={11} color="#60A5FA" />
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                      {arquivosPub.length > 2 && (
+                                        <span style={{ fontSize: 9, color: '#8B949E' }}>+{arquivosPub.length - 2}</span>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11, color: '#C9D1D9' }}>
+                                    <span style={{ fontWeight: 600, color: '#7EE787', marginRight: 6 }}>{pub.hora_local || 'Publicado'}</span>
+                                    {pub.legenda && (
+                                      <span style={{ color: '#8B949E' }}>{pub.legenda.slice(0, 45)}{pub.legenda.length > 45 ? '...' : ''}</span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                                  {permalink && (
+                                    <a
+                                      href={permalink}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      title="Ver postagem no Instagram"
+                                      style={{
+                                        background: 'rgba(56, 139, 253, 0.15)',
+                                        color: '#58A6FF',
+                                        padding: '2px 6px',
+                                        borderRadius: 4,
+                                        fontSize: 9,
+                                        fontWeight: 700,
+                                        textDecoration: 'none',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: 3
+                                      }}
+                                    >
+                                      Ver <ExternalLink size={9} />
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Botão de criar agendamento caso ainda não exista nenhuma atividade */}
+                      {pubsDoDiaSelecionado.length === 0 && agendamentosDoDia.length === 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingAgendamentoMap(prev => ({ ...prev, [perfil.username]: null }));
+                            setFormOpenMap(prev => ({ ...prev, [perfil.username]: true }));
+                          }}
+                          style={{
+                            width: '100%',
+                            padding: '12px 14px',
+                            borderRadius: 8,
+                            border: '1px dashed #3B82F6',
+                            background: 'rgba(59, 130, 246, 0.08)',
+                            color: '#60A5FA',
+                            fontWeight: 700,
+                            fontSize: 12,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 4,
+                            transition: 'all 0.2s',
+                            marginBottom: 4
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.background = 'rgba(59, 130, 246, 0.16)';
+                            e.currentTarget.style.borderColor = '#60A5FA';
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.background = 'rgba(59, 130, 246, 0.08)';
+                            e.currentTarget.style.borderColor = '#3B82F6';
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <Plus size={15} />
+                            <span>AGENDAR POSTAGEM</span>
+                          </div>
+                          <span style={{ fontSize: 9, color: '#8B949E', fontWeight: 500 }}>
+                            (ou arraste a mídia direto nesta janela)
+                          </span>
+                        </button>
+                      )}
+
+                      {/* Botão compacto para adicionar agendamento se já houver posts publicados hoje mas nenhum agendamento pendente */}
+                      {pubsDoDiaSelecionado.length > 0 && agendamentosDoDia.length === 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingAgendamentoMap(prev => ({ ...prev, [perfil.username]: null }));
+                            setFormOpenMap(prev => ({ ...prev, [perfil.username]: true }));
+                          }}
+                          style={{
+                            width: '100%',
+                            padding: '7px 10px',
+                            borderRadius: 6,
+                            border: '1px dashed #30363D',
+                            background: 'transparent',
+                            color: '#8B949E',
+                            fontSize: 11,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 6,
+                            transition: 'all 0.15s'
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.borderColor = '#388BFD';
+                            e.currentTarget.style.color = '#388BFD';
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.borderColor = '#30363D';
+                            e.currentTarget.style.color = '#8B949E';
+                          }}
+                        >
+                          <Plus size={13} />
+                          Adicionar agendamento nesta data
+                        </button>
+                      )}
+
+                      {agendamentosDoDia.length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 6 }}>
                       {agendamentosDoDia.map(ag => (
                         <div
                           key={ag.id}
@@ -2395,6 +2637,8 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                       </button>
                     </div>
                   )}
+                </div>
+              )}
 
                   {/* FORMULÁRIO EXPANDIDO DE AGENDAMENTO */}
                   {isFormOpen && (
@@ -2717,22 +2961,27 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
             overflow: 'hidden',
             border: '1px solid rgba(255,255,255,0.06)'
           }}>
-            {globalHoverMedia.isVideo ? (
-              <video
-                src={globalHoverMedia.url}
-                autoPlay
-                loop
-                muted
-                playsInline
-                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-              />
-            ) : (
-              <img
-                src={globalHoverMedia.url}
-                alt={globalHoverMedia.name}
-                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-              />
-            )}
+            {(() => {
+              const isRealVideo = globalHoverMedia.isVideo && Boolean(
+                globalHoverMedia.url.match(/\.(mp4|mov|m4v|webm)(\?|$)/i) || globalHoverMedia.url.includes('/dashinit.mp4')
+              );
+              return isRealVideo ? (
+                <video
+                  src={globalHoverMedia.url}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                />
+              ) : (
+                <img
+                  src={globalHoverMedia.url}
+                  alt={globalHoverMedia.name}
+                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                />
+              );
+            })()}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
@@ -2850,21 +3099,26 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
               borderRadius: 8,
               background: '#010409'
             }}>
-              {globalLightboxMedia.isVideo ? (
-                <video
-                  src={globalLightboxMedia.url}
-                  controls
-                  autoPlay
-                  playsInline
-                  style={{ maxWidth: '100%', maxHeight: '75vh', objectFit: 'contain' }}
-                />
-              ) : (
-                <img
-                  src={globalLightboxMedia.url}
-                  alt={globalLightboxMedia.name}
-                  style={{ maxWidth: '100%', maxHeight: '75vh', objectFit: 'contain' }}
-                />
-              )}
+              {(() => {
+                const isRealVideo = globalLightboxMedia.isVideo && Boolean(
+                  globalLightboxMedia.url.match(/\.(mp4|mov|m4v|webm)(\?|$)/i) || globalLightboxMedia.url.includes('/dashinit.mp4')
+                );
+                return isRealVideo ? (
+                  <video
+                    src={globalLightboxMedia.url}
+                    controls
+                    autoPlay
+                    playsInline
+                    style={{ maxWidth: '100%', maxHeight: '75vh', objectFit: 'contain' }}
+                  />
+                ) : (
+                  <img
+                    src={globalLightboxMedia.url}
+                    alt={globalLightboxMedia.name}
+                    style={{ maxWidth: '100%', maxHeight: '75vh', objectFit: 'contain' }}
+                  />
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -3299,17 +3553,89 @@ function CalendarioAgendamentos({
             </button>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {selectedDayInfo.publicados.map((pub, idx) => (
-              <div key={`pub-${idx}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#7EE787', fontSize: 11 }}>
-                <span>
-                  {pub.tipo_postagem === 'REELS' ? '🎬 Reels' : '🖼️ Feed'}
-                  <span style={{ color: '#8B949E', marginLeft: 4 }}>({pub.hora_local || 'Publicado'})</span>
-                </span>
-                <span style={{ color: '#34D399', fontSize: 9, fontWeight: 700, background: 'rgba(52, 211, 153, 0.12)', padding: '1px 5px', borderRadius: 4 }}>
-                  ✅ No Instagram
-                </span>
-              </div>
-            ))}
+            {selectedDayInfo.publicados.map((pub, idx) => {
+              const arquivosPub = Array.isArray(pub.arquivos) ? pub.arquivos : [];
+              const instaLink = arquivosPub.find(a => typeof a?.url === 'string' && a.url.includes('instagram.com/'))?.url
+                || (pub.meta_media_id ? `https://www.instagram.com/p/${pub.meta_media_id}/` : '');
+              return (
+                <div key={`pub-${idx}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#7EE787', fontSize: 11, gap: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: 1 }}>
+                    <span style={{ whiteSpace: 'nowrap' }}>
+                      {pub.tipo_postagem === 'REELS' ? '🎬 Reels' : '🖼️ Feed'}
+                      <span style={{ color: '#8B949E', marginLeft: 4 }}>({pub.hora_local || 'Publicado'})</span>
+                    </span>
+                    {pub.legenda && (
+                      <span style={{ color: '#8B949E', fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {pub.legenda.slice(0, 25)}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                    {arquivosPub.length > 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        {arquivosPub.slice(0, 3).map((arq, aIdx) => {
+                          const url = getMediaUrl(arq, pub.meta_account_id);
+                          const isVid = isVideoFile(arq) || pub.tipo_postagem === 'REELS';
+                          return (
+                            <div
+                              key={aIdx}
+                              onMouseEnter={(e) => onMediaHover?.(e, arq, pub.meta_account_id)}
+                              onMouseMove={(e) => onMediaHover?.(e, arq, pub.meta_account_id)}
+                              onMouseLeave={() => onMediaLeave?.()}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (url) {
+                                  onMediaClick?.({ url, name: arq.name || `Post @${pub.username}`, isVideo: isVid });
+                                } else if (instaLink) {
+                                  window.open(instaLink, '_blank');
+                                }
+                              }}
+                              style={{
+                                width: 18,
+                                height: 18,
+                                borderRadius: 3,
+                                overflow: 'hidden',
+                                border: '1px solid rgba(46, 160, 67, 0.45)',
+                                background: '#010409',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                position: 'relative'
+                              }}
+                              title="Passe o mouse para ver ou clique para abrir"
+                            >
+                              {url ? (
+                                <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              ) : isVid ? (
+                                <Film size={10} color="#F87171" />
+                              ) : (
+                                <ImageIcon size={10} color="#60A5FA" />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <span style={{ color: '#34D399', fontSize: 9, fontWeight: 700, background: 'rgba(52, 211, 153, 0.12)', padding: '1px 5px', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                      ✅ No Instagram
+                    </span>
+                    {instaLink && (
+                      <a
+                        href={instaLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        title="Abrir publicação no Instagram"
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ color: '#58A6FF', display: 'flex', alignItems: 'center' }}
+                      >
+                        <ExternalLink size={10} />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
             {selectedDayInfo.posts.map((post, idx) => (
               <div key={`post-${idx}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#C9D1D9', gap: 6 }}>
                 <span>

@@ -152,6 +152,87 @@ export async function GET(req: NextRequest) {
         rawPubs.push(p);
       }
 
+      // Busca também do posts_historico para cobrir postagens feitas diretamente pelo app do Instagram ou coletadas
+      try {
+        const histSql = username
+          ? `SELECT post_id, username, formato, data_postagem, media_url, thumbnail_url, permalink, legenda
+              FROM posts_historico
+              WHERE LOWER(username) = LOWER(?)
+                AND (is_deleted IS NULL OR is_deleted = 0)
+                AND data_postagem >= date('now', 'localtime', '-180 days')
+              ORDER BY data_postagem DESC`
+          : `SELECT post_id, username, formato, data_postagem, media_url, thumbnail_url, permalink, legenda
+              FROM posts_historico
+              WHERE (is_deleted IS NULL OR is_deleted = 0)
+                AND data_postagem >= date('now', 'localtime', '-180 days')
+              ORDER BY data_postagem DESC`;
+        const histRows = username ? await db.all(histSql, [username]) : await db.all(histSql);
+
+        const thumbMap = new Map<string, string>();
+        for (const h of histRows) {
+          const pid = (h.post_id || '').toString().trim();
+          const thumb = h.thumbnail_url || h.media_url || '';
+          if (pid && thumb) thumbMap.set(pid, thumb);
+        }
+
+        for (const h of histRows) {
+          const metaId = (h.post_id || '').toString().trim();
+          if (metaId && seenMetaIds.has(metaId)) continue;
+          if (metaId) seenMetaIds.add(metaId);
+
+          const partesDt = (h.data_postagem || '').split(' ');
+          const dataLocal = partesDt[0] || '';
+          const horaLocal = partesDt[1] || '12:00:00';
+          const horaChave = horaLocal.slice(0, 4);
+          const legChave = (h.legenda || '').trim().slice(0, 20).toLowerCase();
+          const fallbackKey = `${(h.username || '').toLowerCase()}|${dataLocal}|${h.formato}|${horaChave}|${legChave}`;
+          if (legChave && seenFallback.has(fallbackKey)) continue;
+          if (legChave) seenFallback.add(fallbackKey);
+
+          const fmt = (h.formato || '').toUpperCase();
+          const tipoPub = fmt.includes('REEL') || fmt.includes('VÍDEO') || fmt.includes('VIDEO') ? 'REELS' : 'FEED';
+          const linkPost = h.permalink || (metaId ? `https://www.instagram.com/p/${metaId}/` : '');
+          const thumb = h.thumbnail_url || h.media_url || '';
+
+          rawPubs.push({
+            id: `meta_${metaId}`,
+            agendamento_id: null,
+            username: h.username,
+            meta_account_id: '',
+            tipo_postagem: tipoPub,
+            data_local: dataLocal,
+            hora_local: horaLocal,
+            publicado_em: h.data_postagem,
+            status: 'PUBLICADO',
+            meta_media_id: metaId,
+            erro_detalhe: '',
+            arquivos: JSON.stringify([{
+              url: linkPost,
+              previewUrl: thumb,
+              tipo: h.formato || 'Imagem'
+            }]),
+            legenda: h.legenda || '',
+            origem: 'INSTAGRAM'
+          });
+        }
+
+        // Enriquecer rawPubs cujos arquivos não tenham previewUrl mas temos no thumbMap
+        for (const p of rawPubs) {
+          const metaId = (p.meta_media_id || '').toString().trim();
+          if (metaId && thumbMap.has(metaId)) {
+            try {
+              let arqs = typeof p.arquivos === 'string' ? JSON.parse(p.arquivos) : p.arquivos;
+              if (Array.isArray(arqs) && arqs.length > 0 && !arqs[0].previewUrl) {
+                arqs[0].previewUrl = thumbMap.get(metaId);
+                p.arquivos = JSON.stringify(arqs);
+              }
+            } catch (e) {}
+          }
+        }
+      } catch (e) {
+        console.warn('Erro ao consultar posts_historico:', e);
+      }
+
       publicacoes = rawPubs.map((p: any) => ({
         ...p,
         arquivos: (() => {
