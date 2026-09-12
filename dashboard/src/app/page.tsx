@@ -1,6 +1,7 @@
 "use client";
 export const dynamic = 'force-dynamic';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import nextDynamic from 'next/dynamic';
 import {
@@ -364,96 +365,260 @@ const FeedMediaThumbnail = ({
   onClick: () => void;
 }) => {
   const [imgError, setImgError] = useState(false);
+  const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setHoverPos(null);
+    };
+    const handleScroll = () => {
+      setHoverPos(null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('scroll', handleScroll, true);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('scroll', handleScroll, true);
+    };
+  }, []);
+
   const mediaSrc = post.thumbnail_url || post.media_url;
-  const isDirectVideo = typeof mediaSrc === 'string' && (mediaSrc.endsWith('.mp4') || mediaSrc.endsWith('.webm') || mediaSrc.includes('/video/'));
+  const isDirectVideo = typeof mediaSrc === 'string' && (
+    mediaSrc.endsWith('.mp4') || mediaSrc.endsWith('.webm') || mediaSrc.includes('/video/') || mediaSrc.includes('/dashinit.mp4')
+  );
   const hasValidMedia = Boolean(mediaSrc) && !imgError && !isDirectVideo;
+
+  const handleHover = (e: React.MouseEvent) => {
+    if (!mediaSrc || imgError) return;
+    const cardW = 280;
+    const cardH = 340;
+
+    let x = e.clientX + 16;
+    if (x + cardW > window.innerWidth - 12) {
+      x = e.clientX - cardW - 16;
+    }
+    if (x < 12) x = 12;
+
+    let y = e.clientY - cardH / 2;
+    if (y < 12) y = 12;
+    if (y + cardH > window.innerHeight - 12) {
+      y = window.innerHeight - cardH - 12;
+    }
+
+    setHoverPos({ x, y });
+  };
+
+  const handleMouseLeave = () => {
+    setHoverPos(null);
+  };
+
+  const handleClick = () => {
+    setHoverPos(null);
+    onClick();
+  };
 
   const tooltipText = `${post.formato || 'Post'}${post.legenda ? ` • ${post.legenda.slice(0, 100)}` : ''} • Clique para ver evolução`;
 
+  const isReels = post.formato === 'Reels' || isDirectVideo;
+  const isCarrossel = post.formato === 'Carrossel';
+
   return (
-    <div
-      onClick={onClick}
-      title={tooltipText}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        cursor: 'pointer'
-      }}
-    >
-      {hasValidMedia ? (
+    <>
+      <div
+        onClick={handleClick}
+        onMouseEnter={handleHover}
+        onMouseMove={handleHover}
+        onMouseLeave={handleMouseLeave}
+        title={hoverPos ? undefined : tooltipText}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer'
+        }}
+      >
+        {hasValidMedia ? (
+          <div
+            style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '8px',
+              overflow: 'hidden',
+              border: '1px solid #30363D',
+              backgroundColor: '#0D1117',
+              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.35)',
+              transition: 'transform 0.15s ease, border-color 0.15s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = '#00F0FF';
+              e.currentTarget.style.transform = 'scale(1.08)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = '#30363D';
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
+          >
+            <img
+              src={mediaSrc}
+              alt={post.formato || 'Mídia'}
+              loading="lazy"
+              decoding="async"
+              onError={() => setImgError(true)}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                display: 'block'
+              }}
+            />
+          </div>
+        ) : (
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '36px',
+              height: '36px',
+              borderRadius: '8px',
+              backgroundColor: 'rgba(255, 255, 255, 0.05)',
+              border: '1px solid #30363D',
+              flexShrink: 0,
+              boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
+              transition: 'transform 0.15s ease, border-color 0.15s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = '#00F0FF';
+              e.currentTarget.style.transform = 'scale(1.08)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = '#30363D';
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
+          >
+            {post.formato === 'Reels' ? (
+              <VideoIcon size={16} style={{ color: 'var(--color-cyan)' }} />
+            ) : post.formato === 'Carrossel' ? (
+              <LayersIcon size={16} style={{ color: 'var(--color-purple)' }} />
+            ) : (
+              <ImageIcon size={16} style={{ color: 'var(--text-secondary)' }} />
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* CARD FLUTUANTE DE PRÉ-VISUALIZAÇÃO EM HOVER (PADRÃO AGENDAMENTOS) */}
+      {hoverPos && mounted && typeof document !== 'undefined' && createPortal(
         <div
           style={{
-            width: '36px',
-            height: '36px',
-            borderRadius: '8px',
+            position: 'fixed',
+            left: hoverPos.x,
+            top: hoverPos.y,
+            zIndex: 99999,
+            pointerEvents: 'none',
+            width: 280,
+            background: '#0D1117',
+            border: '1px solid rgba(56, 139, 253, 0.6)',
+            boxShadow: '0 16px 40px rgba(0, 0, 0, 0.9), 0 0 20px rgba(56, 139, 253, 0.3)',
+            borderRadius: 12,
             overflow: 'hidden',
-            border: '1px solid #30363D',
-            backgroundColor: '#0D1117',
-            flexShrink: 0,
+            padding: 10,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+            animation: 'fadeInScale 0.15s ease-out'
+          }}
+        >
+          <div style={{
+            width: '100%',
+            height: 280,
+            background: '#010409',
+            borderRadius: 8,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            boxShadow: '0 2px 6px rgba(0,0,0,0.35)',
-            transition: 'transform 0.15s ease, border-color 0.15s ease'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = '#00F0FF';
-            e.currentTarget.style.transform = 'scale(1.08)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = '#30363D';
-            e.currentTarget.style.transform = 'scale(1)';
-          }}
-        >
-          <img
-            src={mediaSrc}
-            alt={post.formato || 'Mídia'}
-            loading="lazy"
-            decoding="async"
-            onError={() => setImgError(true)}
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              display: 'block'
-            }}
-          />
-        </div>
-      ) : (
-        <div
-          style={{
-            display: 'inline-flex',
+            overflow: 'hidden',
+            border: '1px solid rgba(255,255,255,0.06)'
+          }}>
+            {isDirectVideo ? (
+              <video
+                src={mediaSrc}
+                autoPlay
+                loop
+                muted
+                playsInline
+                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              />
+            ) : (
+              <img
+                src={mediaSrc}
+                alt={post.formato || 'Mídia'}
+                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              />
+            )}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#F0F6FC', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              @{post.username || 'perfil'}
+            </span>
+            <span style={{
+              fontSize: 9,
+              fontWeight: 800,
+              padding: '2px 6px',
+              borderRadius: 4,
+              background: isReels
+                ? 'rgba(239, 68, 68, 0.2)'
+                : isCarrossel
+                ? 'rgba(113, 0, 226, 0.25)'
+                : 'rgba(56, 139, 253, 0.2)',
+              color: isReels
+                ? '#F87171'
+                : isCarrossel
+                ? '#C084FC'
+                : '#58A6FF',
+              whiteSpace: 'nowrap'
+            }}>
+              {isReels ? '🎬 Reels' : isCarrossel ? '📚 Carrossel' : '📸 Foto'}
+            </span>
+          </div>
+
+          {post.legenda && (
+            <div style={{
+              fontSize: 10,
+              color: '#8B949E',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              lineHeight: 1.3
+            }}>
+              {post.legenda}
+            </div>
+          )}
+
+          <div style={{
+            fontSize: 9,
+            color: '#8B949E',
+            textAlign: 'center',
+            borderTop: '1px solid rgba(255,255,255,0.08)',
+            paddingTop: 6,
+            display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            width: '36px',
-            height: '36px',
-            borderRadius: '8px',
-            backgroundColor: 'rgba(255, 255, 255, 0.05)',
-            border: '1px solid #30363D',
-            flexShrink: 0,
-            boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
-            transition: 'transform 0.15s ease, border-color 0.15s ease'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = '#00F0FF';
-            e.currentTarget.style.transform = 'scale(1.08)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = '#30363D';
-            e.currentTarget.style.transform = 'scale(1)';
-          }}
-        >
-          {post.formato === 'Reels' ? (
-            <VideoIcon size={16} style={{ color: 'var(--color-cyan)' }} />
-          ) : post.formato === 'Carrossel' ? (
-            <LayersIcon size={16} style={{ color: 'var(--color-purple)' }} />
-          ) : (
-            <ImageIcon size={16} style={{ color: 'var(--text-secondary)' }} />
-          )}
-        </div>
+            gap: 4
+          }}>
+            <span>✨ Pré-visualização</span>
+          </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   );
 };
 
