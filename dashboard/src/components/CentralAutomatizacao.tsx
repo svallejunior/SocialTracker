@@ -249,6 +249,33 @@ export function isPrevisaoNoDia(ag: Agendamento, dataObj: Date, hojeIso: string)
 }
 
 /**
+ * Normaliza e padroniza strings de hora para formato HH:MM:SS de comparação segura.
+ */
+export function normalizarHora(horaStr?: string | null): string {
+  if (!horaStr) return '00:00:00';
+  const limpo = String(horaStr).trim();
+  const apenasHora = limpo.includes(' ') ? limpo.split(' ')[1] : (limpo.includes('T') ? limpo.split('T')[1] : limpo);
+  const partes = apenasHora.split(':');
+  const h = (partes[0] || '0').padStart(2, '0');
+  const m = (partes[1] || '0').padStart(2, '0');
+  const s = (partes[2] || '0').split('.')[0].padStart(2, '0');
+  return `${h}:${m}:${s}`;
+}
+
+export function getPubTime(p: any): string {
+  if (p?.hora_local) return normalizarHora(p.hora_local);
+  if (p?.publicado_em) return normalizarHora(p.publicado_em);
+  return '00:00:00';
+}
+
+export function getAgTime(ag: any): string {
+  if (ag?.modo_hora === 'FIXA') {
+    return normalizarHora(ag.hora_fixa || '12:00');
+  }
+  return normalizarHora(ag?.hora_janela_inicio || ag?.hora_fixa || '12:00');
+}
+
+/**
  * Deduplica publicações garantindo que cada post publicado no Instagram ou agendado
  * apareça estritamente UMA vez em qualquer visualização ou contagem.
  */
@@ -286,7 +313,7 @@ export function deduplicatePublicacoes(pubs: Publicacao[]): Publicacao[] {
     result.push(p);
   }
 
-  return result.sort((a, b) => (b.hora_local || '').localeCompare(a.hora_local || ''));
+  return result.sort((a, b) => getPubTime(a).localeCompare(getPubTime(b)));
 }
 
 export interface ProximoEnvioDetalhe {
@@ -1526,12 +1553,12 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
               publicacoesDoPerfil.filter(
                 p => p.data_local === isoDataSelecionada && p.status === 'PUBLICADO'
               )
-            );
+            ).sort((a, b) => getPubTime(a).localeCompare(getPubTime(b)));
 
-            // Filtra agendamentos apenas para a data selecionada/hoje
-            const agendamentosDoDia = agendamentosDoPerfil.filter(
-              ag => isAgendamentoNoDia(ag, selectedDate)
-            );
+            // Filtra agendamentos apenas para a data selecionada/hoje ordenados do mais cedo para o mais tarde
+            const agendamentosDoDia = agendamentosDoPerfil
+              .filter(ag => isAgendamentoNoDia(ag, selectedDate))
+              .sort((a, b) => getAgTime(a).localeCompare(getAgTime(b)));
 
             const idsPublicados = new Set(pubsDoDiaSelecionado.map(p => p.agendamento_id).filter(Boolean));
             const metaIdsPublicados = new Set(pubsDoDiaSelecionado.map(p => p.meta_media_id).filter(Boolean));
@@ -3461,8 +3488,8 @@ function CalendarioAgendamentos({
 
                     setSelectedDayInfo({
                       dateStr: `${String(c.dia).padStart(2, '0')}/${String(c.mes + 1).padStart(2, '0')}/${c.ano}`,
-                      posts: isPassado ? [] : agsPendentes,
-                      publicados: pubs
+                      posts: isPassado ? [] : [...agsPendentes].sort((a, b) => getAgTime(a).localeCompare(getAgTime(b))),
+                      publicados: [...pubs].sort((a, b) => getPubTime(a).localeCompare(getPubTime(b)))
                     });
                   } else {
                     setSelectedDayInfo(null);
