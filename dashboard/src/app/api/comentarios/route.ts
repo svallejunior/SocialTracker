@@ -1,51 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { formatToBrazilDateTime } from '@/lib/timezone';
-import { getDb as getDbBase } from '@/lib/db';
+import { getDb } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 const GRAPH_API_VERSION = 'v20.0';
 const GRAPH_API_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
-
-async function getDb() {
-  const db = await getDbBase();
-
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS instagram_comentarios (
-      id TEXT PRIMARY KEY,
-      media_id TEXT NOT NULL,
-      modelo_username TEXT NOT NULL,
-      autor_username TEXT,
-      autor_id TEXT,
-      texto TEXT NOT NULL,
-      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-      like_count INTEGER DEFAULT 0,
-      curtido INTEGER DEFAULT 0,
-      respondido INTEGER DEFAULT 0,
-      resposta_texto TEXT,
-      criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  try {
-    const cols = await db.all("PRAGMA table_info(instagram_comentarios)");
-    const colNames = new Set(cols.map((c: any) => c.name));
-    if (!colNames.has("like_count")) {
-      await db.exec(`ALTER TABLE instagram_comentarios ADD COLUMN like_count INTEGER DEFAULT 0`);
-    }
-    if (!colNames.has("resposta_texto")) {
-      await db.exec(`ALTER TABLE instagram_comentarios ADD COLUMN resposta_texto TEXT`);
-    }
-    if (!colNames.has("autor_id")) {
-      await db.exec(`ALTER TABLE instagram_comentarios ADD COLUMN autor_id TEXT`);
-    }
-  } catch (err) {
-    console.error("Migration error in instagram_comentarios:", err);
-  }
-
-  return db;
-}
 
 /** Gera o link OAuth do Instagram Platform (sem necessidade de Facebook) */
 function gerarLinkAutorizacao(username: string): string {

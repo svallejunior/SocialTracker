@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
-import { getDb as getDbBase } from '@/lib/db';
+import { getDb } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -9,68 +9,6 @@ export const revalidate = 0;
 // (reivindicação atômica) e ENCERRADO encerra as ocorrências futuras de uma rotina
 // preservando o histórico já publicado.
 const STATUS_VALIDOS = ['AGENDADO', 'PAUSADO', 'PUBLICADO', 'PUBLICANDO', 'ERRO', 'ENCERRADO'];
-
-async function getDb() {
-  const db = await getDbBase();
-
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS automacao_agendamentos (
-      id TEXT PRIMARY KEY,
-      username TEXT NOT NULL,
-      meta_account_id TEXT NOT NULL,
-      tipo_postagem TEXT NOT NULL,
-      arquivos TEXT DEFAULT '[]',
-      ordem_arquivos TEXT DEFAULT 'ORDEM_SELECAO',
-      tipo_agendamento TEXT DEFAULT 'DATA_ESPECIFICA',
-      data_especifica TEXT DEFAULT '',
-      duracao_recorrencia TEXT DEFAULT 'SEMPRE',
-      data_inicio TEXT DEFAULT '',
-      data_fim TEXT DEFAULT '',
-      dias_selecionados TEXT DEFAULT '[]',
-      modo_hora TEXT DEFAULT 'FIXA',
-      hora_fixa TEXT DEFAULT '18:00',
-      hora_janela_inicio TEXT DEFAULT '18:00',
-      hora_janela_fim TEXT DEFAULT '21:00',
-      variacao_minutos INTEGER DEFAULT 15,
-      recorrencia TEXT DEFAULT 'UNICA',
-      legenda TEXT DEFAULT '',
-      status TEXT DEFAULT 'AGENDADO',
-      criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
-      atualizado_em DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  try { await db.exec(`ALTER TABLE automacao_agendamentos ADD COLUMN tipo_agendamento TEXT DEFAULT 'DATA_ESPECIFICA'`); } catch(e){}
-  try { await db.exec(`ALTER TABLE automacao_agendamentos ADD COLUMN data_especifica TEXT DEFAULT ''`); } catch(e){}
-  try { await db.exec(`ALTER TABLE automacao_agendamentos ADD COLUMN duracao_recorrencia TEXT DEFAULT 'SEMPRE'`); } catch(e){}
-  try { await db.exec(`ALTER TABLE automacao_agendamentos ADD COLUMN data_inicio TEXT DEFAULT ''`); } catch(e){}
-  try { await db.exec(`ALTER TABLE automacao_agendamentos ADD COLUMN data_fim TEXT DEFAULT ''`); } catch(e){}
-  try { await db.exec(`ALTER TABLE automacao_agendamentos ADD COLUMN ultima_execucao DATETIME`); } catch(e){}
-
-  // Histórico de publicações — definição canônica em publicador_instagram.py
-  // (init_db_schema), replicada aqui para o dashboard funcionar antes do primeiro
-  // ciclo do publicador. Datas desta tabela são em hora LOCAL.
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS automacao_publicacoes (
-      id TEXT PRIMARY KEY,
-      agendamento_id TEXT,
-      username TEXT NOT NULL,
-      meta_account_id TEXT DEFAULT '',
-      tipo_postagem TEXT NOT NULL,
-      data_local TEXT NOT NULL,
-      hora_local TEXT NOT NULL,
-      publicado_em DATETIME NOT NULL,
-      status TEXT NOT NULL DEFAULT 'PUBLICADO',
-      meta_media_id TEXT DEFAULT '',
-      erro_detalhe TEXT DEFAULT '',
-      arquivos TEXT DEFAULT '[]',
-      legenda TEXT DEFAULT '',
-      origem TEXT DEFAULT 'AGENDADOR'
-    );
-  `);
-
-  return db;
-}
 
 // GET: Lista todos os agendamentos (ou filtra por username)
 export async function GET(req: NextRequest) {

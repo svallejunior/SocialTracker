@@ -1,49 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { formatToBrazilDateTime } from '@/lib/timezone';
-import { getDb as getDbBase } from '@/lib/db';
+import { getDb } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 const GRAPH_API_VERSION = 'v20.0';
 const GRAPH_API_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
-
-async function getDb() {
-  const db = await getDbBase();
-
-  // Garante tabela e colunas necessárias
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS instagram_mensagens (
-      id TEXT PRIMARY KEY,
-      conversation_id TEXT,
-      modelo_username TEXT NOT NULL,
-      remetente_username TEXT NOT NULL,
-      remetente_id TEXT DEFAULT '',
-      direcao TEXT DEFAULT 'recebida',
-      texto TEXT NOT NULL,
-      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-      lida INTEGER DEFAULT 0,
-      respondida INTEGER DEFAULT 0,
-      criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  try {
-    const cols = await db.all("PRAGMA table_info(instagram_mensagens)");
-    const colNames = new Set(cols.map((c: any) => c.name));
-    if (!colNames.has("direcao")) {
-      await db.exec(`ALTER TABLE instagram_mensagens ADD COLUMN direcao TEXT DEFAULT 'recebida'`);
-    }
-    if (!colNames.has("remetente_id")) {
-      await db.exec(`ALTER TABLE instagram_mensagens ADD COLUMN remetente_id TEXT DEFAULT ''`);
-    }
-  } catch (err) {
-    console.error("Migration error in instagram_mensagens:", err);
-  }
-
-  return db;
-}
 
 // ─────────────────────────────────────────────
 // Obtém credenciais da Meta para um determinado username

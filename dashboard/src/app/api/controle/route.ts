@@ -1,87 +1,10 @@
 // app/api/controle/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
-import { getDb as getDbBase } from '@/lib/db';
+import { getDb } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-
-async function getDb() {
-  const db = await getDbBase();
-  
-  // Migration: ensure table has foto_url column
-  try {
-    const columns = await db.all("PRAGMA table_info(controle_perfis)");
-    const hasFotoUrl = columns.some((c: any) => c.name === "foto_url");
-    if (!hasFotoUrl) {
-      await db.exec(`ALTER TABLE controle_perfis ADD COLUMN foto_url TEXT`);
-    }
-
-    // Meta Account ID precisa ficar arquivado junto com o resto do cadastro da
-    // modelo (não só em automacao_config, que é config de automação). Na
-    // primeira vez que a coluna é criada, faz backfill a partir do que já
-    // existe em automacao_config, pra não depender de re-digitar tudo.
-    const hasMetaAccountId = columns.some((c: any) => c.name === "meta_account_id");
-    if (!hasMetaAccountId) {
-      await db.exec(`ALTER TABLE controle_perfis ADD COLUMN meta_account_id TEXT`);
-
-      await db.exec(`
-        INSERT INTO controle_perfis (username, meta_account_id)
-        SELECT ac.username, ac.meta_account_id
-        FROM automacao_config ac
-        WHERE ac.meta_account_id IS NOT NULL AND ac.meta_account_id != ''
-        ON CONFLICT(username) DO UPDATE SET meta_account_id = excluded.meta_account_id
-      `);
-
-      // Contas cujo username no cadastro difere só em maiúsculas/minúsculas do
-      // usado em automacao_config (o ON CONFLICT acima é exato) — casa por
-      // LOWER() pra não deixar essas de fora do backfill.
-      await db.exec(`
-        UPDATE controle_perfis
-        SET meta_account_id = (
-          SELECT ac.meta_account_id FROM automacao_config ac
-          WHERE LOWER(ac.username) = LOWER(controle_perfis.username)
-            AND ac.meta_account_id IS NOT NULL AND ac.meta_account_id != ''
-        )
-        WHERE (meta_account_id IS NULL OR meta_account_id = '')
-          AND EXISTS (
-            SELECT 1 FROM automacao_config ac
-            WHERE LOWER(ac.username) = LOWER(controle_perfis.username)
-              AND ac.meta_account_id IS NOT NULL AND ac.meta_account_id != ''
-          )
-      `);
-    }
-  } catch (err) {
-    console.error("Migration error:", err);
-  }
-
-  // Create table for observations history
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS controle_perfis_obs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT NOT NULL,
-      texto TEXT NOT NULL,
-      criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
-  // Migrate existing observations from controle_perfis if any
-  try {
-    const countObs = await db.get("SELECT COUNT(*) as count FROM controle_perfis_obs");
-    if (countObs && countObs.count === 0) {
-      await db.exec(`
-        INSERT INTO controle_perfis_obs (username, texto, criado_em)
-        SELECT username, obs, datetime('now')
-        FROM controle_perfis
-        WHERE obs IS NOT NULL AND obs != ''
-      `);
-    }
-  } catch (err) {
-    console.error("Observation migration error:", err);
-  }
-
-  return db;
-}
 
 // ─────────────────────────────────────────────
 // GET — busca todos os dados da aba Controle (Tratado para o Frontend)

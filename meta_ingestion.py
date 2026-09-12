@@ -153,6 +153,9 @@ def inicializar_estrutura_banco():
                 print(f"Aviso ao adicionar coluna {col_name} em posts_historico: {e}")
 
     c.execute("CREATE INDEX IF NOT EXISTS idx_posts_historico_user_data ON posts_historico(username, data_postagem)")
+    # A listagem geral de posts (ex: mobile/resumo) filtra só por is_deleted e
+    # ordena por data_postagem, sem username — o índice acima não serve pra isso.
+    c.execute("CREATE INDEX IF NOT EXISTS idx_posts_historico_deleted_data ON posts_historico(is_deleted, data_postagem)")
 
     # Garante coluna is_deleted em automacao_publicacoes se a tabela existir
     c.execute("PRAGMA table_info(automacao_publicacoes)")
@@ -191,6 +194,11 @@ def inicializar_estrutura_banco():
     # (usernames podem vir com case inconsistente da API/Apify) — sem esse índice, o filtro
     # cai em varredura completa mesmo com o índice acima, que é sobre a coluna crua.
     c.execute("CREATE INDEX IF NOT EXISTS idx_perfis_historico_lower_user_inativo_data ON perfis_historico(LOWER(username), inativo, data_coleta)")
+    # As consultas de visão geral (todos os perfis) filtram por inativo=0 e
+    # particionam/ordenam por username + data_coleta — sem username fixo,
+    # então o índice acima (LOWER(username) primeiro) não ajuda; esse cobre
+    # o caso "todos os perfis" em vez de "um perfil específico".
+    c.execute("CREATE INDEX IF NOT EXISTS idx_perfis_historico_inativo_user_data ON perfis_historico(inativo, username, data_coleta)")
 
     # 4. Tabela de Seguidores Histórico
     c.execute("""

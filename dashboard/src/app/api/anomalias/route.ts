@@ -1,25 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb as getDbBase } from '@/lib/db';
+import { getDb } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-
-async function getDb() {
-  const db = await getDbBase();
-
-  // Garante que as colunas necessárias existem
-  const colsHist = await db.all("PRAGMA table_info(perfis_historico)");
-  const hasTipoJanela = colsHist.some((c: { name: string }) => c.name === "tipo_janela");
-  if (!hasTipoJanela) {
-    await db.exec(`ALTER TABLE perfis_historico ADD COLUMN tipo_janela TEXT DEFAULT 'ORGANICO'`);
-  }
-  const hasRevisado = colsHist.some((c: { name: string }) => c.name === "revisado_manualmente");
-  if (!hasRevisado) {
-    await db.exec(`ALTER TABLE perfis_historico ADD COLUMN revisado_manualmente INTEGER DEFAULT 0`);
-  }
-
-  return db;
-}
 
 // ─────────────────────────────────────────────
 // GET — Central de Anomalias & Triagem por Perfil

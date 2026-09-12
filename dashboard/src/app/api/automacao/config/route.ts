@@ -1,39 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import path from 'path';
 import fs from 'fs';
-import { getDb as getDbBase, resolveDbPath } from '@/lib/db';
+import { getDb, resolveDbPath } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-
-async function getDb() {
-  const db = await getDbBase();
-
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS automacao_config (
-      id TEXT PRIMARY KEY,
-      meta_account_id TEXT,
-      username TEXT,
-      app_id TEXT,
-      app_secret TEXT,
-      access_token TEXT,
-      public_base_url TEXT DEFAULT '',
-      atualizado_em DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  try {
-    await db.exec(`ALTER TABLE automacao_config ADD COLUMN public_base_url TEXT DEFAULT ''`);
-  } catch (e) {}
-
-  try {
-    await db.exec(`ALTER TABLE automacao_agendamentos ADD COLUMN meta_media_id TEXT DEFAULT ''`);
-    await db.exec(`ALTER TABLE automacao_agendamentos ADD COLUMN publicado_em DATETIME`);
-    await db.exec(`ALTER TABLE automacao_agendamentos ADD COLUMN erro_detalhe TEXT DEFAULT ''`);
-  } catch (e) {}
-
-  return db;
-}
 
 // GET: Retorna a configuração da Meta API e dispara o daemon se estiver inativo
 export async function GET(req: NextRequest) {

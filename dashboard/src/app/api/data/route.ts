@@ -1,78 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { formatToBrazilDateTime } from '@/lib/timezone';
-import { getDb as getDbBase } from '@/lib/db';
+import { getDb } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-
-async function getDb() {
-  const db = await getDbBase();
-  
-  // Migrações
-  try {
-    const colsCheck = await db.all("PRAGMA table_info(perfis_monitorados)");
-    const cols = new Set(colsCheck.map((c: any) => c.name));
-
-    if (!cols.has("meu_perfil")) {
-      await db.exec(`ALTER TABLE perfis_monitorados ADD COLUMN meu_perfil INTEGER NOT NULL DEFAULT 0`);
-    }
-    if (!cols.has("primeira_postagem")) {
-      await db.exec(`ALTER TABLE perfis_monitorados ADD COLUMN primeira_postagem TEXT`);
-    }
-    if (!cols.has("exibir")) {
-      await db.exec(`ALTER TABLE perfis_monitorados ADD COLUMN exibir INTEGER NOT NULL DEFAULT 1`);
-    }
-    if (!cols.has("favorito")) {
-      await db.exec(`ALTER TABLE perfis_monitorados ADD COLUMN favorito INTEGER NOT NULL DEFAULT 0`);
-    }
-    if (!cols.has("tipo_conta")) {
-      await db.exec(`ALTER TABLE perfis_monitorados ADD COLUMN tipo_conta TEXT DEFAULT 'Geral'`);
-    }
-    if (!cols.has("tipo_trafego")) {
-      await db.exec(`ALTER TABLE perfis_monitorados ADD COLUMN tipo_trafego TEXT DEFAULT 'ORGANICO'`);
-    }
-
-    // Garante colunas de mídia em posts_historico
-    const postColsCheck = await db.all("PRAGMA table_info(posts_historico)");
-    const postCols = new Set(postColsCheck.map((c: any) => c.name));
-    if (!postCols.has("media_url")) {
-      await db.exec(`ALTER TABLE posts_historico ADD COLUMN media_url TEXT`);
-    }
-    if (!postCols.has("thumbnail_url")) {
-      await db.exec(`ALTER TABLE posts_historico ADD COLUMN thumbnail_url TEXT`);
-    }
-
-    // Garante tabelas de engajamento (comentários e mensagens)
-    await db.exec(`
-      CREATE TABLE IF NOT EXISTS instagram_comentarios (
-        id TEXT PRIMARY KEY,
-        media_id TEXT,
-        modelo_username TEXT NOT NULL,
-        autor_username TEXT,
-        texto TEXT,
-        timestamp DATETIME,
-        respondido INTEGER DEFAULT 0,
-        curtido INTEGER DEFAULT 0,
-        criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
-      CREATE TABLE IF NOT EXISTS instagram_mensagens (
-        id TEXT PRIMARY KEY,
-        conversation_id TEXT,
-        modelo_username TEXT NOT NULL,
-        remetente_username TEXT,
-        texto TEXT,
-        timestamp DATETIME,
-        lida INTEGER DEFAULT 0,
-        respondida INTEGER DEFAULT 0,
-        criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-  } catch (err) {
-    console.error("Migration error in perfis_monitorados / engajamento:", err);
-  }
-
-  return db;
-}
 
 export async function GET() {
   try {
