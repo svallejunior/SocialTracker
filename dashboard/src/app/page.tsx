@@ -8,7 +8,7 @@ import {
   TrendingUp, ExternalLink, LogOut, Calendar, Search, Users, MessageSquare, Eye, EyeOff, Heart, Filter,
   BarChart3, Play, Hash, Hash as TagIcon, Image as ImageIcon, Film as VideoIcon, Layers as LayersIcon,
   HelpCircle, CheckCircle2, DollarSign, Wallet, FileText, X, Brain, AlertTriangle, BadgeCheck, History,
-  Smartphone, RefreshCw, Clock, Sliders, ChevronRight, PlusCircle, Film, Target
+  Smartphone, RefreshCw, Clock, Sliders, ChevronRight, PlusCircle, Film, Target, Check
 } from "lucide-react";
 import {
   LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, AreaChart, Area, ReferenceLine, CartesianGrid,
@@ -1852,7 +1852,7 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFormats, setSelectedFormats] = useState<Set<string>>(new Set(['Imagem', 'Carrossel', 'Reels']));
   const [selectedProfileFilter, setSelectedProfileFilter] = useState('Todos');
-  const [selectedProfilesMulti, setSelectedProfilesMulti] = useState<Set<string>>(new Set());
+  const [unselectedProfiles, setUnselectedProfiles] = useState<Set<string>>(new Set());
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [sortField, setSortField] = useState<string>('data_postagem');
@@ -2957,24 +2957,33 @@ export default function Dashboard() {
 
     const matchesFormat = selectedFormats.size === 0 || selectedFormats.has(post.formato);
 
-    let matchesProfile = true;
+    // Se houver perfil específico selecionado no dropdown select:
+    if (selectedProfileFilter !== 'Todos') {
+      if ((post.username || '').toLowerCase() !== selectedProfileFilter.toLowerCase()) {
+        return false;
+      }
+    }
+
+    // Filtro por botões: por default todos marcados; ao desmarcar, aquele resultado some da lista
     const postUser = (post.username || '').toLowerCase();
     const isMinha = minhasModelosSet.has(postUser);
 
-    if (selectedProfilesMulti.size > 0) {
-      const matchesUser = selectedProfilesMulti.has(postUser);
-      const matchesDemais = selectedProfilesMulti.has('__DEMAIS__') && !isMinha;
-      matchesProfile = matchesUser || matchesDemais;
-    } else if (selectedProfileFilter !== 'Todos') {
-      matchesProfile = postUser === selectedProfileFilter.toLowerCase();
+    if (isMinha) {
+      if (unselectedProfiles.has(postUser)) {
+        return false; // desmarcada -> some da lista
+      }
+    } else {
+      if (unselectedProfiles.has('__DEMAIS__')) {
+        return false; // demais modelos desmarcadas -> somem da lista
+      }
     }
 
     // Filtro de data simples
     const dateLimit = post.data_postagem ? post.data_postagem.split(' ')[0] : '';
     const matchesDate = (!startDate || dateLimit >= startDate) && (!endDate || dateLimit <= endDate);
 
-    return matchesSearch && matchesFormat && matchesProfile && matchesDate;
-  }), [posts, searchQuery, selectedFormats, selectedProfilesMulti, selectedProfileFilter, minhasModelosSet, startDate, endDate]);
+    return matchesSearch && matchesFormat && matchesDate;
+  }), [posts, searchQuery, selectedFormats, unselectedProfiles, selectedProfileFilter, minhasModelosSet, startDate, endDate]);
 
   // Ordenar posts para a tabela
   const sortedPosts = useMemo(() => [...filteredPosts].sort((a, b) => {
@@ -6215,7 +6224,6 @@ export default function Dashboard() {
                 value={selectedProfileFilter}
                 onChange={(e) => {
                   setSelectedProfileFilter(e.target.value);
-                  setSelectedProfilesMulti(new Set());
                   setPostsPage(1);
                 }}
               >
@@ -6280,46 +6288,41 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Atalhos rápidos: filtros de modelos (multi-select: Minhas Modelos + Demais Modelos) */}
+            {/* Atalhos rápidos: filtros de modelos (por default marcados com check; ao desmarcar, some da lista) */}
             {profiles.some(p => p.exibir !== 0) && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                 <span style={{ color: 'var(--text-secondary)', fontSize: '11px', fontWeight: 700, marginRight: '2px' }}>
                   ⭐ MINHAS MODELOS:
                 </span>
 
-                {/* Botão Todos */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedProfilesMulti(new Set());
-                    setSelectedProfileFilter('Todos');
-                    setPostsPage(1);
-                  }}
-                  title="Mostrar todas as modelos (minhas e demais)"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '6px 12px',
-                    borderRadius: '8px',
-                    border: (selectedProfilesMulti.size === 0 && selectedProfileFilter === 'Todos')
-                      ? '1px solid rgba(255, 255, 255, 0.4)'
-                      : '1px solid var(--border-color)',
-                    background: (selectedProfilesMulti.size === 0 && selectedProfileFilter === 'Todos')
-                      ? 'rgba(255, 255, 255, 0.15)'
-                      : 'rgba(0, 0, 0, 0.2)',
-                    color: (selectedProfilesMulti.size === 0 && selectedProfileFilter === 'Todos')
-                      ? '#FFFFFF'
-                      : 'var(--text-secondary)',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                    whiteSpace: 'nowrap'
-                  }}
-                >
-                  Todos
-                </button>
+                {/* Ações rápidas: Marcar todas */}
+                {unselectedProfiles.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUnselectedProfiles(new Set());
+                      setSelectedProfileFilter('Todos');
+                      setPostsPage(1);
+                    }}
+                    title="Marcar todas as modelos novamente"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '4px 9px',
+                      borderRadius: '6px',
+                      border: '1px solid rgba(168, 85, 247, 0.45)',
+                      background: 'rgba(113, 0, 226, 0.15)',
+                      color: '#C084FC',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      marginRight: '2px'
+                    }}
+                  >
+                    <Check size={12} strokeWidth={2.8} /> Marcar todas
+                  </button>
+                )}
 
                 {/* Botões individuais de Minhas Modelos */}
                 {[...profiles]
@@ -6327,13 +6330,13 @@ export default function Dashboard() {
                   .sort((a, b) => a.username.localeCompare(b.username))
                   .map(p => {
                     const uKey = p.username.toLowerCase();
-                    const isActive = selectedProfilesMulti.has(uKey);
+                    const isChecked = !unselectedProfiles.has(uKey);
                     return (
                       <button
                         key={p.username}
                         type="button"
                         onClick={() => {
-                          setSelectedProfilesMulti(prev => {
+                          setUnselectedProfiles(prev => {
                             const next = new Set(prev);
                             if (next.has(uKey)) next.delete(uKey);
                             else next.add(uKey);
@@ -6342,38 +6345,38 @@ export default function Dashboard() {
                           setSelectedProfileFilter('Todos');
                           setPostsPage(1);
                         }}
-                        title={isActive ? `Desmarcar @${p.username}` : `Marcar @${p.username}`}
+                        title={isChecked ? `Clique para desmarcar e ocultar @${p.username}` : `Clique para marcar e exibir @${p.username}`}
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '6px',
+                          gap: '5px',
                           padding: '6px 12px',
                           borderRadius: '8px',
-                          border: `1px solid ${isActive ? '#C084FC' : 'rgba(113, 0, 226, 0.4)'}`,
-                          background: isActive ? '#7100E2' : 'rgba(113, 0, 226, 0.18)',
-                          color: isActive ? '#FFFFFF' : '#E0C8FF',
+                          border: isChecked ? '1px solid #A855F7' : '1px dashed rgba(113, 0, 226, 0.35)',
+                          background: isChecked ? '#7100E2' : 'rgba(0, 0, 0, 0.35)',
+                          color: isChecked ? '#FFFFFF' : '#8B949E',
                           fontSize: '12px',
                           fontWeight: 700,
                           cursor: 'pointer',
                           transition: 'all 0.15s ease',
                           whiteSpace: 'nowrap',
-                          boxShadow: isActive ? '0 0 12px rgba(113, 0, 226, 0.6)' : 'none'
+                          boxShadow: isChecked ? '0 2px 8px rgba(113, 0, 226, 0.4)' : 'none',
+                          opacity: isChecked ? 1 : 0.55
                         }}
                         onMouseEnter={(e) => {
-                          if (!isActive) {
-                            e.currentTarget.style.background = 'rgba(113, 0, 226, 0.3)';
-                            e.currentTarget.style.borderColor = 'rgba(113, 0, 226, 0.65)';
-                            e.currentTarget.style.color = '#FFFFFF';
+                          if (!isChecked) {
+                            e.currentTarget.style.opacity = '0.9';
+                            e.currentTarget.style.borderColor = 'rgba(113, 0, 226, 0.6)';
                           }
                         }}
                         onMouseLeave={(e) => {
-                          if (!isActive) {
-                            e.currentTarget.style.background = 'rgba(113, 0, 226, 0.18)';
-                            e.currentTarget.style.borderColor = 'rgba(113, 0, 226, 0.4)';
-                            e.currentTarget.style.color = '#E0C8FF';
+                          if (!isChecked) {
+                            e.currentTarget.style.opacity = '0.55';
+                            e.currentTarget.style.borderColor = 'rgba(113, 0, 226, 0.35)';
                           }
                         }}
                       >
+                        {isChecked && <Check size={13} strokeWidth={2.8} style={{ flexShrink: 0 }} />}
                         @{p.username}
                       </button>
                     );
@@ -6384,14 +6387,14 @@ export default function Dashboard() {
                   <>
                     <div style={{ width: '1px', height: '18px', background: 'var(--border-color)', margin: '0 2px' }} />
                     {(() => {
-                      const isDemaisActive = selectedProfilesMulti.has('__DEMAIS__');
+                      const isDemaisChecked = !unselectedProfiles.has('__DEMAIS__');
                       const demaisCount = profiles.filter(p => Number(p.meu_perfil) !== 1 && p.meu_perfil !== true && p.exibir !== 0).length;
                       return (
                         <button
                           key="__DEMAIS__"
                           type="button"
                           onClick={() => {
-                            setSelectedProfilesMulti(prev => {
+                            setUnselectedProfiles(prev => {
                               const next = new Set(prev);
                               if (next.has('__DEMAIS__')) next.delete('__DEMAIS__');
                               else next.add('__DEMAIS__');
@@ -6400,69 +6403,44 @@ export default function Dashboard() {
                             setSelectedProfileFilter('Todos');
                             setPostsPage(1);
                           }}
-                          title={isDemaisActive ? "Desmarcar demais modelos" : "Mostrar posts das demais modelos monitoradas"}
+                          title={isDemaisChecked ? "Clique para desmarcar e ocultar as demais modelos" : "Clique para marcar e exibir as demais modelos"}
                           style={{
                             display: 'inline-flex',
                             alignItems: 'center',
-                            gap: '6px',
+                            gap: '5px',
                             padding: '6px 12px',
                             borderRadius: '8px',
-                            border: `1px solid ${isDemaisActive ? '#00F0FF' : 'rgba(0, 240, 255, 0.35)'}`,
-                            background: isDemaisActive ? 'rgba(0, 240, 255, 0.25)' : 'rgba(0, 240, 255, 0.08)',
-                            color: isDemaisActive ? '#00F0FF' : '#88D8E8',
+                            border: isDemaisChecked ? '1px solid #00F0FF' : '1px dashed rgba(0, 240, 255, 0.3)',
+                            background: isDemaisChecked ? 'rgba(0, 240, 255, 0.22)' : 'rgba(0, 0, 0, 0.35)',
+                            color: isDemaisChecked ? '#00F0FF' : '#8B949E',
                             fontSize: '12px',
                             fontWeight: 700,
                             cursor: 'pointer',
                             transition: 'all 0.15s ease',
                             whiteSpace: 'nowrap',
-                            boxShadow: isDemaisActive ? '0 0 12px rgba(0, 240, 255, 0.4)' : 'none'
+                            boxShadow: isDemaisChecked ? '0 2px 8px rgba(0, 240, 255, 0.3)' : 'none',
+                            opacity: isDemaisChecked ? 1 : 0.55
                           }}
                           onMouseEnter={(e) => {
-                            if (!isDemaisActive) {
-                              e.currentTarget.style.background = 'rgba(0, 240, 255, 0.18)';
-                              e.currentTarget.style.borderColor = 'rgba(0, 240, 255, 0.6)';
-                              e.currentTarget.style.color = '#FFFFFF';
+                            if (!isDemaisChecked) {
+                              e.currentTarget.style.opacity = '0.9';
+                              e.currentTarget.style.borderColor = 'rgba(0, 240, 255, 0.5)';
                             }
                           }}
                           onMouseLeave={(e) => {
-                            if (!isDemaisActive) {
-                              e.currentTarget.style.background = 'rgba(0, 240, 255, 0.08)';
-                              e.currentTarget.style.borderColor = 'rgba(0, 240, 255, 0.35)';
-                              e.currentTarget.style.color = '#88D8E8';
+                            if (!isDemaisChecked) {
+                              e.currentTarget.style.opacity = '0.55';
+                              e.currentTarget.style.borderColor = 'rgba(0, 240, 255, 0.3)';
                             }
                           }}
                         >
-                          <Users size={13} />
+                          {isDemaisChecked && <Check size={13} strokeWidth={2.8} style={{ flexShrink: 0 }} />}
+                          <Users size={13} style={{ flexShrink: 0 }} />
                           Demais Modelos ({demaisCount})
                         </button>
                       );
                     })()}
                   </>
-                )}
-
-                {/* Atalho para limpar quando houver filtro multi-select ativo */}
-                {selectedProfilesMulti.size > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedProfilesMulti(new Set());
-                      setSelectedProfileFilter('Todos');
-                      setPostsPage(1);
-                    }}
-                    title="Limpar seleção de modelos e mostrar todas"
-                    style={{
-                      background: 'transparent',
-                      border: '1px solid #30363D',
-                      color: '#8B949E',
-                      borderRadius: '6px',
-                      padding: '4px 8px',
-                      fontSize: '11px',
-                      cursor: 'pointer',
-                      marginLeft: '4px'
-                    }}
-                  >
-                    ✕ Limpar ({selectedProfilesMulti.size})
-                  </button>
                 )}
               </div>
             )}
