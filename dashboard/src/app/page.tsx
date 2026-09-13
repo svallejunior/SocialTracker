@@ -1852,6 +1852,7 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFormats, setSelectedFormats] = useState<Set<string>>(new Set(['Imagem', 'Carrossel', 'Reels']));
   const [selectedProfileFilter, setSelectedProfileFilter] = useState('Todos');
+  const [selectedProfilesMulti, setSelectedProfilesMulti] = useState<Set<string>>(new Set());
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [sortField, setSortField] = useState<string>('data_postagem');
@@ -2937,6 +2938,17 @@ export default function Dashboard() {
 
   // Filtrar posts para a tabela da aba "Posts" — useMemo evita refazer o
   // filter+sort sobre o array inteiro a cada render (ex: ao digitar em outro
+  // Set com usernames em lowercase das "minhas modelos"
+  const minhasModelosSet = useMemo(() => {
+    const set = new Set<string>();
+    profiles.forEach(p => {
+      if ((Number(p.meu_perfil) === 1 || p.meu_perfil === true) && p.username) {
+        set.add(p.username.toLowerCase());
+      }
+    });
+    return set;
+  }, [profiles]);
+
   // campo, fora desta aba), recalculando só quando os posts ou os filtros mudam.
   const filteredPosts = useMemo(() => posts.filter(post => {
     const matchesSearch = searchQuery === '' ||
@@ -2945,14 +2957,24 @@ export default function Dashboard() {
 
     const matchesFormat = selectedFormats.size === 0 || selectedFormats.has(post.formato);
 
-    const matchesProfile = selectedProfileFilter === 'Todos' || post.username === selectedProfileFilter;
+    let matchesProfile = true;
+    const postUser = (post.username || '').toLowerCase();
+    const isMinha = minhasModelosSet.has(postUser);
+
+    if (selectedProfilesMulti.size > 0) {
+      const matchesUser = selectedProfilesMulti.has(postUser);
+      const matchesDemais = selectedProfilesMulti.has('__DEMAIS__') && !isMinha;
+      matchesProfile = matchesUser || matchesDemais;
+    } else if (selectedProfileFilter !== 'Todos') {
+      matchesProfile = postUser === selectedProfileFilter.toLowerCase();
+    }
 
     // Filtro de data simples
     const dateLimit = post.data_postagem ? post.data_postagem.split(' ')[0] : '';
     const matchesDate = (!startDate || dateLimit >= startDate) && (!endDate || dateLimit <= endDate);
 
     return matchesSearch && matchesFormat && matchesProfile && matchesDate;
-  }), [posts, searchQuery, selectedFormats, selectedProfileFilter, startDate, endDate]);
+  }), [posts, searchQuery, selectedFormats, selectedProfilesMulti, selectedProfileFilter, minhasModelosSet, startDate, endDate]);
 
   // Ordenar posts para a tabela
   const sortedPosts = useMemo(() => [...filteredPosts].sort((a, b) => {
@@ -6191,7 +6213,11 @@ export default function Dashboard() {
               <select
                 className="filter-select"
                 value={selectedProfileFilter}
-                onChange={(e) => { setSelectedProfileFilter(e.target.value); setPostsPage(1); }}
+                onChange={(e) => {
+                  setSelectedProfileFilter(e.target.value);
+                  setSelectedProfilesMulti(new Set());
+                  setPostsPage(1);
+                }}
               >
                 <option value="Todos">Todos Perfis</option>
                 {[...profiles]
@@ -6254,25 +6280,69 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Atalhos rápidos: minhas modelos, para facilitar a busca sem abrir o select */}
-            {profiles.some(p => p.meu_perfil && p.exibir !== 0) && (
+            {/* Atalhos rápidos: filtros de modelos (multi-select: Minhas Modelos + Demais Modelos) */}
+            {profiles.some(p => p.exibir !== 0) && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                 <span style={{ color: 'var(--text-secondary)', fontSize: '11px', fontWeight: 700, marginRight: '2px' }}>
                   ⭐ MINHAS MODELOS:
                 </span>
+
+                {/* Botão Todos */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedProfilesMulti(new Set());
+                    setSelectedProfileFilter('Todos');
+                    setPostsPage(1);
+                  }}
+                  title="Mostrar todas as modelos (minhas e demais)"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    border: (selectedProfilesMulti.size === 0 && selectedProfileFilter === 'Todos')
+                      ? '1px solid rgba(255, 255, 255, 0.4)'
+                      : '1px solid var(--border-color)',
+                    background: (selectedProfilesMulti.size === 0 && selectedProfileFilter === 'Todos')
+                      ? 'rgba(255, 255, 255, 0.15)'
+                      : 'rgba(0, 0, 0, 0.2)',
+                    color: (selectedProfilesMulti.size === 0 && selectedProfileFilter === 'Todos')
+                      ? '#FFFFFF'
+                      : 'var(--text-secondary)',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  Todos
+                </button>
+
+                {/* Botões individuais de Minhas Modelos */}
                 {[...profiles]
-                  .filter(p => p.meu_perfil && p.exibir !== 0)
+                  .filter(p => (Number(p.meu_perfil) === 1 || p.meu_perfil === true) && p.exibir !== 0)
                   .sort((a, b) => a.username.localeCompare(b.username))
                   .map(p => {
-                    const isActive = selectedProfileFilter === p.username;
+                    const uKey = p.username.toLowerCase();
+                    const isActive = selectedProfilesMulti.has(uKey);
                     return (
                       <button
                         key={p.username}
+                        type="button"
                         onClick={() => {
-                          setSelectedProfileFilter(prev => prev === p.username ? 'Todos' : p.username);
+                          setSelectedProfilesMulti(prev => {
+                            const next = new Set(prev);
+                            if (next.has(uKey)) next.delete(uKey);
+                            else next.add(uKey);
+                            return next;
+                          });
+                          setSelectedProfileFilter('Todos');
                           setPostsPage(1);
                         }}
-                        title={`Filtrar posts de @${p.username}`}
+                        title={isActive ? `Desmarcar @${p.username}` : `Marcar @${p.username}`}
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
@@ -6308,6 +6378,92 @@ export default function Dashboard() {
                       </button>
                     );
                   })}
+
+                {/* Divisória e Botão Demais Modelos */}
+                {profiles.some(p => Number(p.meu_perfil) !== 1 && p.meu_perfil !== true && p.exibir !== 0) && (
+                  <>
+                    <div style={{ width: '1px', height: '18px', background: 'var(--border-color)', margin: '0 2px' }} />
+                    {(() => {
+                      const isDemaisActive = selectedProfilesMulti.has('__DEMAIS__');
+                      const demaisCount = profiles.filter(p => Number(p.meu_perfil) !== 1 && p.meu_perfil !== true && p.exibir !== 0).length;
+                      return (
+                        <button
+                          key="__DEMAIS__"
+                          type="button"
+                          onClick={() => {
+                            setSelectedProfilesMulti(prev => {
+                              const next = new Set(prev);
+                              if (next.has('__DEMAIS__')) next.delete('__DEMAIS__');
+                              else next.add('__DEMAIS__');
+                              return next;
+                            });
+                            setSelectedProfileFilter('Todos');
+                            setPostsPage(1);
+                          }}
+                          title={isDemaisActive ? "Desmarcar demais modelos" : "Mostrar posts das demais modelos monitoradas"}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '6px 12px',
+                            borderRadius: '8px',
+                            border: `1px solid ${isDemaisActive ? '#00F0FF' : 'rgba(0, 240, 255, 0.35)'}`,
+                            background: isDemaisActive ? 'rgba(0, 240, 255, 0.25)' : 'rgba(0, 240, 255, 0.08)',
+                            color: isDemaisActive ? '#00F0FF' : '#88D8E8',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease',
+                            whiteSpace: 'nowrap',
+                            boxShadow: isDemaisActive ? '0 0 12px rgba(0, 240, 255, 0.4)' : 'none'
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isDemaisActive) {
+                              e.currentTarget.style.background = 'rgba(0, 240, 255, 0.18)';
+                              e.currentTarget.style.borderColor = 'rgba(0, 240, 255, 0.6)';
+                              e.currentTarget.style.color = '#FFFFFF';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isDemaisActive) {
+                              e.currentTarget.style.background = 'rgba(0, 240, 255, 0.08)';
+                              e.currentTarget.style.borderColor = 'rgba(0, 240, 255, 0.35)';
+                              e.currentTarget.style.color = '#88D8E8';
+                            }
+                          }}
+                        >
+                          <Users size={13} />
+                          Demais Modelos ({demaisCount})
+                        </button>
+                      );
+                    })()}
+                  </>
+                )}
+
+                {/* Atalho para limpar quando houver filtro multi-select ativo */}
+                {selectedProfilesMulti.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedProfilesMulti(new Set());
+                      setSelectedProfileFilter('Todos');
+                      setPostsPage(1);
+                    }}
+                    title="Limpar seleção de modelos e mostrar todas"
+                    style={{
+                      background: 'transparent',
+                      border: '1px solid #30363D',
+                      color: '#8B949E',
+                      borderRadius: '6px',
+                      padding: '4px 8px',
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                      marginLeft: '4px'
+                    }}
+                  >
+                    ✕ Limpar ({selectedProfilesMulti.size})
+                  </button>
+                )}
               </div>
             )}
           </div>
