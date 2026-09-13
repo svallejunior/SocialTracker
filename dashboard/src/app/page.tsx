@@ -6277,16 +6277,31 @@ export default function Dashboard() {
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: '6px',
-                          padding: '5px 10px',
-                          borderRadius: '999px',
-                          border: `1px solid ${isActive ? 'rgba(0, 240, 255, 0.5)' : 'var(--border-color)'}`,
-                          background: isActive ? 'rgba(0, 240, 255, 0.15)' : 'rgba(0, 0, 0, 0.2)',
-                          color: isActive ? '#00F0FF' : 'var(--text-secondary)',
+                          padding: '6px 12px',
+                          borderRadius: '8px',
+                          border: `1px solid ${isActive ? '#C084FC' : 'rgba(113, 0, 226, 0.4)'}`,
+                          background: isActive ? '#7100E2' : 'rgba(113, 0, 226, 0.18)',
+                          color: isActive ? '#FFFFFF' : '#E0C8FF',
                           fontSize: '12px',
                           fontWeight: 700,
                           cursor: 'pointer',
                           transition: 'all 0.15s ease',
-                          whiteSpace: 'nowrap'
+                          whiteSpace: 'nowrap',
+                          boxShadow: isActive ? '0 0 12px rgba(113, 0, 226, 0.6)' : 'none'
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isActive) {
+                            e.currentTarget.style.background = 'rgba(113, 0, 226, 0.3)';
+                            e.currentTarget.style.borderColor = 'rgba(113, 0, 226, 0.65)';
+                            e.currentTarget.style.color = '#FFFFFF';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isActive) {
+                            e.currentTarget.style.background = 'rgba(113, 0, 226, 0.18)';
+                            e.currentTarget.style.borderColor = 'rgba(113, 0, 226, 0.4)';
+                            e.currentTarget.style.color = '#E0C8FF';
+                          }
                         }}
                       >
                         @{p.username}
