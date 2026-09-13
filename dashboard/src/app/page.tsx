@@ -6349,10 +6349,10 @@ export default function Dashboard() {
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '5px',
+                          gap: '6px',
                           padding: '6px 12px',
                           borderRadius: '8px',
-                          border: isChecked ? '1px solid #A855F7' : '1px dashed rgba(113, 0, 226, 0.35)',
+                          border: isChecked ? '1px solid #A855F7' : '1px solid rgba(113, 0, 226, 0.35)',
                           background: isChecked ? '#7100E2' : 'rgba(0, 0, 0, 0.35)',
                           color: isChecked ? '#FFFFFF' : '#8B949E',
                           fontSize: '12px',
@@ -6376,7 +6376,20 @@ export default function Dashboard() {
                           }
                         }}
                       >
-                        {isChecked && <Check size={13} strokeWidth={2.8} style={{ flexShrink: 0 }} />}
+                        <span style={{
+                          width: '14px',
+                          height: '14px',
+                          borderRadius: '3px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                          border: isChecked ? '1px solid #FFFFFF' : '1px solid rgba(255, 255, 255, 0.25)',
+                          background: isChecked ? 'rgba(255, 255, 255, 0.2)' : 'transparent',
+                          transition: 'all 0.15s ease'
+                        }}>
+                          {isChecked && <Check size={11} strokeWidth={3} />}
+                        </span>
                         @{p.username}
                       </button>
                     );
@@ -6407,10 +6420,10 @@ export default function Dashboard() {
                           style={{
                             display: 'inline-flex',
                             alignItems: 'center',
-                            gap: '5px',
+                            gap: '6px',
                             padding: '6px 12px',
                             borderRadius: '8px',
-                            border: isDemaisChecked ? '1px solid #00F0FF' : '1px dashed rgba(0, 240, 255, 0.3)',
+                            border: isDemaisChecked ? '1px solid #00F0FF' : '1px solid rgba(0, 240, 255, 0.3)',
                             background: isDemaisChecked ? 'rgba(0, 240, 255, 0.22)' : 'rgba(0, 0, 0, 0.35)',
                             color: isDemaisChecked ? '#00F0FF' : '#8B949E',
                             fontSize: '12px',
@@ -6434,7 +6447,20 @@ export default function Dashboard() {
                             }
                           }}
                         >
-                          {isDemaisChecked && <Check size={13} strokeWidth={2.8} style={{ flexShrink: 0 }} />}
+                          <span style={{
+                            width: '14px',
+                            height: '14px',
+                            borderRadius: '3px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                            border: isDemaisChecked ? '1px solid #00F0FF' : '1px solid rgba(0, 240, 255, 0.3)',
+                            background: isDemaisChecked ? 'rgba(0, 240, 255, 0.25)' : 'transparent',
+                            transition: 'all 0.15s ease'
+                          }}>
+                            {isDemaisChecked && <Check size={11} strokeWidth={3} color="#00F0FF" />}
+                          </span>
                           <Users size={13} style={{ flexShrink: 0 }} />
                           Demais Modelos ({demaisCount})
                         </button>
