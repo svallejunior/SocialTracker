@@ -7,7 +7,7 @@ import {
   Plus, ExternalLink, Sliders, Image as ImageIcon, Check,
   AlertCircle, ChevronDown, Zap, X, Calendar, Clock, Film, UploadCloud,
   FileText, Repeat, Shuffle, ArrowDownAZ, ListOrdered, Layers,
-  ChevronLeft, ChevronRight, Info, Maximize2
+  ChevronLeft, ChevronRight, Info, Maximize2, Eye, EyeOff
 } from 'lucide-react';
 
 interface Profile {
@@ -708,6 +708,27 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
     return isMeu && !isMorreu;
   });
 
+  const PERFIS_1707 = ['maisa_souzaa5', 'karinesilva.1'];
+  const is1707Perfil = (username: string) =>
+    PERFIS_1707.includes((username || '').trim().toLowerCase());
+
+  const [userRole, setUserRole] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('st_pin_role') || '';
+    }
+    return '';
+  });
+  const [mostrarTodos, setMostrarTodos] = useState<boolean>(false);
+
+  const perfisExibidos = perfisAtivos.filter(p => {
+    if (mostrarTodos) return true;
+    if (userRole === '1707') {
+      return is1707Perfil(p.username);
+    }
+    // Para 2802 (ou padrão/master), aparecem os outros perfis
+    return !is1707Perfil(p.username);
+  });
+
   type SortMode = 'agendamentos_dia' | 'personalizada' | 'alfabetica';
   const [sortMode, setSortMode] = useState<SortMode>('personalizada');
   const [profileOrderMap, setProfileOrderMap] = useState<{ [username: string]: number }>({});
@@ -830,6 +851,18 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
   useEffect(() => {
     fetchAgendamentos();
     fetchMetaConfig();
+
+    fetch('/api/auth/session')
+      .then(res => res.json())
+      .then(data => {
+        if (data?.role) {
+          setUserRole(data.role);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('st_pin_role', data.role);
+          }
+        }
+      })
+      .catch(e => console.error('Erro ao verificar sessão:', e));
     try {
       const stored = localStorage.getItem('socialtracker_automacao_configs');
       if (stored) setConfigs(JSON.parse(stored));
@@ -1061,7 +1094,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
   };
 
   const moveProfilePosition = (username: string, targetPosition: number) => {
-    const list = [...perfisAtivos];
+    const list = [...perfisExibidos];
     const currentOrdered = list.sort((a, b) => {
       const ordA = profileOrderMap[a.username.toLowerCase()] ?? 9999;
       const ordB = profileOrderMap[b.username.toLowerCase()] ?? 9999;
@@ -1095,7 +1128,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
   };
 
   // Ordenação dinâmica dos perfis
-  const perfisOrdenados = [...perfisAtivos].sort((a, b) => {
+  const perfisOrdenados = [...perfisExibidos].sort((a, b) => {
     if (sortMode === 'agendamentos_dia') {
       const dateA = selectedDateMap[a.username] || new Date();
       const dateB = selectedDateMap[b.username] || new Date();
@@ -1120,7 +1153,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
   // ─── CÁLCULOS DO SCORE TOTALIZADOR GERAL ─────────────────────────────────
   const hojeDate = new Date();
   const hojeIso = dataIsoLocal(hojeDate);
-  const meusUsernames = new Set(perfisAtivos.map(p => p.username.toLowerCase()));
+  const meusUsernames = new Set(perfisExibidos.map(p => p.username.toLowerCase()));
 
   // Todos os agendamentos dos perfis ativos
   const agsMeus = agendamentos.filter(a => meusUsernames.has(a.username.toLowerCase()));
@@ -1136,7 +1169,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
       const horaOrdenavel = ag.modo_hora === 'ALEATORIA' ? (ag.hora_janela_inicio || '00:00') : (ag.hora_fixa || '00:00');
       const publicado = pubsMinhas.some(p => p.agendamento_id === ag.id && p.data_local === agendaDiaIso && p.status === 'PUBLICADO');
       const erro = pubsMinhas.some(p => p.agendamento_id === ag.id && p.data_local === agendaDiaIso && p.status === 'ERRO');
-      const perfil = perfisAtivos.find(p => p.username.toLowerCase() === ag.username.toLowerCase());
+      const perfil = perfisExibidos.find(p => p.username.toLowerCase() === ag.username.toLowerCase());
       return { ag, horaOrdenavel, publicado, erro, perfil };
     })
     .sort((a, b) => a.horaOrdenavel.localeCompare(b.horaOrdenavel));
@@ -1488,7 +1521,50 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => {
+                const nextState = !mostrarTodos;
+                setMostrarTodos(nextState);
+                showToast(
+                  nextState
+                    ? 'Exibindo todos os perfis'
+                    : (userRole === '1707' ? 'Exibindo perfis 1707' : 'Exibindo outros perfis')
+                );
+              }}
+              style={{
+                padding: '5px 12px',
+                borderRadius: 6,
+                border: mostrarTodos ? '1px solid #388BFD' : '1px solid #30363D',
+                background: mostrarTodos ? 'rgba(56, 139, 253, 0.15)' : '#0D1117',
+                color: mostrarTodos ? '#58A6FF' : '#C9D1D9',
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                transition: 'all 0.15s ease'
+              }}
+              title={mostrarTodos ? 'Clique para voltar ao filtro da senha' : 'Exibir todos os perfis'}
+            >
+              {mostrarTodos ? <EyeOff size={12} /> : <Eye size={12} />}
+              MOSTRAR TODOS
+              {mostrarTodos && (
+                <span style={{
+                  fontSize: 9,
+                  background: '#388BFD',
+                  color: '#FFFFFF',
+                  padding: '1px 5px',
+                  borderRadius: 10,
+                  fontWeight: 800
+                }}>
+                  ATIVO
+                </span>
+              )}
+            </button>
+
             <span style={{
               fontSize: 10,
               fontWeight: 700,
