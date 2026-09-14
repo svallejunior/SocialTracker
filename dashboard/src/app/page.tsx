@@ -127,6 +127,9 @@ const CentralRespostas = nextDynamic(() => import("../components/CentralResposta
   loading: TabLoading,
   ssr: false,
 });
+const ModalMelhoresHorarios = nextDynamic(() => import("../components/ModalMelhoresHorarios"), {
+  ssr: false,
+});
 
 const ModalLancamentoInline = ({ isOpen, onClose, username, onSave, perfisDisponiveis }: any) => {
   useEffect(() => {
@@ -2434,6 +2437,7 @@ export default function Dashboard() {
   const [ultimaMetaExec, setUltimaMetaExec] = useState<string | null>(null);
   const [modalLancamento, setModalLancamento] = useState<{ username: string; tipo: string; } | null>(null);
   const [modalControleEdit, setModalControleEdit] = useState<any | null>(null);
+  const [modalMelhoresHorarios, setModalMelhoresHorarios] = useState<any | null>(null);
 
   const [ingestingProfile, setIngestingProfile] = useState<string | null>(null);
   const [ingestingAll, setIngestingAll] = useState(false);
@@ -3414,7 +3418,13 @@ export default function Dashboard() {
                   const hojeStoriesAg = pProf.hoje_stories_ag !== undefined ? Number(pProf.hoje_stories_ag) : (pCtrl.hoje_stories_ag !== undefined ? Number(pCtrl.hoje_stories_ag) : 0);
 
                   return (
-                    <div key={m.username} className="modelo-card-mockup">
+                    <div
+                      key={m.username}
+                      className="modelo-card-mockup"
+                      onClick={() => setModalMelhoresHorarios(m)}
+                      style={{ cursor: 'pointer' }}
+                      title={`Clique para ver os Melhores Horários de @${m.username}`}
+                    >
                       {/* COLUNA ESQUERDA: FOTO, NOME, USERNAME E BOTÃO GERENCIAR */}
                       <div className="modelo-col-left">
                         {/* Foto da Modelo (Ao clicar abre o Instagram em nova aba) */}
@@ -3424,6 +3434,7 @@ export default function Dashboard() {
                           rel="noopener noreferrer"
                           className="modelo-photo-frame"
                           title={`Abrir perfil de @${m.username} no Instagram`}
+                          onClick={(e) => e.stopPropagation()}
                         >
                           {foto ? (
                             <img
@@ -3463,7 +3474,10 @@ export default function Dashboard() {
                         <button
                           type="button"
                           className="modelo-action-btn"
-                          onClick={() => setModalControleEdit(pCtrl)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setModalControleEdit(pCtrl);
+                          }}
                           title={`Abrir modal de controle de ${nome}`}
                         >
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -6872,6 +6886,14 @@ export default function Dashboard() {
             setLancamentoSelecionado(null);
             setModalLancamento({ username: u, tipo: 'recebido' });
           }}
+        />
+      )}
+
+      {/* Modal de Melhores Horários (Seguidores & Views) */}
+      {modalMelhoresHorarios && (
+        <ModalMelhoresHorarios
+          modelo={modalMelhoresHorarios}
+          onClose={() => setModalMelhoresHorarios(null)}
         />
       )}
     </div>

@@ -1,0 +1,783 @@
+'use client';
+import React, { useEffect, useState } from 'react';
+import { AvatarModelo } from './AvatarModelo';
+import {
+  X, Users, Eye, TrendingUp, Calendar, Clock,
+  Sparkles, Flame, CheckCircle2, RefreshCw,
+  AlertCircle, ChevronRight, BarChart3, HelpCircle
+} from 'lucide-react';
+
+interface FaixaSeguidor {
+  faixa: string;
+  horaInicio: number;
+  ganhoTotal: number;
+  ganhoMedio: number;
+  amostras: number;
+  percentual: number;
+  isMelhor: boolean;
+}
+
+interface FaixaView {
+  faixa: string;
+  horaInicio: number;
+  viewsMedia: number;
+  viewsMediana: number;
+  viewsTotal: number;
+  postsCount: number;
+  percentual: number;
+  isMelhor: boolean;
+}
+
+interface DiaSemanaView {
+  dia: string;
+  diaCurto: string;
+  diaIndex: number;
+  viewsMedia: number;
+  viewsMediana: number;
+  postsCount: number;
+  percentual: number;
+  destaque: boolean;
+}
+
+interface HorariosData {
+  success: boolean;
+  username: string;
+  nome: string;
+  foto_url: string | null;
+  seguidores: {
+    melhorFaixa: string;
+    melhorFaixaInicio: number;
+    melhorFaixaFim: number;
+    ganhoTotalFaixa: number;
+    ganhoMedioFaixa: number;
+    totalGanhosAnalisados: number;
+    faixas: FaixaSeguidor[];
+    temDados: boolean;
+    observacao?: string;
+  };
+  visualizacoes: {
+    melhorFaixa: string;
+    melhorFaixaInicio: number;
+    melhorFaixaFim: number;
+    viewsMediaFaixa: number;
+    viewsMedianaFaixa: number;
+    totalPostsAnalisados: number;
+    faixas: FaixaView[];
+    diasSemana: DiaSemanaView[];
+    houveDiscrepancia: boolean;
+    diasIndicados: string[];
+    temDados: boolean;
+    observacao?: string;
+  };
+}
+
+interface ModalMelhoresHorariosProps {
+  modelo: {
+    username: string;
+    nome?: string;
+    foto_url?: string;
+    foto_perfil?: string;
+    [key: string]: any;
+  } | null;
+  onClose: () => void;
+}
+
+function formatNumber(num: number): string {
+  if (num === undefined || num === null) return '0';
+  if (num >= 1000000) return (num / 1000000).toFixed(1).replace('.0', '') + 'M';
+  if (num >= 1000) return (num / 1000).toFixed(1).replace('.0', '') + 'k';
+  return num.toLocaleString('pt-BR');
+}
+
+export default function ModalMelhoresHorarios({ modelo, onClose }: ModalMelhoresHorariosProps) {
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<HorariosData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [tabVisual, setTabVisual] = useState<'geral' | 'faixas_seguidores' | 'faixas_views' | 'dias'>('geral');
+
+  useEffect(() => {
+    if (!modelo?.username) return;
+
+    setLoading(true);
+    setError(null);
+
+    fetch(`/api/perfis/melhores-horarios?username=${encodeURIComponent(modelo.username)}`)
+      .then(res => res.json())
+      .then(json => {
+        if (json.success) {
+          setData(json);
+        } else {
+          setError(json.error || 'Erro ao carregar métricas da modelo');
+        }
+      })
+      .catch(err => {
+        setError(err.message || 'Falha na conexão com o servidor');
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [modelo?.username]);
+
+  // Fechar ao pressionar ESC
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  if (!modelo) return null;
+
+  const nomeExibicao = data?.nome || modelo.nome || modelo.nome_controle || modelo.username;
+  const fotoExibicao = data?.foto_url || modelo.foto_url || modelo.foto_perfil || null;
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(5, 8, 15, 0.82)',
+        backdropFilter: 'blur(8px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 9999,
+        padding: '16px',
+        animation: 'fadeIn 0.2s ease-out'
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          background: '#0D1117',
+          border: '1px solid #30363D',
+          borderRadius: 16,
+          width: '100%',
+          maxWidth: 780,
+          maxHeight: '92vh',
+          display: 'flex',
+          flexDirection: 'column',
+          boxShadow: '0 25px 60px rgba(0, 0, 0, 0.7), 0 0 30px rgba(0, 240, 255, 0.08)',
+          overflow: 'hidden',
+          color: '#E6EDF3'
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* --- HEADER DO MODAL --- */}
+        <div
+          style={{
+            padding: '16px 20px',
+            background: '#161B22',
+            borderBottom: '1px solid #21262D',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+            <AvatarModelo
+              src={fotoExibicao}
+              username={modelo.username}
+              size={48}
+              showBadge={false}
+              borderColor="#00FF66"
+              imageStyle={{ border: '2px solid rgba(0, 255, 102, 0.4)' }}
+            />
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <h2
+                  style={{
+                    fontSize: 18,
+                    fontWeight: 800,
+                    color: '#FFFFFF',
+                    margin: 0,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }}
+                >
+                  {nomeExibicao}
+                </h2>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: 12,
+                    background: 'rgba(0, 255, 102, 0.12)',
+                    border: '1px solid rgba(0, 255, 102, 0.3)',
+                    color: '#00FF66'
+                  }}
+                >
+                  Insights & Melhores Horários
+                </span>
+              </div>
+              <div style={{ fontSize: 12, color: '#8B949E', fontWeight: 600 }}>
+                @{modelo.username}
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              background: '#21262D',
+              border: '1px solid #30363D',
+              color: '#8B949E',
+              borderRadius: 8,
+              width: 32,
+              height: 32,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.color = '#FFFFFF';
+              e.currentTarget.style.background = '#30363D';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.color = '#8B949E';
+              e.currentTarget.style.background = '#21262D';
+            }}
+            title="Fechar (Esc)"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* --- CORPO COM ROLAGEM --- */}
+        <div style={{ padding: '20px', overflowY: 'auto', flex: 1 }}>
+          {loading ? (
+            <div style={{ padding: '60px 0', textAlign: 'center', color: '#8B949E' }}>
+              <RefreshCw size={28} className="animate-spin" style={{ margin: '0 auto 12px auto', color: '#00F0FF' }} />
+              <div style={{ fontSize: 14, fontWeight: 600 }}>Calculando séries temporais e engajamento...</div>
+            </div>
+          ) : error ? (
+            <div
+              style={{
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                padding: '20px',
+                borderRadius: 12,
+                textAlign: 'center',
+                color: '#F87171'
+              }}
+            >
+              <AlertCircle size={24} style={{ margin: '0 auto 8px auto' }} />
+              <div style={{ fontSize: 14, fontWeight: 700 }}>Erro ao obter métricas</div>
+              <div style={{ fontSize: 12, marginTop: 4 }}>{error}</div>
+            </div>
+          ) : data ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+
+              {/* GRID PRINCIPAL: 2 CARDS GRANDES DE DESTAQUE */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
+
+                {/* ─────────────────────────────────────────────────────────────
+                    CARD 1: MELHOR HORÁRIO EM SEGUIDORES (FAIXA DE 2H)
+                ───────────────────────────────────────────────────────────── */}
+                <div
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, #161B22 100%)',
+                    border: '1px solid rgba(16, 185, 129, 0.35)',
+                    borderRadius: 14,
+                    padding: '18px',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 8,
+                          background: 'rgba(16, 185, 129, 0.15)',
+                          border: '1px solid rgba(16, 185, 129, 0.3)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#10B981'
+                        }}
+                      >
+                        <Users size={16} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 800, color: '#10B981', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          1. Crescimento de Seguidores
+                        </div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#8B949E' }}>
+                          Melhor faixa de 2 horas
+                        </div>
+                      </div>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: 10,
+                        background: 'rgba(16, 185, 129, 0.15)',
+                        color: '#34D399',
+                        border: '1px solid rgba(16, 185, 129, 0.3)'
+                      }}
+                    >
+                      Pico de Conversão
+                    </span>
+                  </div>
+
+                  {data.seguidores.temDados ? (
+                    <div>
+                      {/* Bloco de Horário Gigante */}
+                      <div
+                        style={{
+                          background: '#0D1117',
+                          border: '1px solid #238636',
+                          borderRadius: 12,
+                          padding: '12px 16px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          marginBottom: 12
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: 11, color: '#8B949E', fontWeight: 600 }}>Horário de Maior Ganho</div>
+                          <div style={{ fontSize: 22, fontWeight: 900, color: '#00FF66', letterSpacing: '-0.5px' }}>
+                            {data.seguidores.melhorFaixa}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: 11, color: '#8B949E', fontWeight: 600 }}>Total no Período</div>
+                          <div style={{ fontSize: 15, fontWeight: 800, color: '#FFFFFF' }}>
+                            +{formatNumber(data.seguidores.ganhoTotalFaixa)} seg
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Mini Indicadores */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 11 }}>
+                        <div style={{ background: '#0D1117', padding: '8px 10px', borderRadius: 8, border: '1px solid #21262D' }}>
+                          <span style={{ color: '#8B949E' }}>Média por ciclo: </span>
+                          <strong style={{ color: '#34D399' }}>+{data.seguidores.ganhoMedioFaixa} seg</strong>
+                        </div>
+                        <div style={{ background: '#0D1117', padding: '8px 10px', borderRadius: 8, border: '1px solid #21262D' }}>
+                          <span style={{ color: '#8B949E' }}>Leituras válidas: </span>
+                          <strong style={{ color: '#FFFFFF' }}>{data.seguidores.totalGanhosAnalisados} ciclos</strong>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ padding: '24px 12px', textAlign: 'center', color: '#8B949E', fontSize: 12 }}>
+                      <Clock size={20} style={{ margin: '0 auto 6px auto', opacity: 0.5 }} />
+                      <div>{data.seguidores.observacao || 'Pouco histórico temporal registrado.'}</div>
+                    </div>
+                  )}
+                </div>
+
+                {/* ─────────────────────────────────────────────────────────────
+                    CARD 2: MELHOR FAIXA DE VISUALIZAÇÕES (VIEWS - 2H)
+                ───────────────────────────────────────────────────────────── */}
+                <div
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(56, 139, 253, 0.08) 0%, #161B22 100%)',
+                    border: '1px solid rgba(56, 139, 253, 0.35)',
+                    borderRadius: 14,
+                    padding: '18px',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 8,
+                          background: 'rgba(56, 139, 253, 0.15)',
+                          border: '1px solid rgba(56, 139, 253, 0.3)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#58A6FF'
+                        }}
+                      >
+                        <Eye size={16} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 800, color: '#58A6FF', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          2. Faixa de Visualizações
+                        </div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#8B949E' }}>
+                          Melhor horário de postagem
+                        </div>
+                      </div>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: 10,
+                        background: 'rgba(56, 139, 253, 0.15)',
+                        color: '#58A6FF',
+                        border: '1px solid rgba(56, 139, 253, 0.3)'
+                      }}
+                    >
+                      Pico de Alcance
+                    </span>
+                  </div>
+
+                  {data.visualizacoes.temDados ? (
+                    <div>
+                      {/* Bloco de Horário Gigante */}
+                      <div
+                        style={{
+                          background: '#0D1117',
+                          border: '1px solid #1F6FEB',
+                          borderRadius: 12,
+                          padding: '12px 16px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          marginBottom: 12
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: 11, color: '#8B949E', fontWeight: 600 }}>Horário Ideal para Postar</div>
+                          <div style={{ fontSize: 22, fontWeight: 900, color: '#58A6FF', letterSpacing: '-0.5px' }}>
+                            {data.visualizacoes.melhorFaixa}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: 11, color: '#8B949E', fontWeight: 600 }}>Média / Post</div>
+                          <div style={{ fontSize: 15, fontWeight: 800, color: '#FFFFFF' }}>
+                            {formatNumber(data.visualizacoes.viewsMediaFaixa)} views
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Mini Indicadores */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 11 }}>
+                        <div style={{ background: '#0D1117', padding: '8px 10px', borderRadius: 8, border: '1px solid #21262D' }}>
+                          <span style={{ color: '#8B949E' }}>Mediana da faixa: </span>
+                          <strong style={{ color: '#58A6FF' }}>{formatNumber(data.visualizacoes.viewsMedianaFaixa)} views</strong>
+                        </div>
+                        <div style={{ background: '#0D1117', padding: '8px 10px', borderRadius: 8, border: '1px solid #21262D' }}>
+                          <span style={{ color: '#8B949E' }}>Total analisado: </span>
+                          <strong style={{ color: '#FFFFFF' }}>{data.visualizacoes.totalPostsAnalisados} posts</strong>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ padding: '24px 12px', textAlign: 'center', color: '#8B949E', fontSize: 12 }}>
+                      <Eye size={20} style={{ margin: '0 auto 6px auto', opacity: 0.5 }} />
+                      <div>{data.visualizacoes.observacao || 'Nenhum post com visualizações registrado.'}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* ─────────────────────────────────────────────────────────────
+                  CARD 3: DISCREPÂNCIA EM DIAS DE SEMANA (REQUISITO EXPLÍCITO)
+              ───────────────────────────────────────────────────────────── */}
+              {data.visualizacoes.temDados && (
+                <div
+                  style={{
+                    background: '#161B22',
+                    border: data.visualizacoes.houveDiscrepancia ? '1px solid #F59E0B' : '1px solid #30363D',
+                    borderRadius: 14,
+                    padding: '16px 18px',
+                    boxShadow: data.visualizacoes.houveDiscrepancia ? '0 4px 20px rgba(245, 158, 11, 0.12)' : 'none'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Calendar size={16} color={data.visualizacoes.houveDiscrepancia ? '#FBBF24' : '#58A6FF'} />
+                      <span style={{ fontSize: 13, fontWeight: 800, color: '#FFFFFF' }}>
+                        Desempenho por Dia da Semana
+                      </span>
+                    </div>
+
+                    {data.visualizacoes.houveDiscrepancia ? (
+                      <span
+                        style={{
+                          fontSize: 10.5,
+                          fontWeight: 800,
+                          padding: '3px 10px',
+                          borderRadius: 12,
+                          background: 'rgba(245, 158, 11, 0.18)',
+                          color: '#FBBF24',
+                          border: '1px solid rgba(245, 158, 11, 0.4)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 5
+                        }}
+                      >
+                        <Sparkles size={12} />
+                        Discrepância Detectada
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 11, color: '#8B949E' }}>
+                        Distribuição homogênea entre dias
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Banner de Dias Indicados caso haja discrepância */}
+                  {data.visualizacoes.houveDiscrepancia && (
+                    <div
+                      style={{
+                        background: 'rgba(245, 158, 11, 0.08)',
+                        border: '1px solid rgba(245, 158, 11, 0.25)',
+                        borderRadius: 10,
+                        padding: '10px 14px',
+                        marginBottom: 14,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: 8
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#FCD34D' }}>
+                        <Flame size={16} color="#F59E0B" />
+                        <span><strong>Dias com maior volume de visualizações:</strong></span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        {data.visualizacoes.diasIndicados.map(d => (
+                          <span
+                            key={d}
+                            style={{
+                              background: '#F59E0B',
+                              color: '#0B0E14',
+                              fontWeight: 800,
+                              fontSize: 11,
+                              padding: '3px 9px',
+                              borderRadius: 6
+                            }}
+                          >
+                            ⭐ {d}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 7 Colunas dos Dias da Semana (Seg a Dom) */}
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+                      gap: 8
+                    }}
+                  >
+                    {data.visualizacoes.diasSemana.map(d => (
+                      <div
+                        key={d.dia}
+                        style={{
+                          background: d.destaque ? 'rgba(245, 158, 11, 0.12)' : '#0D1117',
+                          border: d.destaque ? '1px solid rgba(245, 158, 11, 0.5)' : '1px solid #21262D',
+                          borderRadius: 8,
+                          padding: '8px 6px',
+                          textAlign: 'center',
+                          transition: 'transform 0.15s ease'
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 800,
+                            color: d.destaque ? '#FBBF24' : '#8B949E',
+                            marginBottom: 4,
+                            textTransform: 'uppercase'
+                          }}
+                        >
+                          {d.diaCurto}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 800,
+                            color: d.viewsMedia > 0 ? '#FFFFFF' : '#6E7681'
+                          }}
+                        >
+                          {d.viewsMedia > 0 ? formatNumber(d.viewsMedia) : '-'}
+                        </div>
+                        <div style={{ fontSize: 9.5, color: '#8B949E', marginTop: 2 }}>
+                          {d.postsCount} {d.postsCount === 1 ? 'post' : 'posts'}
+                        </div>
+                        {d.destaque && (
+                          <div style={{ marginTop: 4 }}>
+                            <span style={{ fontSize: 8.5, fontWeight: 900, color: '#0B0E14', background: '#F59E0B', padding: '1px 4px', borderRadius: 4 }}>
+                              TOP
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ─────────────────────────────────────────────────────────────
+                  SELETOR DE DETALHAMENTO DAS FAIXAS DE 2H (DISTRIBUIÇÃO COMPLETA)
+              ───────────────────────────────────────────────────────────── */}
+              <div
+                style={{
+                  background: '#161B22',
+                  border: '1px solid #21262D',
+                  borderRadius: 14,
+                  padding: '16px 18px'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <BarChart3 size={15} color="#58A6FF" />
+                    <span style={{ fontSize: 13, fontWeight: 800, color: '#FFFFFF' }}>
+                      Distribuição Horária (Todas as 12 Faixas de 2h)
+                    </span>
+                  </div>
+
+                  {/* Toggle para ver Seguidores vs Visualizações */}
+                  <div style={{ display: 'flex', background: '#0D1117', padding: 2, borderRadius: 8, border: '1px solid #30363D', gap: 2 }}>
+                    <button
+                      type="button"
+                      onClick={() => setTabVisual('faixas_seguidores')}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: 6,
+                        border: tabVisual === 'faixas_seguidores' ? '1px solid #10B981' : '1px solid transparent',
+                        background: tabVisual === 'faixas_seguidores' ? 'rgba(16, 185, 129, 0.2)' : 'transparent',
+                        color: tabVisual === 'faixas_seguidores' ? '#34D399' : '#8B949E',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Seguidores
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTabVisual('faixas_views')}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: 6,
+                        border: tabVisual === 'faixas_views' ? '1px solid #388BFD' : '1px solid transparent',
+                        background: tabVisual === 'faixas_views' ? 'rgba(56, 139, 253, 0.2)' : 'transparent',
+                        color: tabVisual === 'faixas_views' ? '#58A6FF' : '#8B949E',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Visualizações
+                    </button>
+                  </div>
+                </div>
+
+                {/* Tabela / Grid de Barras Horárias */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(105px, 1fr))', gap: 8 }}>
+                  {(tabVisual === 'faixas_views' ? data.visualizacoes.faixas : data.seguidores.faixas).map((item: any) => {
+                    const isMelhor = item.isMelhor;
+                    const valPrincipal = tabVisual === 'faixas_views' ? item.viewsMedia : item.ganhoTotal;
+                    const valFormatado = tabVisual === 'faixas_views'
+                      ? (valPrincipal > 0 ? `${formatNumber(valPrincipal)}` : '-')
+                      : (valPrincipal > 0 ? `+${formatNumber(valPrincipal)}` : '-');
+
+                    const corTema = tabVisual === 'faixas_views' ? '#58A6FF' : '#10B981';
+                    const corTemaBg = tabVisual === 'faixas_views' ? 'rgba(56, 139, 253, 0.15)' : 'rgba(16, 185, 129, 0.15)';
+
+                    return (
+                      <div
+                        key={item.faixa}
+                        style={{
+                          background: isMelhor ? corTemaBg : '#0D1117',
+                          border: isMelhor ? `1px solid ${corTema}` : '1px solid #21262D',
+                          borderRadius: 8,
+                          padding: '8px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'space-between',
+                          position: 'relative'
+                        }}
+                      >
+                        <div style={{ fontSize: 10, fontWeight: 700, color: isMelhor ? corTema : '#8B949E', marginBottom: 4 }}>
+                          {item.faixa}
+                        </div>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: valPrincipal > 0 ? '#FFFFFF' : '#484F58' }}>
+                          {valFormatado}
+                        </div>
+                        <div style={{ marginTop: 6, width: '100%', height: 4, background: '#21262D', borderRadius: 2, overflow: 'hidden' }}>
+                          <div
+                            style={{
+                              width: `${Math.max(4, item.percentual)}%`,
+                              height: '100%',
+                              background: isMelhor ? corTema : '#30363D',
+                              borderRadius: 2
+                            }}
+                          />
+                        </div>
+                        {isMelhor && (
+                          <div style={{ position: 'absolute', top: 4, right: 6, fontSize: 8.5, fontWeight: 900, color: corTema }}>
+                            ★ TOP
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+            </div>
+          ) : null}
+        </div>
+
+        {/* --- FOOTER DO MODAL --- */}
+        <div
+          style={{
+            padding: '12px 20px',
+            background: '#161B22',
+            borderTop: '1px solid #21262D',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: 11,
+            color: '#8B949E'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <HelpCircle size={13} />
+            <span>Dados compilados a partir de coletas a cada 15 min e histórico de postagens do Instagram.</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              background: '#21262D',
+              border: '1px solid #30363D',
+              color: '#C9D1D9',
+              borderRadius: 6,
+              padding: '6px 14px',
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: 'pointer'
+            }}
+          >
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
