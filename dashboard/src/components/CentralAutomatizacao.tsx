@@ -42,6 +42,7 @@ export interface AgendamentoArquivo {
   type?: string;
   tipo?: string;
   previewUrl?: string | null;
+  file?: File;
 }
 
 export interface Agendamento {
@@ -97,8 +98,8 @@ export interface Publicacao {
 
 export function getMediaUrl(arq?: AgendamentoArquivo | null, metaAccountId?: string): string {
   if (!arq) return '';
-  // 1. Se tiver previewUrl válida (CDN de imagem do Instagram, base64 ou miniatura direta), prioriza para exibição de imagem
-  if (arq.previewUrl && (arq.previewUrl.startsWith('http://') || arq.previewUrl.startsWith('https://') || arq.previewUrl.startsWith('data:') || arq.previewUrl.startsWith('/'))) {
+  // 1. Se tiver previewUrl válida (CDN de imagem do Instagram, blob local, base64 ou miniatura direta), prioriza para exibição de imagem
+  if (arq.previewUrl && (arq.previewUrl.startsWith('http://') || arq.previewUrl.startsWith('https://') || arq.previewUrl.startsWith('data:') || arq.previewUrl.startsWith('/') || arq.previewUrl.startsWith('blob:'))) {
     return arq.previewUrl;
   }
   // 2. Se a URL for um link direto de arquivo de mídia
@@ -4012,7 +4013,7 @@ function FormularioAgendamento({
     setTipoPostagem(novoTipo);
   };
 
-  const handleFileUpload = async (filesList: FileList | File[] | null) => {
+  const handleFileUpload = (filesList: FileList | File[] | null) => {
     if (!filesList || filesList.length === 0) return;
 
     const filesArray = Array.from(filesList);
@@ -4026,31 +4027,16 @@ function FormularioAgendamento({
       setAvisoFoto(null);
     }
 
-    try {
-      setUploading(true);
-      const formData = new FormData();
-      formData.append('metaAccountId', metaAccountId || username);
+    // Cria previews locais instantâneos em memória (0ms, zero consumo de rede e sem salvar nada ainda)
+    const novosArquivos: AgendamentoArquivo[] = filesArray.map(f => ({
+      file: f,
+      name: f.name,
+      size: f.size,
+      type: f.type,
+      previewUrl: URL.createObjectURL(f)
+    }));
 
-      for (let i = 0; i < filesArray.length; i++) {
-        formData.append('files', filesArray[i]);
-      }
-
-      const res = await fetch('/api/automacao/upload', {
-        method: 'POST',
-        body: formData
-      });
-      const json = await res.json();
-
-      if (json.success && json.files) {
-        setArquivos(prev => [...prev, ...json.files]);
-      } else {
-        alert(`Erro no upload: ${json.error || 'Erro desconhecido'}`);
-      }
-    } catch (e: any) {
-      alert(`Falha no upload de arquivos: ${e.message}`);
-    } finally {
-      setUploading(false);
-    }
+    setArquivos(prev => [...prev, ...novosArquivos]);
   };
 
   // Carrega automaticamente arquivos arrastados diretamente para a janela da modelo
@@ -4061,9 +4047,27 @@ function FormularioAgendamento({
     }
   }, [initialFiles]);
 
+  // Remove arquivo e libera o recurso do blob se for preview local
   const handleRemoveArquivo = (index: number) => {
-    setArquivos(prev => prev.filter((_, i) => i !== index));
+    setArquivos(prev => {
+      const item = prev[index];
+      if (item?.previewUrl && item.previewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(item.previewUrl);
+      }
+      return prev.filter((_, i) => i !== index);
+    });
   };
+
+  // Limpa quaisquer URLs blob criadas ao fechar ou desmontar o formulário
+  useEffect(() => {
+    return () => {
+      arquivos.forEach(a => {
+        if (a.previewUrl && a.previewUrl.startsWith('blob:')) {
+          URL.revokeObjectURL(a.previewUrl);
+        }
+      });
+    };
+  }, []);
 
   const toggleDia = (dia: string) => {
     if (diasSelecionados.includes(dia)) {
@@ -4075,6 +4079,11 @@ function FormularioAgendamento({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (arquivos.length === 0) {
+      alert('Por favor, adicione ao menos 1 arquivo de mídia para agendar.');
+      return;
+    }
 
     if (tipoAgendamento === 'DATA_ESPECIFICA') {
       if (!dataEspecifica) {
@@ -4094,6 +4103,46 @@ function FormularioAgendamento({
 
     setSaving(true);
     try {
+      // 1. Upload apenas dos arquivos que foram adicionados agora e ainda têm o objeto File pendente
+      const arquivosPendentes = arquivos.filter(a => a.file instanceof File);
+      let arquivosFinais: AgendamentoArquivo[] = arquivos;
+
+      if (arquivosPendentes.length > 0) {
+        setUploading(true);
+        const formData = new FormData();
+        formData.append('metaAccountId', metaAccountId || username);
+
+        arquivosPendentes.forEach(a => {
+          if (a.file) {
+            formData.append('files', a.file);
+          }
+        });
+
+        const res = await fetch('/api/automacao/upload', {
+          method: 'POST',
+          body: formData
+        });
+        const json = await res.json();
+
+        if (!json.success || !json.files?.length) {
+          throw new Error(json.error || 'Falha ao salvar arquivos de mídia no servidor');
+        }
+
+        // Substitui os arquivos pendentes pelos objetos salvos definitivos retornados pelo servidor
+        let pendenteIdx = 0;
+        arquivosFinais = arquivos.map(a => {
+          if (a.file instanceof File) {
+            const uploaded = json.files[pendenteIdx];
+            pendenteIdx++;
+            if (a.previewUrl && a.previewUrl.startsWith('blob:')) {
+              URL.revokeObjectURL(a.previewUrl);
+            }
+            return uploaded || a;
+          }
+          return a;
+        });
+      }
+
       const payloadDias = tipoAgendamento === 'DATA_ESPECIFICA' ? [dataEspecifica] : diasSelecionados;
       const payloadRecorrencia = tipoAgendamento === 'DATA_ESPECIFICA'
         ? 'UNICA'
@@ -4104,7 +4153,7 @@ function FormularioAgendamento({
         username,
         meta_account_id: metaAccountId,
         tipo_postagem: tipoPostagem,
-        arquivos,
+        arquivos: arquivosFinais,
         ordem_arquivos: ordemArquivos,
         tipo_agendamento: tipoAgendamento,
         data_especifica: tipoAgendamento === 'DATA_ESPECIFICA' ? dataEspecifica : '',
@@ -4121,7 +4170,10 @@ function FormularioAgendamento({
         legenda: tipoPostagem === 'STORIES' ? '' : legenda,
         status: 'AGENDADO'
       });
+    } catch (err: any) {
+      alert(`Erro ao salvar agendamento: ${err.message}`);
     } finally {
+      setUploading(false);
       setSaving(false);
     }
   };
@@ -4262,7 +4314,7 @@ function FormularioAgendamento({
         >
           <UploadCloud size={20} color={isDragOver ? activeTheme.color : '#8B949E'} style={{ margin: '0 auto 4px auto' }} />
           <div style={{ fontSize: 11, fontWeight: 600, color: '#F0F6FC' }}>
-            {uploading ? 'Enviando arquivos...' : (tipoPostagem === 'REELS' ? 'Arraste vídeos para o Reels aqui, ou clique para selecionar' : 'Arraste fotos ou vídeos aqui, ou clique para selecionar')}
+            {tipoPostagem === 'REELS' ? 'Arraste vídeos para o Reels aqui, ou clique para selecionar' : 'Arraste fotos ou vídeos aqui, ou clique para selecionar'}
           </div>
           <div style={{ fontSize: 9, color: '#6E7681', marginTop: 2 }}>
             {tipoPostagem === 'REELS' ? '⚠️ Reels aceita exclusivamente arquivos de vídeo (.mp4, .mov)' : 'Aceita fotos (.jpg, .png) e vídeos (.mp4, .mov)'}
@@ -5056,7 +5108,7 @@ function FormularioAgendamento({
             boxShadow: `0 2px 10px ${activeTheme.bgSelected}`
           }}
         >
-          {saving ? 'Salvando...' : (initialData ? '💾 Atualizar Agendamento' : '💾 Salvar Agendamento')}
+          {saving ? (uploading ? '⏳ Enviando mídias...' : '💾 Salvando...') : (initialData ? '💾 Atualizar Agendamento' : '💾 Salvar Agendamento')}
         </button>
       </div>
 
