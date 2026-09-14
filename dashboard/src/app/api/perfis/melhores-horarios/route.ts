@@ -82,6 +82,25 @@ export async function GET(req: NextRequest) {
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([dt, seg]) => ({ data_coleta: dt, seguidores: seg }));
 
+    // Contagem de leituras por data (YYYY-MM-DD).
+    // O usuário relatou que antes realizava coletas apenas 1x ao dia (entre 5h e 8h),
+    // o que acumulava o ganho de 24h na manhã e distorcia a melhor faixa.
+    // Desprezamos dias com poucas coletas (< 6 coletas no dia).
+    const leiturasPorDia: { [dia: string]: number } = {};
+    for (const c of coletasOrdenadas) {
+      const dia = c.data_coleta.substring(0, 10);
+      leiturasPorDia[dia] = (leiturasPorDia[dia] || 0) + 1;
+    }
+
+    const MIN_COLETAS_DIA = 6;
+    const diasValidos = new Set<string>(
+      Object.entries(leiturasPorDia)
+        .filter(([_, cnt]) => cnt >= MIN_COLETAS_DIA)
+        .map(([dia]) => dia)
+    );
+    const diasDescartadosCount = Object.keys(leiturasPorDia).length - diasValidos.size;
+    const diasValidosCount = diasValidos.size;
+
     // Faixas de 2 horas (00h-02h, 02h-04h, ..., 22h-00h)
     const faixasSeguidores: {
       [f: number]: {
@@ -101,6 +120,14 @@ export async function GET(req: NextRequest) {
       const prev = coletasOrdenadas[i - 1];
       const curr = coletasOrdenadas[i];
 
+      const diaPrev = prev.data_coleta.substring(0, 10);
+      const diaCurr = curr.data_coleta.substring(0, 10);
+
+      // Despreza medições de dias com poucas coletas
+      if (!diasValidos.has(diaPrev) || !diasValidos.has(diaCurr)) {
+        continue;
+      }
+
       const dtPrev = parseSqliteDate(prev.data_coleta);
       const dtCurr = parseSqliteDate(curr.data_coleta);
 
@@ -108,8 +135,9 @@ export async function GET(req: NextRequest) {
 
       const diffHoras = (dtCurr.getTime() - dtPrev.getTime()) / (1000 * 60 * 60);
 
-      // Considera intervalos de amostragem razoáveis (até 36h)
-      if (diffHoras > 0 && diffHoras <= 36) {
+      // Considera intervalos curtos de amostragem periódica (máximo 2.5 horas)
+      // Evita imputar gaps longos ou intervalos noturnos a uma única faixa de 2h
+      if (diffHoras > 0 && diffHoras <= 2.5) {
         const diffSeg = curr.seguidores - prev.seguidores;
         // Filtra ganhos positivos reais (exclui ruídos de coleta > 10.000)
         if (diffSeg > 0 && diffSeg < 10000) {
@@ -306,11 +334,18 @@ export async function GET(req: NextRequest) {
         ganhoTotalFaixa: faixasSeguidores[melhorFaixaSeguidoresInicio]?.ganhoTotal || 0,
         ganhoMedioFaixa: faixasSeguidores[melhorFaixaSeguidoresInicio]?.ganhoMedio || 0,
         totalGanhosAnalisados,
+        diasValidosCount,
+        diasDescartadosCount,
         faixas: listaFaixasSeguidores,
         temDados: temDadosSeguidores,
+        observacaoFiltro: diasDescartadosCount > 0
+          ? `Filtro ativo: ${diasDescartadosCount} dia(s) com coletas esparsas (1x/dia) foram descartados.`
+          : undefined,
         observacao: temDadosSeguidores
           ? undefined
-          : 'Poucos registros de variação horária coletados ainda. A estimativa será aprimorada nos próximos ciclos.'
+          : diasValidosCount === 0
+            ? 'Aguardando mais dias com coletas frequentes (dias com apenas 1 leitura diária foram descartados para evitar distorções).'
+            : 'Poucos registros de variação horária coletados ainda. A estimativa será aprimorada nos próximos ciclos.'
       },
       visualizacoes: {
         melhorFaixa: `${String(melhorFaixaViewsInicio).padStart(2, '0')}:00 às ${String(fFimView).padStart(2, '0')}:00`,

@@ -850,23 +850,23 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
 
                 {/* Navegação por janela de 15 dias no histórico */}
                 {!apenasPendentesTable && (
-                  <div className="anomalias-nav-btns" title="Navegar por janelas de 15 dias">
-                    <button
-                      onClick={() => setPaginaHistorico(p => Math.min(totalPaginasHistorico - 1, p + 1))}
-                      className="anomalias-nav-btn"
-                      disabled={itemsLoading || paginaHistorico >= totalPaginasHistorico - 1}
-                      title="15 dias mais antigos"
-                    >
-                      <ChevronLeft size={16} />
-                    </button>
-                    <span className="anomalias-nav-index">
-                      {paginaHistorico + 1} / {totalPaginasHistorico}
-                    </span>
+                  <div className="anomalias-nav-btns" title="Navegar páginas de 15 dias no histórico">
                     <button
                       onClick={() => setPaginaHistorico(p => Math.max(0, p - 1))}
                       className="anomalias-nav-btn"
                       disabled={itemsLoading || paginaHistorico === 0}
-                      title="15 dias mais recentes"
+                      title="Página Anterior (dias mais recentes)"
+                    >
+                      <ChevronLeft size={16} />
+                    </button>
+                    <span className="anomalias-nav-index">
+                      Pág. {paginaHistorico + 1} / {totalPaginasHistorico}
+                    </span>
+                    <button
+                      onClick={() => setPaginaHistorico(p => Math.min(totalPaginasHistorico - 1, p + 1))}
+                      className="anomalias-nav-btn"
+                      disabled={itemsLoading || paginaHistorico >= totalPaginasHistorico - 1}
+                      title="Próxima Página (dias mais antigos)"
                     >
                       <ChevronRight size={16} />
                     </button>
@@ -874,7 +874,7 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                 )}
 
                 {/* Botões de Navegação entre perfis */}
-                <div className="anomalias-nav-btns">
+                <div className="anomalias-nav-btns" title="Navegar entre perfis monitorados">
                   <button
                     onClick={handlePrevProfile}
                     className="anomalias-nav-btn"
@@ -883,7 +883,7 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                     <ChevronLeft size={16} />
                   </button>
                   <span className="anomalias-nav-index">
-                    {currentProfileIndex + 1} / {perfisFiltrados.length}
+                    Perfil {currentProfileIndex + 1} / {perfisFiltrados.length}
                   </span>
                   <button
                     onClick={handleNextProfile}

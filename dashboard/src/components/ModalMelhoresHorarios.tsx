@@ -4,7 +4,7 @@ import { AvatarModelo } from './AvatarModelo';
 import {
   X, Users, Eye, TrendingUp, Calendar, Clock,
   Sparkles, Flame, CheckCircle2, RefreshCw,
-  AlertCircle, ChevronRight, BarChart3, HelpCircle
+  AlertCircle, ChevronRight, BarChart3, HelpCircle, Info
 } from 'lucide-react';
 
 interface FaixaSeguidor {
@@ -54,6 +54,9 @@ interface HorariosData {
     faixas: FaixaSeguidor[];
     temDados: boolean;
     observacao?: string;
+    observacaoFiltro?: string;
+    diasValidosCount?: number;
+    diasDescartadosCount?: number;
   };
   visualizacoes: {
     melhorFaixa: string;
@@ -373,6 +376,26 @@ export default function ModalMelhoresHorarios({ modelo, onClose }: ModalMelhores
                           <strong style={{ color: '#FFFFFF' }}>{data.seguidores.totalGanhosAnalisados} ciclos</strong>
                         </div>
                       </div>
+
+                      {data.seguidores.observacaoFiltro && (
+                        <div
+                          style={{
+                            marginTop: 10,
+                            background: '#0D1117',
+                            padding: '6px 10px',
+                            borderRadius: 8,
+                            border: '1px solid rgba(16, 185, 129, 0.2)',
+                            fontSize: 11,
+                            color: '#8B949E',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6
+                          }}
+                        >
+                          <Info size={13} style={{ color: '#10B981', flexShrink: 0 }} />
+                          <span>{data.seguidores.observacaoFiltro}</span>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div style={{ padding: '24px 12px', textAlign: 'center', color: '#8B949E', fontSize: 12 }}>

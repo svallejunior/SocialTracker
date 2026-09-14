@@ -1639,9 +1639,14 @@ body::after {
   transition: all 0.15s;
 }
 
-.anomalias-nav-btn:hover {
+.anomalias-nav-btn:hover:not(:disabled) {
   color: white;
   background: #21262D;
+}
+
+.anomalias-nav-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 .anomalias-nav-index {
