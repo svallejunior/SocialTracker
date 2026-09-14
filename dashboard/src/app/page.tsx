@@ -799,7 +799,7 @@ const formatarHorarioNeon = (dateStr: string) => {
 };
 
 // ============================================================
-// 🎯 PERFORMANCE SCORE — Cálculo dos 3 Pilares (0–100)
+// 🎯 PERFORMANCE SCORE — Cálculo dos 3 Pilares Reformulado (0–100)
 // ============================================================
 
 /**
@@ -831,14 +831,20 @@ function calcularIdadeDias(primeiraPostagem: string | null, dataColeta: string |
 }
 
 interface PillarDetail {
+  tipoTrafego: 'ORGANICO' | 'ADS';
+  benchmarkCount: number;
+  diasJanela: number;
+  isRecente: boolean;
   sCrescimento: number;
-  sRitmo: number;
-  sEficiencia: number;
+  sEngajamento: number;
+  sConsistencia: number;
   ganhoDiarioReal: number;
+  engajamentoReal: number;
   postsPorDiaReal: number;
-  eficienciaReal: number;
+  totalPostsAvaliados: number;
   medGanhoBenchmark: number;
-  medEficienciaBenchmark: number;
+  medEngajamentoBenchmark: number;
+  medRitmoBenchmark: number;
 }
 
 interface PSResult {
@@ -847,78 +853,175 @@ interface PSResult {
 }
 
 /**
+ * Extrai o ganho diário recente de um perfil usando snapshots de followersHistory (janela de até 30 dias),
+ * com fallback inteligente para a idade total da conta caso não haja snapshots suficientes.
+ */
+function extrairGanhoDiarioPerfil(p: any, fHist: Record<string, any[]>): { ganhoDiario: number; diasJanela: number; isRecente: boolean } {
+  const u = (p.username || '').toLowerCase();
+  const hist = (fHist[u] || fHist[p.username] || [])
+    .slice()
+    .filter((h: any) => h.total_seguidores !== undefined && h.total_seguidores !== null)
+    .sort((a: any, b: any) => String(a.data || a.data_coleta || '').localeCompare(String(b.data || b.data_coleta || '')));
+
+  const seguidoresAtual = Number(p.seguidores) || 0;
+
+  if (hist.length >= 2) {
+    const lastEntry = hist[hist.length - 1];
+    const lastVal = Number(lastEntry.total_seguidores) || seguidoresAtual;
+    const lastDateStr = (lastEntry.data || lastEntry.data_coleta || '').split('T')[0].split(' ')[0];
+    const lastDate = new Date(lastDateStr + 'T00:00:00');
+
+    // Tenta obter um snapshot de cerca de 30 dias atrás
+    const trintaDiasAtras = new Date(lastDate);
+    trintaDiasAtras.setDate(trintaDiasAtras.getDate() - 30);
+    const trintaDiasAtrasStr = trintaDiasAtras.toISOString().split('T')[0];
+
+    let baseEntry = hist[0];
+    for (let i = hist.length - 1; i >= 0; i--) {
+      const dStr = (hist[i].data || hist[i].data_coleta || '').split('T')[0].split(' ')[0];
+      if (dStr <= trintaDiasAtrasStr) {
+        baseEntry = hist[i];
+        break;
+      }
+    }
+
+    const baseVal = Number(baseEntry.total_seguidores);
+    const baseDateStr = (baseEntry.data || baseEntry.data_coleta || '').split('T')[0].split(' ')[0];
+    const baseDate = new Date(baseDateStr + 'T00:00:00');
+    const dias = Math.max(1, Math.round((lastDate.getTime() - baseDate.getTime()) / 86400000));
+
+    if (dias >= 1) {
+      const ganho = (lastVal - baseVal) / dias;
+      return { ganhoDiario: Math.max(0, ganho), diasJanela: dias, isRecente: true };
+    }
+  }
+
+  // Fallback: cálculo histórico baseado na primeira_postagem e idade total
+  const idadeDias = calcularIdadeDias(p.primeira_postagem, p.data_coleta);
+  if (idadeDias > 0 && seguidoresAtual > 0) {
+    const ganhoHistorico = seguidoresAtual / idadeDias;
+    return { ganhoDiario: Math.max(0, ganhoHistorico), diasJanela: Math.max(1, idadeDias), isRecente: false };
+  }
+
+  return { ganhoDiario: 0, diasJanela: 0, isRecente: false };
+}
+
+/**
+ * Calcula a taxa de engajamento média por post ( (likes + comentários) / seguidores * 100 ).
+ */
+function extrairEngajamentoPerfil(p: any, postsList?: any[]): { taxaEngajamento: number; totalPostsAvaliados: number } {
+  const u = (p.username || '').toLowerCase();
+  const seg = Number(p.seguidores) || 0;
+  if (!postsList || postsList.length === 0 || seg <= 0) {
+    return { taxaEngajamento: 0, totalPostsAvaliados: 0 };
+  }
+
+  const userPosts = postsList.filter((post: any) => (post.username || '').toLowerCase() === u);
+  if (userPosts.length === 0) {
+    return { taxaEngajamento: 0, totalPostsAvaliados: 0 };
+  }
+
+  const somaEng = userPosts.reduce((acc: number, post: any) => {
+    const likes = Number(post.likes) || 0;
+    const comments = Number(post.comentarios) || 0;
+    return acc + likes + comments;
+  }, 0);
+
+  const mediaEngPorPost = somaEng / userPosts.length;
+  const taxa = (mediaEngPorPost / seg) * 100;
+  return { taxaEngajamento: taxa, totalPostsAvaliados: userPosts.length };
+}
+
+/**
+ * Calcula a média de postagens diárias.
+ */
+function extrairRitmoPostsPerfil(p: any): number {
+  const idadeDias = calcularIdadeDias(p.primeira_postagem, p.data_coleta);
+  const totalPosts = Number(p.total_posts) || 0;
+  return totalPosts / Math.max(1, idadeDias);
+}
+
+/**
  * Calcula o Performance Score (0–100) para um perfil.
- * Requer: primeira_postagem, seguidores, total_posts e data_coleta.
+ * - Segrega estritamente por tipo_trafego ('ORGANICO' vs 'ADS').
+ * - 3 Pilares:
+ *   1. Tração & Ganho Diário (45%)
+ *   2. Engajamento & Qualidade (30%)
+ *   3. Consistência & Ritmo (25%)
  */
 function calcularPerformanceScore(
   perfil: any,
   allProfiles: any[],
+  followersHistory: Record<string, any[]> = {},
+  allPosts: any[] = []
 ): PSResult | null {
-  // Sem data de início, impossível calcular
-  if (!perfil.primeira_postagem) return null;
+  const tipoTrafego: 'ORGANICO' | 'ADS' = ((perfil.tipo_trafego || 'ORGANICO') as string).toUpperCase() === 'ADS' ? 'ADS' : 'ORGANICO';
 
-  const idadeDias = calcularIdadeDias(perfil.primeira_postagem, perfil.data_coleta);
+  // Métricas do perfil avaliado
+  const ganhoInfo = extrairGanhoDiarioPerfil(perfil, followersHistory);
+  const engInfo = extrairEngajamentoPerfil(perfil, allPosts);
+  const postsPorDiaReal = extrairRitmoPostsPerfil(perfil);
+
   const seguidoresAtual = Number(perfil.seguidores) || 0;
-  const totalPosts = Number(perfil.total_posts) || 0;
-
-  // Pilar 1: Ganho diário de seguidores
-  const ganhoDiarioReal = seguidoresAtual / Math.max(1, idadeDias);
-
-  // Pilar 2: Ritmo de postagem (posts por dia)
-  const postsPorDiaReal = totalPosts / Math.max(1, idadeDias);
-
-  // Pilar 3: Eficiência (seguidores por post)
-  const eficienciaReal = totalPosts > 0 ? seguidoresAtual / totalPosts : 0;
-
-  // ── Benchmark: perfis do mesmo tipo_conta onde meu_perfil = 0 (ou null) ──
-  const tipoConta = perfil.tipo_conta || '';
-  const benchmarkPerfis = allProfiles.filter(p =>
-    (p.meu_perfil === 0 || p.meu_perfil === null) &&
-    (p.tipo_conta || '') === tipoConta &&
-    p.primeira_postagem != null
-  );
-
-  const benchGanhos: number[] = benchmarkPerfis.map(b => {
-    const id = calcularIdadeDias(b.primeira_postagem, b.data_coleta);
-    return (Number(b.seguidores) || 0) / Math.max(1, id);
-  });
-
-  const benchEficiencias: number[] = benchmarkPerfis.map(b => {
-    const posts = Number(b.total_posts) || 0;
-    return posts > 0 ? (Number(b.seguidores) || 0) / posts : 0;
-  });
-
-  const medGanhoBenchmark = mediana(benchGanhos);
-  const medEficienciaBenchmark = mediana(benchEficiencias);
-
-  // ── S_crescimento (40%) ──
-  let sCrescimento: number;
-  if (idadeDias < 3 && ganhoDiarioReal === 0) {
-    // Conta nova sem histórico suficiente → valor neutro provisório
-    sCrescimento = 50;
-  } else if (medGanhoBenchmark <= 0) {
-    // Sem benchmark disponível → neutro
-    sCrescimento = 50;
-  } else {
-    sCrescimento = Math.min(100, (ganhoDiarioReal / medGanhoBenchmark) * 50);
+  // Sem dados básicos (sem seguidores e sem postagens), não calcula
+  if (seguidoresAtual <= 0 && ganhoInfo.ganhoDiario === 0 && !perfil.primeira_postagem) {
+    return null;
   }
 
-  // ── S_ritmo (35%) ──
-  const META_POSTS_DIA = 1.8;
-  const sRitmo = Math.min(100, (postsPorDiaReal / META_POSTS_DIA) * 100);
+  // ── Grupo de Benchmark: concorrentes do MESMO tipo_trafego (ORGANICO vs ADS) onde meu_perfil = 0 ──
+  const benchmarkPerfis = allProfiles.filter(p => {
+    const isOutro = (p.meu_perfil === 0 || p.meu_perfil === null);
+    const pTrafego: 'ORGANICO' | 'ADS' = ((p.tipo_trafego || 'ORGANICO') as string).toUpperCase() === 'ADS' ? 'ADS' : 'ORGANICO';
+    return isOutro && pTrafego === tipoTrafego;
+  });
 
-  // ── S_eficiência (25%) ──
-  let sEficiencia: number;
-  if (medEficienciaBenchmark <= 0) {
-    sEficiencia = 50; // Sem benchmark → neutro
+  const benchGanhos: number[] = benchmarkPerfis
+    .map(b => extrairGanhoDiarioPerfil(b, followersHistory).ganhoDiario)
+    .filter(g => g > 0);
+
+  const benchEngajamentos: number[] = benchmarkPerfis
+    .map(b => extrairEngajamentoPerfil(b, allPosts).taxaEngajamento)
+    .filter(e => e > 0);
+
+  const benchRitmos: number[] = benchmarkPerfis
+    .map(b => extrairRitmoPostsPerfil(b))
+    .filter(r => r > 0);
+
+  const medGanhoBenchmark = mediana(benchGanhos);
+  const medEngajamentoBenchmark = mediana(benchEngajamentos);
+  const medRitmoBenchmark = mediana(benchRitmos);
+
+  // ── 1. S_crescimento (45%) ──
+  let sCrescimento: number;
+  if (medGanhoBenchmark <= 0) {
+    sCrescimento = 50; // Sem benchmark suficiente → neutro provisório
+  } else if (ganhoInfo.ganhoDiario <= 0) {
+    sCrescimento = 10; // Sem ganho registrado
   } else {
-    sEficiencia = Math.min(100, (eficienciaReal / medEficienciaBenchmark) * 50);
+    sCrescimento = Math.min(100, Math.max(0, (ganhoInfo.ganhoDiario / medGanhoBenchmark) * 50));
+  }
+
+  // ── 2. S_engajamento (30%) ──
+  let sEngajamento: number;
+  if (engInfo.totalPostsAvaliados === 0 || medEngajamentoBenchmark <= 0) {
+    sEngajamento = 50; // Sem posts para amostragem ou sem benchmark → neutro provisório
+  } else {
+    sEngajamento = Math.min(100, Math.max(0, (engInfo.taxaEngajamento / medEngajamentoBenchmark) * 50));
+  }
+
+  // ── 3. S_consistencia (25%) ──
+  let sConsistencia: number;
+  if (medRitmoBenchmark > 0) {
+    sConsistencia = Math.min(100, Math.max(0, (postsPorDiaReal / medRitmoBenchmark) * 50));
+  } else {
+    // Referência padrão: 0.7 posts/dia (~5 posts/sem) = 50 pts, 1.4 posts/dia = 100 pts
+    sConsistencia = Math.min(100, Math.max(0, (postsPorDiaReal / 0.7) * 50));
   }
 
   const score = Math.round(
-    0.40 * sCrescimento +
-    0.35 * sRitmo +
-    0.25 * sEficiencia
+    0.45 * sCrescimento +
+    0.30 * sEngajamento +
+    0.25 * sConsistencia
   );
 
   if (isNaN(score)) return null;
@@ -926,14 +1029,20 @@ function calcularPerformanceScore(
   return {
     score: Math.max(0, Math.min(100, score)),
     detail: {
+      tipoTrafego,
+      benchmarkCount: benchmarkPerfis.length,
+      diasJanela: ganhoInfo.diasJanela,
+      isRecente: ganhoInfo.isRecente,
       sCrescimento: Math.round(sCrescimento),
-      sRitmo: Math.round(sRitmo),
-      sEficiencia: Math.round(sEficiencia),
-      ganhoDiarioReal,
+      sEngajamento: Math.round(sEngajamento),
+      sConsistencia: Math.round(sConsistencia),
+      ganhoDiarioReal: ganhoInfo.ganhoDiario,
+      engajamentoReal: engInfo.taxaEngajamento,
       postsPorDiaReal,
-      eficienciaReal,
+      totalPostsAvaliados: engInfo.totalPostsAvaliados,
       medGanhoBenchmark,
-      medEficienciaBenchmark,
+      medEngajamentoBenchmark,
+      medRitmoBenchmark,
     }
   };
 }
@@ -2003,8 +2112,8 @@ export default function Dashboard() {
         }
       }
 
-      // Calcula o Performance Score para este perfil
-      const psResult = calcularPerformanceScore(p, profiles);
+      // Calcula o Performance Score para este perfil com a nova lógica (tráfego, crescimento recente, engajamento e consistência)
+      const psResult = calcularPerformanceScore(p, profiles, followersHistory, posts);
       const performance_score = psResult ? psResult.score : null;
       const ps_detail = psResult ? psResult.detail : null;
 
@@ -2075,7 +2184,7 @@ export default function Dashboard() {
       if (diff !== 0) return acompSortDir === 'desc' ? diff : -diff;
       // Desempate: ordem alfabética
       return (a.username || '').toLowerCase().localeCompare((b.username || '').toLowerCase());
-    }), [profiles, incluirTodosPerfis, searchAcompanhados, acompStatusFilter, followersHistory, acompSortField, acompSortDir]);
+    }), [profiles, incluirTodosPerfis, searchAcompanhados, acompStatusFilter, followersHistory, posts, acompSortField, acompSortDir]);
   const handleSort = (field: string) => {
     setPostsPage(1);
     if (sortField === field) {
@@ -4116,16 +4225,17 @@ export default function Dashboard() {
                         const detail = perfil.ps_detail;
                         const si = psStatusInfo(ps);
                         const tooltipLines = detail ? [
-                          `${si.emoji} ${si.label}`,
+                          `${si.emoji} ${si.label} • Régua [${detail.tipoTrafego === 'ADS' ? 'COM ADS' : 'ORGÂNICO'}]`,
+                          `Benchmark com ${detail.benchmarkCount} concorrentes da mesma categoria`,
                           ``,
-                          `📈 S_crescimento (40%): ${detail.sCrescimento}`,
-                          `   Ganho/dia: ${detail.ganhoDiarioReal.toFixed(1)} seg | Bench: ${detail.medGanhoBenchmark.toFixed(1)}`,
+                          `📈 Crescimento (45%): ${detail.sCrescimento} pts`,
+                          `   ${detail.isRecente ? `Últimos ${detail.diasJanela} dias` : 'Média histórica'}: +${detail.ganhoDiarioReal.toFixed(1)} seg/dia | Bench: ${detail.medGanhoBenchmark.toFixed(1)}/dia`,
                           ``,
-                          `📅 S_ritmo (35%): ${detail.sRitmo}`,
-                          `   Posts/dia: ${detail.postsPorDiaReal.toFixed(2)} | Meta: 1.8`,
+                          `⚡ Engajamento (30%): ${detail.sEngajamento} pts`,
+                          `   Taxa: ${detail.engajamentoReal.toFixed(2)}% (${detail.totalPostsAvaliados} posts) | Bench: ${detail.medEngajamentoBenchmark.toFixed(2)}%`,
                           ``,
-                          `⚡ S_eficiência (25%): ${detail.sEficiencia}`,
-                          `   Seg/post: ${detail.eficienciaReal.toFixed(1)} | Bench: ${detail.medEficienciaBenchmark.toFixed(1)}`,
+                          `📅 Consistência (25%): ${detail.sConsistencia} pts`,
+                          `   Ritmo: ${detail.postsPorDiaReal.toFixed(2)} posts/dia | Bench: ${detail.medRitmoBenchmark.toFixed(2)} posts/dia`,
                         ].join('\n') : '';
                         return (
                           <div
@@ -4142,11 +4252,15 @@ export default function Dashboard() {
                               background: si.bg,
                               border: `1.5px solid ${si.border}`,
                               borderRadius: 8,
-                              padding: '4px 10px',
-                              minWidth: 52,
+                              padding: '4px 8px',
+                              minWidth: 54,
                               textAlign: 'center',
                               boxShadow: `0 0 8px ${si.bg}`,
                               transition: 'box-shadow 0.2s',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              gap: 3,
                             }}>
                               <div style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'baseline' }}>
                                 <span
@@ -4174,11 +4288,28 @@ export default function Dashboard() {
                                   /100
                                 </span>
                               </div>
+                              {detail && (
+                                <span
+                                  style={{
+                                    fontSize: 8,
+                                    fontWeight: 800,
+                                    letterSpacing: '0.06em',
+                                    padding: '1px 5px',
+                                    borderRadius: 4,
+                                    lineHeight: 1.1,
+                                    background: detail.tipoTrafego === 'ADS' ? 'rgba(168, 85, 247, 0.25)' : 'rgba(0, 240, 255, 0.18)',
+                                    color: detail.tipoTrafego === 'ADS' ? '#D8B4FE' : '#67E8F9',
+                                    border: `1px solid ${detail.tipoTrafego === 'ADS' ? 'rgba(168, 85, 247, 0.45)' : 'rgba(0, 240, 255, 0.35)'}`,
+                                  }}
+                                >
+                                  {detail.tipoTrafego === 'ADS' ? 'ADS' : 'ORG'}
+                                </span>
+                              )}
                             </div>
                           </div>
                         );
                       })() : (
-                        <span style={{ color: '#444C56', fontSize: 12 }} title="Sem data de 1ª postagem para calcular">—</span>
+                        <span style={{ color: '#444C56', fontSize: 12 }} title="Sem dados suficientes para calcular o Score PS">—</span>
                       )}
                     </div>
 
