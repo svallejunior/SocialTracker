@@ -5,7 +5,6 @@ const nextConfig: NextConfig = {
   experimental: {
     // Permite uploads de mídias de alta resolução e vídeos no Next.js
     proxyClientMaxBodySize: '150mb',
-    middlewareClientMaxBodySize: '150mb',
     serverActions: {
       bodySizeLimit: '150mb',
     },
