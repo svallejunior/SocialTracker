@@ -1707,13 +1707,10 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                   dragCounterMap.current[perfil.username] = 0;
                   setDragOverCardMap(prev => ({ ...prev, [perfil.username]: false }));
 
-                  // Só processa arquivos via card se o formulário NÃO estiver aberto.
-                  // Quando o usuário solta no dropzone interno (dentro do form já aberto),
-                  // o evento borbulha até aqui — sem esse guard causaria agendamento duplicado.
-                  if (!isFormOpen) {
-                    const droppedFiles = e.dataTransfer.files ? Array.from(e.dataTransfer.files) : [];
-                    if (droppedFiles.length > 0) {
-                      setPendingFilesMap(prev => ({ ...prev, [perfil.username]: droppedFiles }));
+                  const droppedFiles = e.dataTransfer.files ? Array.from(e.dataTransfer.files) : [];
+                  if (droppedFiles.length > 0) {
+                    setPendingFilesMap(prev => ({ ...prev, [perfil.username]: droppedFiles }));
+                    if (!isFormOpen) {
                       setEditingAgendamentoMap(prev => ({ ...prev, [perfil.username]: null }));
                       setFormOpenMap(prev => ({ ...prev, [perfil.username]: true }));
                     }
@@ -3994,6 +3991,7 @@ function FormularioAgendamento({
   );
 
   const [uploading, setUploading] = useState(false);
+  const [uploadStatusText, setUploadStatusText] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -4109,39 +4107,50 @@ function FormularioAgendamento({
 
       if (arquivosPendentes.length > 0) {
         setUploading(true);
-        const formData = new FormData();
-        formData.append('metaAccountId', metaAccountId || username);
 
-        arquivosPendentes.forEach(a => {
-          if (a.file) {
-            formData.append('files', a.file);
+        const uploadedResults: AgendamentoArquivo[] = [];
+
+        // Upload arquivo por arquivo para evitar exceder limites de requisição e permitir feedback claro
+        for (let i = 0; i < arquivosPendentes.length; i++) {
+          const arq = arquivosPendentes[i];
+          if (!arq.file) continue;
+
+          setUploadStatusText(`⏳ Enviando mídia ${i + 1} de ${arquivosPendentes.length}...`);
+
+          const formData = new FormData();
+          formData.append('metaAccountId', metaAccountId || username);
+          formData.append('files', arq.file);
+
+          const res = await fetch('/api/automacao/upload', {
+            method: 'POST',
+            body: formData
+          });
+          const json = await res.json();
+
+          if (!json.success || !json.files?.length) {
+            throw new Error(json.error || `Falha ao salvar ${arq.name} no servidor`);
           }
-        });
 
-        const res = await fetch('/api/automacao/upload', {
-          method: 'POST',
-          body: formData
-        });
-        const json = await res.json();
+          uploadedResults.push(json.files[0]);
 
-        if (!json.success || !json.files?.length) {
-          throw new Error(json.error || 'Falha ao salvar arquivos de mídia no servidor');
+          if (arq.previewUrl && arq.previewUrl.startsWith('blob:')) {
+            URL.revokeObjectURL(arq.previewUrl);
+          }
         }
 
         // Substitui os arquivos pendentes pelos objetos salvos definitivos retornados pelo servidor
         let pendenteIdx = 0;
         arquivosFinais = arquivos.map(a => {
           if (a.file instanceof File) {
-            const uploaded = json.files[pendenteIdx];
+            const uploaded = uploadedResults[pendenteIdx];
             pendenteIdx++;
-            if (a.previewUrl && a.previewUrl.startsWith('blob:')) {
-              URL.revokeObjectURL(a.previewUrl);
-            }
             return uploaded || a;
           }
           return a;
         });
       }
+
+      setUploadStatusText('💾 Gravando agendamento...');
 
       const payloadDias = tipoAgendamento === 'DATA_ESPECIFICA' ? [dataEspecifica] : diasSelecionados;
       const payloadRecorrencia = tipoAgendamento === 'DATA_ESPECIFICA'
@@ -5108,7 +5117,7 @@ function FormularioAgendamento({
             boxShadow: `0 2px 10px ${activeTheme.bgSelected}`
           }}
         >
-          {saving ? (uploading ? '⏳ Enviando mídias...' : '💾 Salvando...') : (initialData ? '💾 Atualizar Agendamento' : '💾 Salvar Agendamento')}
+          {saving ? (uploading ? (uploadStatusText || '⏳ Enviando mídias...') : '💾 Gravando...') : (initialData ? '💾 Atualizar Agendamento' : '💾 Salvar Agendamento')}
         </button>
       </div>
 
