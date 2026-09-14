@@ -187,133 +187,198 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // 3. Análise de Visualizações (posts_historico)
-    const posts = await db.all(
-      `SELECT post_id, data_postagem, views, likes, comentarios, formato
-       FROM posts_historico
-       WHERE LOWER(username) = LOWER(?) AND views > 0 AND data_postagem LIKE '%:%'
-       ORDER BY data_postagem DESC`,
-      [username]
+    // 3. Análise de Visualizações baseada em Snapshots Periódicos de Métricas
+    // Mede os horários em que os vídeos são mais assistidos (consumo contínuo ao longo do dia),
+    // em vez dos horários em que foram postados (o que deixava várias faixas zeradas).
+    const snapshotsRows = await db.all(
+      `SELECT post_id, data_carga, views
+       FROM posts_metricas_snapshots
+       WHERE (LOWER(username) = LOWER(?) OR username = ?) AND views > 0 AND data_carga LIKE '%:%'
+       ORDER BY post_id ASC, data_carga ASC`,
+      [username, username]
     );
 
     const faixasViews: {
       [f: number]: {
-        viewsArray: number[];
         viewsTotal: number;
+        amostras: number;
         viewsMedia: number;
         viewsMediana: number;
-        postsCount: number;
       };
     } = {};
 
     for (let f = 0; f < 24; f += 2) {
-      faixasViews[f] = { viewsArray: [], viewsTotal: 0, viewsMedia: 0, viewsMediana: 0, postsCount: 0 };
+      faixasViews[f] = { viewsTotal: 0, amostras: 0, viewsMedia: 0, viewsMediana: 0 };
     }
 
-    const diasViewsMap: { [d: number]: number[] } = {
-      0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: []
+    const diasViewsMap: { [d: number]: { viewsTotal: number; amostras: number } } = {
+      0: { viewsTotal: 0, amostras: 0 },
+      1: { viewsTotal: 0, amostras: 0 },
+      2: { viewsTotal: 0, amostras: 0 },
+      3: { viewsTotal: 0, amostras: 0 },
+      4: { viewsTotal: 0, amostras: 0 },
+      5: { viewsTotal: 0, amostras: 0 },
+      6: { viewsTotal: 0, amostras: 0 }
     };
 
-    let somaViewsTotalGeral = 0;
+    let totalViewsGanhas = 0;
+    let totalCiclosViews = 0;
 
-    for (const p of posts) {
-      const dt = parseSqliteDate(p.data_postagem);
-      if (!dt) continue;
-
-      const v = Number(p.views) || 0;
-      if (v <= 0) continue;
-
-      somaViewsTotalGeral += v;
-
-      const hora = dt.getHours();
-      const faixaInicio = Math.floor(hora / 2) * 2;
-      const diaSemana = dt.getDay(); // 0 a 6
-
-      if (faixasViews[faixaInicio]) {
-        faixasViews[faixaInicio].viewsArray.push(v);
-        faixasViews[faixaInicio].viewsTotal += v;
-        faixasViews[faixaInicio].postsCount += 1;
+    // Agrupa snapshots por post_id
+    const snapshotsPorPost: { [postId: string]: Array<{ dt: Date; views: number }> } = {};
+    for (const snap of snapshotsRows) {
+      const dt = parseSqliteDate(snap.data_carga);
+      const v = Number(snap.views) || 0;
+      if (!dt || v <= 0) continue;
+      if (!snapshotsPorPost[snap.post_id]) {
+        snapshotsPorPost[snap.post_id] = [];
       }
-
-      diasViewsMap[diaSemana].push(v);
+      snapshotsPorPost[snap.post_id].push({ dt, views: v });
     }
 
-    let maxMediaViews = -1;
-    let melhorFaixaViewsInicio = 18; // default 18h se sem dados
+    for (const postId in snapshotsPorPost) {
+      const list = snapshotsPorPost[postId];
+      for (let i = 1; i < list.length; i++) {
+        const prev = list[i - 1];
+        const curr = list[i];
 
-    for (let f = 0; f < 24; f += 2) {
-      const item = faixasViews[f];
-      if (item.postsCount > 0) {
-        item.viewsMedia = Math.round(item.viewsTotal / item.postsCount);
-        const sorted = [...item.viewsArray].sort((a, b) => a - b);
-        const mid = Math.floor(sorted.length / 2);
-        item.viewsMediana = sorted.length % 2 !== 0 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+        const diffV = curr.views - prev.views;
+        if (diffV <= 0 || diffV > 100000) continue;
 
-        if (item.viewsMedia > maxMediaViews) {
-          maxMediaViews = item.viewsMedia;
-          melhorFaixaViewsInicio = f;
+        const diffHoras = (curr.dt.getTime() - prev.dt.getTime()) / (1000 * 60 * 60);
+        // Amostragem contínua periódica (até 2.5 horas)
+        if (diffHoras > 0 && diffHoras <= 2.5) {
+          const hora = curr.dt.getHours();
+          const faixaInicio = Math.floor(hora / 2) * 2;
+          const diaSemana = curr.dt.getDay(); // 0 = Domingo, 1 = Segunda, ...
+
+          if (faixasViews[faixaInicio]) {
+            faixasViews[faixaInicio].viewsTotal += diffV;
+            faixasViews[faixaInicio].amostras += 1;
+          }
+
+          if (diasViewsMap[diaSemana]) {
+            diasViewsMap[diaSemana].viewsTotal += diffV;
+            diasViewsMap[diaSemana].amostras += 1;
+          }
+
+          totalViewsGanhas += diffV;
+          totalCiclosViews += 1;
         }
       }
     }
 
-    const temDadosViews = posts.length > 0 && maxMediaViews > 0;
+    let melhorFaixaViewsInicio = 18;
+    let maxViewsFaixa = -1;
+
+    for (let f = 0; f < 24; f += 2) {
+      const item = faixasViews[f];
+      item.viewsMedia = item.amostras > 0 ? Math.round(item.viewsTotal / item.amostras) : 0;
+      item.viewsMediana = item.viewsMedia;
+      if (item.viewsTotal > maxViewsFaixa) {
+        maxViewsFaixa = item.viewsTotal;
+        melhorFaixaViewsInicio = f;
+      }
+    }
+
+    let totalPostsAnalisados = Object.keys(snapshotsPorPost).length;
+
+    // Fallback: se o perfil não possuir snapshots periódicos registrados ainda,
+    // utiliza os dados históricos de postagens como contingência
+    if (totalViewsGanhas === 0) {
+      const postsFallback = await db.all(
+        `SELECT post_id, data_postagem, views
+         FROM posts_historico
+         WHERE LOWER(username) = LOWER(?) AND views > 0 AND data_postagem LIKE '%:%'`,
+        [username]
+      );
+      totalPostsAnalisados = postsFallback.length;
+      if (postsFallback.length > 0) {
+        for (const p of postsFallback) {
+          const dt = parseSqliteDate(p.data_postagem);
+          if (!dt) continue;
+          const v = Number(p.views) || 0;
+          if (v <= 0) continue;
+          const hora = dt.getHours();
+          const faixaInicio = Math.floor(hora / 2) * 2;
+          const diaSemana = dt.getDay();
+
+          faixasViews[faixaInicio].viewsTotal += v;
+          faixasViews[faixaInicio].amostras += 1;
+          diasViewsMap[diaSemana].viewsTotal += v;
+          diasViewsMap[diaSemana].amostras += 1;
+        }
+        for (let f = 0; f < 24; f += 2) {
+          const item = faixasViews[f];
+          item.viewsMedia = item.amostras > 0 ? Math.round(item.viewsTotal / item.amostras) : 0;
+          item.viewsMediana = item.viewsMedia;
+          if (item.viewsTotal > maxViewsFaixa) {
+            maxViewsFaixa = item.viewsTotal;
+            melhorFaixaViewsInicio = f;
+          }
+        }
+      }
+    }
+
+    const temDadosViews = maxViewsFaixa > 0;
 
     const listaFaixasViews = [];
     for (let f = 0; f < 24; f += 2) {
       const fFim = (f + 2) % 24;
       const fLabel = `${String(f).padStart(2, '0')}:00 - ${String(fFim).padStart(2, '0')}:00`;
       const item = faixasViews[f];
-      const pct = maxMediaViews > 0 ? Math.round((item.viewsMedia / maxMediaViews) * 100) : 0;
+      const pct = maxViewsFaixa > 0 ? Math.round((item.viewsTotal / maxViewsFaixa) * 100) : 0;
       listaFaixasViews.push({
         faixa: fLabel,
         horaInicio: f,
         viewsMedia: item.viewsMedia,
         viewsMediana: item.viewsMediana,
         viewsTotal: item.viewsTotal,
-        postsCount: item.postsCount,
+        postsCount: item.amostras,
+        amostras: item.amostras,
         percentual: pct,
         isMelhor: temDadosViews && f === melhorFaixaViewsInicio
       });
     }
 
     // Análise de Dias da Semana & Discrepância
-    const mediaGeralViews = posts.length > 0 ? somaViewsTotalGeral / posts.length : 0;
+    const somaViewsDias = Object.values(diasViewsMap).reduce((acc, cur) => acc + cur.viewsTotal, 0);
+    const mediaGeralViewsDia = somaViewsDias / 7;
     const diasIndicados: string[] = [];
     const listaDiasSemana = [];
 
+    let maxDiaViews = -1;
+    for (let d = 0; d < 7; d++) {
+      if (diasViewsMap[d].viewsTotal > maxDiaViews) {
+        maxDiaViews = diasViewsMap[d].viewsTotal;
+      }
+    }
+
     for (const dIdx of ORDEM_DIAS) {
       const { nome, curto } = DIAS_NOMES[dIdx];
-      const arr = diasViewsMap[dIdx] || [];
-      const count = arr.length;
-      let dMedia = 0;
-      let dMediana = 0;
+      const item = diasViewsMap[dIdx];
+      const dTotal = item.viewsTotal;
+      const dMedia = item.amostras > 0 ? Math.round(dTotal / item.amostras) : 0;
 
-      if (count > 0) {
-        const dTotal = arr.reduce((acc, curr) => acc + curr, 0);
-        dMedia = Math.round(dTotal / count);
-        const sorted = [...arr].sort((a, b) => a - b);
-        const mid = Math.floor(sorted.length / 2);
-        dMediana = sorted.length % 2 !== 0 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
-      }
-
-      // Discrepância acentuada: dia rende 30% ou mais acima da média global
-      const ratio = mediaGeralViews > 0 ? dMedia / mediaGeralViews : 1.0;
-      const destaque = count >= 1 && ratio >= 1.3;
+      // Discrepância: dia com volume pelo menos 35% acima da média dos dias
+      const pctSobreMedia = mediaGeralViewsDia > 0 ? ((dTotal - mediaGeralViewsDia) / mediaGeralViewsDia) * 100 : 0;
+      const destaque = pctSobreMedia >= 35 && dTotal > 0;
 
       if (destaque) {
-        const pctExtra = Math.round((ratio - 1.0) * 100);
-        diasIndicados.push(`${nome} (+${pctExtra}%)`);
+        diasIndicados.push(`${nome} (+${Math.round(pctSobreMedia)}%)`);
       }
 
-      const pctRelativo = maxMediaViews > 0 ? Math.min(100, Math.round((dMedia / maxMediaViews) * 100)) : 0;
+      const pctRelativo = maxDiaViews > 0 ? Math.round((dTotal / maxDiaViews) * 100) : 0;
 
       listaDiasSemana.push({
         dia: nome,
         diaCurto: curto,
         diaIndex: dIdx,
+        viewsTotal: dTotal,
         viewsMedia: dMedia,
-        viewsMediana: dMediana,
-        postsCount: count,
+        viewsMediana: dMedia,
+        postsCount: item.amostras,
+        amostras: item.amostras,
         percentual: pctRelativo,
         destaque
       });
@@ -351,9 +416,11 @@ export async function GET(req: NextRequest) {
         melhorFaixa: `${String(melhorFaixaViewsInicio).padStart(2, '0')}:00 às ${String(fFimView).padStart(2, '0')}:00`,
         melhorFaixaInicio: melhorFaixaViewsInicio,
         melhorFaixaFim: fFimView,
+        viewsTotalFaixa: faixasViews[melhorFaixaViewsInicio]?.viewsTotal || 0,
         viewsMediaFaixa: faixasViews[melhorFaixaViewsInicio]?.viewsMedia || 0,
         viewsMedianaFaixa: faixasViews[melhorFaixaViewsInicio]?.viewsMediana || 0,
-        totalPostsAnalisados: posts.length,
+        totalViewsGanhas,
+        totalPostsAnalisados,
         faixas: listaFaixasViews,
         diasSemana: listaDiasSemana,
         houveDiscrepancia: diasIndicados.length > 0,
@@ -361,7 +428,7 @@ export async function GET(req: NextRequest) {
         temDados: temDadosViews,
         observacao: temDadosViews
           ? undefined
-          : 'Nenhum post com visualizações registrado para este perfil.'
+          : 'Nenhum registro de visualizações medido para este perfil ainda.'
       }
     });
   } catch (err: any) {

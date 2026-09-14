@@ -34,6 +34,7 @@ interface DiaSemanaView {
   diaIndex: number;
   viewsMedia: number;
   viewsMediana: number;
+  viewsTotal?: number;
   postsCount: number;
   percentual: number;
   destaque: boolean;
@@ -62,8 +63,10 @@ interface HorariosData {
     melhorFaixa: string;
     melhorFaixaInicio: number;
     melhorFaixaFim: number;
+    viewsTotalFaixa?: number;
     viewsMediaFaixa: number;
-    viewsMedianaFaixa: number;
+    viewsMedianaFaixa?: number;
+    totalViewsGanhas?: number;
     totalPostsAnalisados: number;
     faixas: FaixaView[];
     diasSemana: DiaSemanaView[];
@@ -476,15 +479,15 @@ export default function ModalMelhoresHorarios({ modelo, onClose }: ModalMelhores
                         }}
                       >
                         <div>
-                          <div style={{ fontSize: 11, color: '#8B949E', fontWeight: 600 }}>Horário Ideal para Postar</div>
+                          <div style={{ fontSize: 11, color: '#8B949E', fontWeight: 600 }}>Horário de Maior Audiência</div>
                           <div style={{ fontSize: 22, fontWeight: 900, color: '#58A6FF', letterSpacing: '-0.5px' }}>
                             {data.visualizacoes.melhorFaixa}
                           </div>
                         </div>
                         <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontSize: 11, color: '#8B949E', fontWeight: 600 }}>Média / Post</div>
+                          <div style={{ fontSize: 11, color: '#8B949E', fontWeight: 600 }}>Total na Faixa</div>
                           <div style={{ fontSize: 15, fontWeight: 800, color: '#FFFFFF' }}>
-                            {formatNumber(data.visualizacoes.viewsMediaFaixa)} views
+                            {formatNumber(data.visualizacoes.viewsTotalFaixa ?? data.visualizacoes.viewsMediaFaixa)} views
                           </div>
                         </div>
                       </div>
@@ -492,12 +495,12 @@ export default function ModalMelhoresHorarios({ modelo, onClose }: ModalMelhores
                       {/* Mini Indicadores */}
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 11 }}>
                         <div style={{ background: '#0D1117', padding: '8px 10px', borderRadius: 8, border: '1px solid #21262D' }}>
-                          <span style={{ color: '#8B949E' }}>Mediana da faixa: </span>
-                          <strong style={{ color: '#58A6FF' }}>{formatNumber(data.visualizacoes.viewsMedianaFaixa)} views</strong>
+                          <span style={{ color: '#8B949E' }}>Média por ciclo: </span>
+                          <strong style={{ color: '#58A6FF' }}>+{formatNumber(data.visualizacoes.viewsMediaFaixa)} views</strong>
                         </div>
                         <div style={{ background: '#0D1117', padding: '8px 10px', borderRadius: 8, border: '1px solid #21262D' }}>
-                          <span style={{ color: '#8B949E' }}>Total analisado: </span>
-                          <strong style={{ color: '#FFFFFF' }}>{data.visualizacoes.totalPostsAnalisados} posts</strong>
+                          <span style={{ color: '#8B949E' }}>Volume medido: </span>
+                          <strong style={{ color: '#FFFFFF' }}>{formatNumber(data.visualizacoes.totalViewsGanhas || data.visualizacoes.viewsTotalFaixa || 0)} views</strong>
                         </div>
                       </div>
                     </div>
@@ -631,13 +634,13 @@ export default function ModalMelhoresHorarios({ modelo, onClose }: ModalMelhores
                           style={{
                             fontSize: 13,
                             fontWeight: 800,
-                            color: d.viewsMedia > 0 ? '#FFFFFF' : '#6E7681'
+                            color: ((d.viewsTotal ?? d.viewsMedia) > 0) ? '#FFFFFF' : '#6E7681'
                           }}
                         >
-                          {d.viewsMedia > 0 ? formatNumber(d.viewsMedia) : '-'}
+                          {((d.viewsTotal ?? d.viewsMedia) > 0) ? formatNumber(d.viewsTotal ?? d.viewsMedia) : '-'}
                         </div>
                         <div style={{ fontSize: 9.5, color: '#8B949E', marginTop: 2 }}>
-                          {d.postsCount} {d.postsCount === 1 ? 'post' : 'posts'}
+                          {d.viewsTotal !== undefined ? 'views' : `${d.postsCount} ${d.postsCount === 1 ? 'post' : 'posts'}`}
                         </div>
                         {d.destaque && (
                           <div style={{ marginTop: 4 }}>
@@ -712,7 +715,7 @@ export default function ModalMelhoresHorarios({ modelo, onClose }: ModalMelhores
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(105px, 1fr))', gap: 8 }}>
                   {(tabVisual === 'faixas_views' ? data.visualizacoes.faixas : data.seguidores.faixas).map((item: any) => {
                     const isMelhor = item.isMelhor;
-                    const valPrincipal = tabVisual === 'faixas_views' ? item.viewsMedia : item.ganhoTotal;
+                    const valPrincipal = tabVisual === 'faixas_views' ? (item.viewsTotal ?? item.viewsMedia) : item.ganhoTotal;
                     const valFormatado = tabVisual === 'faixas_views'
                       ? (valPrincipal > 0 ? `${formatNumber(valPrincipal)}` : '-')
                       : (valPrincipal > 0 ? `+${formatNumber(valPrincipal)}` : '-');
