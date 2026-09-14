@@ -37,16 +37,16 @@ export async function GET(req: NextRequest) {
 
     // 1. Dados básicos do perfil
     const perfil = await db.get(
-      `SELECT username, nome, foto_url, foto_perfil_meta FROM perfis_monitorados WHERE LOWER(username) = LOWER(?)`,
+      `SELECT username, status, foto_perfil_meta FROM perfis_monitorados WHERE LOWER(username) = LOWER(?)`,
       [username]
     );
     const pCtrl = await db.get(
-      `SELECT nome, foto_url FROM controle_perfis WHERE LOWER(username) = LOWER(?)`,
+      `SELECT nome, foto_url, foto_perfil_meta FROM controle_perfis WHERE LOWER(username) = LOWER(?)`,
       [username]
     );
 
-    const nomeExibicao = pCtrl?.nome || perfil?.nome || username;
-    const fotoExibicao = perfil?.foto_perfil_meta || perfil?.foto_url || pCtrl?.foto_url || null;
+    const nomeExibicao = pCtrl?.nome || username;
+    const fotoExibicao = pCtrl?.foto_perfil_meta || perfil?.foto_perfil_meta || pCtrl?.foto_url || null;
 
     // 2. Análise de Seguidores (perfis_historico + seguidores_historico)
     const historicoPh = await db.all(
