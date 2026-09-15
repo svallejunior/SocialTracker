@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import AvatarModelo from './AvatarModelo';
-import { formatDisplayDateBR, formatDisplayDateTimeBR } from '@/lib/timezone';
+import { formatDisplayDateBR, formatDisplayDateTimeBR, formatToBrazilDateTime } from '@/lib/timezone';
 import {
   AlertTriangle, CheckCircle2, Rocket, Trash2, RefreshCw, TrendingUp, Users,
   FileText, Search, Zap, Filter, Edit3, Calendar, ChevronLeft, ChevronRight,
@@ -444,8 +444,10 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
         aVal = calcDiaOperacao(a.data_coleta, a.primeira_postagem || activeProfile?.primeira_postagem) ?? -999999;
         bVal = calcDiaOperacao(b.data_coleta, b.primeira_postagem || activeProfile?.primeira_postagem) ?? -999999;
       } else if (sortCol === 'data_coleta') {
-        aVal = new Date(a.data_coleta).getTime();
-        bVal = new Date(b.data_coleta).getTime();
+        const aClean = String(a.data_coleta || '').replace(' ', 'T');
+        const bClean = String(b.data_coleta || '').replace(' ', 'T');
+        aVal = new Date(aClean).getTime() || 0;
+        bVal = new Date(bClean).getTime() || 0;
       } else if (sortCol === 'tipo_janela') {
         aVal = a.tipo_janela || '';
         bVal = b.tipo_janela || '';
@@ -499,8 +501,26 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
     return formatDisplayDateBR(dateStr);
   };
 
+  const DIA_SEMANA_SIGLAS = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'];
+
   const formatDateTimeBR = (dateStr?: string | null) => {
-    return formatDisplayDateTimeBR(dateStr);
+    if (!dateStr) return '—';
+    const formatted = formatDisplayDateTimeBR(dateStr);
+    if (!formatted || formatted === '—') return '—';
+
+    try {
+      const dtStr = formatToBrazilDateTime(dateStr);
+      if (dtStr && dtStr.length >= 10) {
+        const [ano, mes, dia] = dtStr.substring(0, 10).split('-').map(Number);
+        const diaSemanaIdx = new Date(ano, mes - 1, dia).getDay();
+        const sigla = DIA_SEMANA_SIGLAS[diaSemanaIdx];
+        if (sigla) {
+          return `${sigla} - ${formatted}`;
+        }
+      }
+    } catch {}
+
+    return formatted;
   };
 
   return (
