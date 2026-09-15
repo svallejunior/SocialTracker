@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useRef } from 'react';
-import { X, Camera, Image as ImageIcon, Clock, Calendar as CalendarIcon, CheckCircle2, Loader2, Plus } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { X, Camera, Image as ImageIcon, Clock, Calendar as CalendarIcon, CheckCircle2, Loader2, Plus, Crop, AlertCircle } from 'lucide-react';
+import ModalAjusteCorte from './ModalAjusteCorte';
 
 const MAX_FOTOS_CARROSSEL = 10;
 
@@ -42,7 +43,54 @@ export default function AgendarMobileModal({ perfil, onClose, onCreated }: Props
   const [hora, setHora] = useState(horaDaquiPoucoLocal());
   const [etapa, setEtapa] = useState<'form' | 'enviando' | 'sucesso'>('form');
   const [erro, setErro] = useState('');
+  const [aspectRatios, setAspectRatios] = useState<{ [idx: number]: number }>({});
+  const [cropModalData, setCropModalData] = useState<{
+    idx: number;
+    file: File;
+    imageUrl: string;
+    fileName: string;
+  } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    previews.forEach((url, idx) => {
+      if (aspectRatios[idx] !== undefined) return;
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        if (img.naturalWidth && img.naturalHeight) {
+          setAspectRatios(prev => ({ ...prev, [idx]: img.naturalWidth / img.naturalHeight }));
+        }
+      };
+      img.src = url;
+    });
+  }, [previews]);
+
+  const isInvalidoFeed = (idx: number) => {
+    if (tipo !== 'FEED') return false;
+    const r = aspectRatios[idx];
+    if (r === undefined) return false;
+    return r < 0.79 || r > 1.92;
+  };
+
+  const handleApplyCrop = (croppedFile: File, newPreviewUrl: string) => {
+    if (!cropModalData) return;
+    const targetIdx = cropModalData.idx;
+    setArquivos(prev => {
+      const copy = [...prev];
+      copy[targetIdx] = croppedFile;
+      return copy;
+    });
+    setPreviews(prev => {
+      const copy = [...prev];
+      URL.revokeObjectURL(copy[targetIdx]);
+      copy[targetIdx] = newPreviewUrl;
+      return copy;
+    });
+    setAspectRatios(prev => ({ ...prev, [targetIdx]: 0.8 }));
+    setCropModalData(null);
+    setErro('');
+  };
 
   const escolherArquivos = (lista: FileList | null) => {
     if (!lista || lista.length === 0) return;
@@ -68,6 +116,20 @@ export default function AgendarMobileModal({ perfil, onClose, onCreated }: Props
     if (arquivos.length === 0) {
       setErro('Escolha ao menos uma foto antes de agendar.');
       return;
+    }
+    // Validação de Aspect Ratio para FEED
+    if (tipo === 'FEED') {
+      const invalidIdx = arquivos.findIndex((_, idx) => isInvalidoFeed(idx));
+      if (invalidIdx >= 0) {
+        setCropModalData({
+          idx: invalidIdx,
+          file: arquivos[invalidIdx],
+          imageUrl: previews[invalidIdx],
+          fileName: arquivos[invalidIdx]?.name || 'foto.jpg'
+        });
+        setErro('A foto possui proporção 9:16 incompatível com o Feed. Ajuste o corte para 4:5 antes de continuar.');
+        return;
+      }
     }
     if (!data || !hora) {
       setErro('Escolha data e horário.');
@@ -274,6 +336,27 @@ export default function AgendarMobileModal({ perfil, onClose, onCreated }: Props
                       >
                         <X size={12} />
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => setCropModalData({
+                          idx,
+                          file: arquivos[idx],
+                          imageUrl: url,
+                          fileName: arquivos[idx]?.name || 'foto.jpg'
+                        })}
+                        aria-label="Ajustar corte"
+                        style={{
+                          position: 'absolute', bottom: '4px', right: '4px',
+                          background: isInvalidoFeed(idx) ? '#F59E0B' : 'rgba(0,0,0,0.7)',
+                          color: isInvalidoFeed(idx) ? '#000' : '#FFFFFF',
+                          border: 'none', borderRadius: '4px', padding: '2px 5px',
+                          display: 'flex', alignItems: 'center', gap: '3px',
+                          fontSize: '9px', fontWeight: 800, cursor: 'pointer'
+                        }}
+                      >
+                        <Crop size={10} />
+                        {isInvalidoFeed(idx) ? 'Cortar 4:5' : 'Cortar'}
+                      </button>
                     </div>
                   ))}
                   {tipo === 'FEED' && previews.length < MAX_FOTOS_CARROSSEL && (
@@ -404,6 +487,16 @@ export default function AgendarMobileModal({ perfil, onClose, onCreated }: Props
             <style>{`.spin-icon { animation: spin 0.8s linear infinite; } @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
           </>
         )}
+      {cropModalData && (
+        <ModalAjusteCorte
+          isOpen={!!cropModalData}
+          file={cropModalData.file}
+          imageUrl={cropModalData.imageUrl}
+          fileName={cropModalData.fileName}
+          onClose={() => setCropModalData(null)}
+          onApplyCrop={handleApplyCrop}
+        />
+      )}
     </div>
   );
 }

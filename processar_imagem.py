@@ -131,12 +131,38 @@ def gerar_nome_arquivo_celular(perfil=None, extensao=".jpg"):
         return f"IMG_{data_compacta}_{hora_compacta}_{rand4}{extensao}"
 
 
-def processar_imagem_para_celular(caminho_ou_buffer_in, caminho_out=None, qualidade=95):
+def ajustar_aspect_ratio_feed(img, target_min=0.8, target_max=1.91):
+    """
+    Verifica e ajusta defensivamente a proporção da imagem para o Feed do Instagram:
+    - O Instagram aceita proporções entre 4:5 (0.80) e 1.91:1 (1.91).
+    - Se a imagem for muito alta (ex: 9:16 ~ 0.56), corta a altura no centro para 4:5.
+    - Se for muito panorâmica (ex: > 1.91), corta a largura no centro para 1.91:1.
+    Retorna: (img_ajustada, foi_cortada)
+    """
+    w, h = img.size
+    if w <= 0 or h <= 0:
+        return img, False
+    ratio = w / h
+    if ratio < target_min:
+        novo_h = int(w / target_min)
+        if novo_h < h:
+            top = (h - novo_h) // 2
+            return img.crop((0, top, w, top + novo_h)), True
+    elif ratio > target_max:
+        novo_w = int(h * target_max)
+        if novo_w < w:
+            left = (w - novo_w) // 2
+            return img.crop((left, 0, left + novo_w, h)), True
+    return img, False
+
+
+def processar_imagem_para_celular(caminho_ou_buffer_in, caminho_out=None, qualidade=95, forcar_feed=False):
     """
     1. Abre imagem (PNG, JPG, WEBP, etc.)
     2. Converte para RGB puro (limpando qualquer metadado prévio de edição/IA)
-    3. Gera e injeta novos metadados EXIF de celular (iPhone / Galaxy / Pixel)
-    4. Salva como JPEG com alta qualidade
+    3. Se forcar_feed=True, garante que a proporção fique entre 4:5 e 1.91:1
+    4. Gera e injeta novos metadados EXIF de celular (iPhone / Galaxy / Pixel)
+    5. Salva como JPEG com alta qualidade
     
     Retorna: (caminho_final, bytes_jpeg, nome_celular)
     """
@@ -149,6 +175,12 @@ def processar_imagem_para_celular(caminho_ou_buffer_in, caminho_out=None, qualid
         # Converter para RGB puro descartando canais alfa e metadados anteriores
         img_rgb = img_raw.convert("RGB")
         
+        # Ajuste defensivo de aspect ratio se for post para o Feed
+        if forcar_feed:
+            img_rgb, cortou = ajustar_aspect_ratio_feed(img_rgb)
+            if cortou:
+                print("[Defensivo] Proporção ajustada automaticamente para Feed do Instagram (4:5 / 1.91:1)", file=sys.stderr)
+
         # Recria a imagem em RGB para garantir o descarte absoluto de metadados antigos
         img_limpa = Image.new("RGB", img_rgb.size)
         img_limpa.paste(img_rgb)

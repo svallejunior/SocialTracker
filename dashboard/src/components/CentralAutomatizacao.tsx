@@ -7,8 +7,9 @@ import {
   Plus, ExternalLink, Sliders, Image as ImageIcon, Check,
   AlertCircle, ChevronDown, Zap, X, Calendar, Clock, Film, UploadCloud,
   FileText, Repeat, Shuffle, ArrowDownAZ, ListOrdered, Layers,
-  ChevronLeft, ChevronRight, Info, Maximize2, Eye, EyeOff
+  ChevronLeft, ChevronRight, Info, Maximize2, Eye, EyeOff, Crop
 } from 'lucide-react';
+import ModalAjusteCorte from './ModalAjusteCorte';
 
 interface Profile {
   username: string;
@@ -3854,6 +3855,15 @@ function FormularioAgendamento({
     initialData?.ordem_arquivos || 'ORDEM_SELECAO'
   );
 
+  // Aspect ratio de cada imagem (largura / altura) e modal de corte
+  const [aspectRatiosMap, setAspectRatiosMap] = useState<{ [key: string]: number }>({});
+  const [cropModalData, setCropModalData] = useState<{
+    idx: number;
+    file?: File | null;
+    imageUrl: string;
+    fileName: string;
+  } | null>(null);
+
   // Estados para hover de mídia (tamanho maior / zoom) e modal lightbox em tela cheia
   const [hoverMedia, setHoverMedia] = useState<{
     url: string;
@@ -3907,6 +3917,66 @@ function FormularioAgendamento({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  // Monitora e mede a proporção (aspect ratio) de todas as fotos presentes
+  useEffect(() => {
+    arquivos.forEach((arq, idx) => {
+      if (isVideoFile(arq)) return;
+      const url = getMediaUrl(arq, metaAccountId);
+      if (!url) return;
+      const key = `${idx}_${arq.name || arq.savedName || idx}`;
+      if (aspectRatiosMap[key] !== undefined) return;
+
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        if (img.naturalWidth && img.naturalHeight) {
+          const ratio = img.naturalWidth / img.naturalHeight;
+          setAspectRatiosMap(prev => ({ ...prev, [key]: ratio }));
+        }
+      };
+      img.src = url;
+    });
+  }, [arquivos, metaAccountId]);
+
+  // Se o tipo for Feed, o Instagram exige proporção entre 4:5 (0.8) e 1.91:1 (1.91). Stories não tem restrição!
+  const isInvalidoParaFeed = (arq: AgendamentoArquivo, idx: number) => {
+    if (tipoPostagem !== 'FEED') return false;
+    if (isVideoFile(arq)) return false;
+    const key = `${idx}_${arq.name || arq.savedName || idx}`;
+    const ratio = aspectRatiosMap[key];
+    if (ratio === undefined) return false;
+    return ratio < 0.79 || ratio > 1.92;
+  };
+
+  const temFotoInvalidaFeed = tipoPostagem === 'FEED' && arquivos.some((arq, idx) => isInvalidoParaFeed(arq, idx));
+
+  const handleApplyCrop = (croppedFile: File, newPreviewUrl: string) => {
+    if (!cropModalData) return;
+    const targetIdx = cropModalData.idx;
+    setArquivos(prev => {
+      const copy = [...prev];
+      const old = copy[targetIdx];
+      if (old?.previewUrl && old.previewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(old.previewUrl);
+      }
+      copy[targetIdx] = {
+        ...old,
+        file: croppedFile,
+        name: croppedFile.name,
+        size: croppedFile.size,
+        type: 'image/jpeg',
+        previewUrl: newPreviewUrl
+      };
+      return copy;
+    });
+    const key = `${targetIdx}_${croppedFile.name}`;
+    setAspectRatiosMap(prev => ({
+      ...prev,
+      [key]: 0.8 // Atualiza para proporção válida
+    }));
+    setCropModalData(null);
+  };
 
   // 3. SELEÇÃO: DATA ESPECÍFICA vs RECORRENTE
   const [tipoAgendamento, setTipoAgendamento] = useState<'DATA_ESPECIFICA' | 'RECORRENTE'>(() => {
@@ -4081,6 +4151,27 @@ function FormularioAgendamento({
     if (arquivos.length === 0) {
       alert('Por favor, adicione ao menos 1 arquivo de mídia para agendar.');
       return;
+    }
+
+    // Validação de Aspect Ratio para FEED (Stories não tem restrição)
+    if (tipoPostagem === 'FEED') {
+      const invalidIdx = arquivos.findIndex((arq, idx) => isInvalidoParaFeed(arq, idx));
+      if (invalidIdx >= 0) {
+        const invalidoArq = arquivos[invalidIdx];
+        const url = getMediaUrl(invalidoArq, metaAccountId);
+        const desejaCortar = confirm(
+          `⚠️ A imagem "${invalidoArq.name || 'selecionada'}" possui proporção inválida para o Feed do Instagram (o Instagram rejeita fotos verticais 9:16 no Feed).\n\nDeseja abrir a ferramenta de corte agora para ajustá-la para 4:5?`
+        );
+        if (desejaCortar) {
+          setCropModalData({
+            idx: invalidIdx,
+            file: invalidoArq.file,
+            imageUrl: url,
+            fileName: invalidoArq.name || 'foto.jpg'
+          });
+        }
+        return;
+      }
     }
 
     if (tipoAgendamento === 'DATA_ESPECIFICA') {
@@ -4330,6 +4421,62 @@ function FormularioAgendamento({
           </div>
         </div>
 
+        {/* Alerta de proporção incompatível para Feed */}
+        {temFotoInvalidaFeed && (
+          <div style={{
+            background: 'rgba(245, 158, 11, 0.12)',
+            border: '1px solid rgba(245, 158, 11, 0.35)',
+            borderRadius: 6,
+            padding: '7px 10px',
+            color: '#FBBF24',
+            fontSize: 10,
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+            marginTop: 6,
+            animation: 'fadeIn 0.2s ease-out'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <AlertCircle size={14} style={{ flexShrink: 0 }} />
+              <span>Foto vertical detectada (9:16). O Feed do Instagram exige proporção 4:5.</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const primeiroInvalidoIdx = arquivos.findIndex((arq, i) => isInvalidoParaFeed(arq, i));
+                if (primeiroInvalidoIdx >= 0) {
+                  const arq = arquivos[primeiroInvalidoIdx];
+                  setCropModalData({
+                    idx: primeiroInvalidoIdx,
+                    file: arq.file,
+                    imageUrl: getMediaUrl(arq, metaAccountId),
+                    fileName: arq.name || 'foto.jpg'
+                  });
+                }
+              }}
+              style={{
+                background: '#F59E0B',
+                color: '#000',
+                border: 'none',
+                borderRadius: 4,
+                padding: '3px 8px',
+                fontWeight: 800,
+                fontSize: 10,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4
+              }}
+            >
+              <Crop size={11} />
+              <span>Ajustar corte (4:5)</span>
+            </button>
+          </div>
+        )}
+
         {/* Preview dos Arquivos Selecionados */}
         {arquivos.length > 0 && (
           <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -4423,6 +4570,42 @@ function FormularioAgendamento({
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                    {/* Botão de Corte para imagens */}
+                    {!isVideo && url && (
+                      <button
+                        type="button"
+                        onClick={() => setCropModalData({
+                          idx,
+                          file: arq.file,
+                          imageUrl: url,
+                          fileName: arq.name || 'foto.jpg'
+                        })}
+                        title={isInvalidoParaFeed(arq, idx) ? "Proporção incompatível com o Feed! Clique para cortar para 4:5" : "Ajustar corte (4:5 / 1:1)"}
+                        style={{
+                          background: isInvalidoParaFeed(arq, idx) ? 'rgba(245, 158, 11, 0.2)' : 'none',
+                          border: isInvalidoParaFeed(arq, idx) ? '1px solid #F59E0B' : 'none',
+                          color: isInvalidoParaFeed(arq, idx) ? '#FBBF24' : '#8B949E',
+                          cursor: 'pointer',
+                          padding: isInvalidoParaFeed(arq, idx) ? '2px 6px' : 3,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 3,
+                          borderRadius: 4,
+                          fontSize: 10,
+                          fontWeight: 700
+                        }}
+                        onMouseEnter={e => {
+                          if (!isInvalidoParaFeed(arq, idx)) e.currentTarget.style.color = '#00F0FF';
+                        }}
+                        onMouseLeave={e => {
+                          if (!isInvalidoParaFeed(arq, idx)) e.currentTarget.style.color = '#8B949E';
+                        }}
+                      >
+                        <Crop size={12} />
+                        {isInvalidoParaFeed(arq, idx) && <span>Cortar 4:5</span>}
+                      </button>
+                    )}
+
                     {url && (
                       <button
                         type="button"
@@ -5305,6 +5488,18 @@ function FormularioAgendamento({
             </div>
           </div>
         </div>
+      )}
+
+      {/* MODAL INTERATIVO DE CORTE DE ASPECT RATIO (4:5 / 1:1) */}
+      {cropModalData && (
+        <ModalAjusteCorte
+          isOpen={!!cropModalData}
+          file={cropModalData.file}
+          imageUrl={cropModalData.imageUrl}
+          fileName={cropModalData.fileName}
+          onClose={() => setCropModalData(null)}
+          onApplyCrop={handleApplyCrop}
+        />
       )}
     </form>
   );

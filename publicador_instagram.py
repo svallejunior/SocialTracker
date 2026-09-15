@@ -1359,11 +1359,28 @@ def publicar_item_meta(agendamento, config, dry_run=False):
                 
                 try:
                     if HAS_PROCESSADOR_IMAGEM:
-                        _, _, cel_escolhido = processar_imagem_para_celular(orig_local, jpg_path)
+                        _, _, cel_escolhido = processar_imagem_para_celular(
+                            orig_local, jpg_path, forcar_feed=(tipo_postagem == "FEED")
+                        )
                         logger.info(f"📸 Imagem sanitizada e EXIF injetado ({cel_escolhido}): {jpg_name}")
                     else:
                         with Image.open(orig_local) as img:
                             rgb = img.convert("RGB")
+                            if tipo_postagem == "FEED":
+                                w, h = rgb.size
+                                r = w / h if h > 0 else 1.0
+                                if r < 0.8:
+                                    novo_h = int(w / 0.8)
+                                    if novo_h < h:
+                                        top = (h - novo_h) // 2
+                                        rgb = rgb.crop((0, top, w, top + novo_h))
+                                        logger.info(f"[Defensivo] Imagem {saved_name} cortada para 4:5 no centro para Feed")
+                                elif r > 1.91:
+                                    novo_w = int(h * 1.91)
+                                    if novo_w < w:
+                                        left = (w - novo_w) // 2
+                                        rgb = rgb.crop((left, 0, left + novo_w, h))
+                                        logger.info(f"[Defensivo] Imagem {saved_name} cortada para 1.91:1 no centro para Feed")
                             rgb.save(jpg_path, "JPEG", quality=95)
                         logger.info(f"Imagem convertida para JPEG limpo: {jpg_name}")
                     served_name = jpg_name
