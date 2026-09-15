@@ -742,6 +742,10 @@ def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str, ac
                     if reach == 0 and prev_r and prev_r > 0:
                         reach = prev_r
 
+        # Regra de negócio: visualizações mínimas lógicas. Fotos e carrosséis não recebem videoViewCount
+        # da Meta Graph API, mas se alguém curtiu ou comentou (ou o alcance foi medido), certamente visualizou.
+        views = max(views, reach, (likes + comentarios))
+
         # Taxa de engajamento baseada em seguidores
         taxa_engajamento = 0.0
         if dados_perfil and dados_perfil.get("followers_count", 0) > 0:

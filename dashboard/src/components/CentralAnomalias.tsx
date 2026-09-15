@@ -112,18 +112,24 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
     } else {
       setViralSearchingId(item.id);
     }
-    // Limpa estado de link manual ao abrir novo modal
-    setLinkManual('');
-    setLinkManualErro(null);
+    // Limpa estado de link manual ao abrir novo modal (apenas se não for forceApi)
+    if (!forceApi) {
+      setLinkManual('');
+      setLinkManualErro(null);
+    }
     try {
+      const payload: any = {
+        username: item.username,
+        data_coleta: item.data_coleta,
+        force_api: forceApi
+      };
+      if (viralData?.top_post?.url) {
+        payload.post_url = viralData.top_post.url;
+      }
       const res = await fetch('/api/anomalias/buscar-viral', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: item.username,
-          data_coleta: item.data_coleta,
-          force_api: forceApi
-        })
+        body: JSON.stringify(payload)
       });
       const json = await res.json();
       if (json.success) {
@@ -1553,7 +1559,9 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                 {viralData?.registrado_manualmente && (
                   <div style={{ fontSize: 11, color: '#39FF14', marginTop: 6 }}>
                     ✅ Post {viralData?.ja_existia ? 'já existia no banco e foi' : 'registrado com sucesso!'} {viralData?.ja_existia ? 'recuperado.' : ''}
-                    {' '}<span style={{ color: '#F59E0B' }}>(data de postagem estimada: coleta − 24h)</span>
+                    {viralData?.top_post?.data_estimada && (
+                      <> <span style={{ color: '#F59E0B' }}>(data de postagem estimada: coleta − 24h)</span></>
+                    )}
                   </div>
                 )}
               </div>

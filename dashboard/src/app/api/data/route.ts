@@ -262,8 +262,15 @@ export async function GET() {
       const mediaUrl = p.media_url || midiaUrlMap[p.post_id] || midiaUrlMap[p.shortcode] || null;
       const thumbnailUrl = p.thumbnail_url || thumbnailUrlMap[p.post_id] || thumbnailUrlMap[p.shortcode] || mediaUrl;
 
+      const viewsEfetivas = Math.max(
+        Number(p.views) || 0,
+        Number(p.reach) || 0,
+        (Number(p.likes) || 0) + (Number(p.comentarios) || 0)
+      );
+
       return {
         ...p,
+        views: viewsEfetivas,
         formato: formatoPadrao,
         media_url: mediaUrl,
         thumbnail_url: thumbnailUrl || mediaUrl,
@@ -274,7 +281,12 @@ export async function GET() {
 
     for (const p of rawPosts) {
       const u = (p.username || '').toLowerCase();
-      viewsSempreMap[u] = (viewsSempreMap[u] || 0) + (Number(p.views) || 0);
+      const viewsEfetivas = Math.max(
+        Number(p.views) || 0,
+        Number(p.reach) || 0,
+        (Number(p.likes) || 0) + (Number(p.comentarios) || 0)
+      );
+      viewsSempreMap[u] = (viewsSempreMap[u] || 0) + viewsEfetivas;
     }
 
 

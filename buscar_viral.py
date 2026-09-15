@@ -253,6 +253,28 @@ def buscar_reels_apify(username, limit=5):
         return []
 
 
+def buscar_post_especifico_apify(post_url, default_username=""):
+    """Busca um post específico por URL diretamente via Apify."""
+    if not APIFY_TOKEN or not post_url:
+        return None
+    try:
+        from apify_client import ApifyClient
+        client = ApifyClient(APIFY_TOKEN)
+        run = client.actor("apify/instagram-scraper").call(
+            run_input={"directUrls": [post_url.strip()]},
+            timeout_secs=60
+        )
+        items = list(client.dataset(run["defaultDatasetId"]).iterate_items())
+        if items:
+            raw = items[0]
+            owner = raw.get("ownerUsername") or default_username
+            parsed = extrair_dados_post(raw, owner)
+            return parsed
+    except Exception as e:
+        print(f"Erro ao buscar post por URL no Apify: {e}", file=sys.stderr)
+    return None
+
+
 def buscar_posts_apify(username, limit=5):
     """Executa scraping pontual no Apify combinando Feed Principal e Aba de Reels."""
     posts_total = []
@@ -264,6 +286,7 @@ def buscar_posts_apify(username, limit=5):
         client = ApifyClient(APIFY_TOKEN)
 
         run_input = {
+            "directUrls": [f"https://www.instagram.com/{username_clean}/"],
             "usernames": [username_clean],
             "resultsLimit": limit,
             "scrapePosts": True,
@@ -336,6 +359,8 @@ def extrair_dados_post(raw, default_username):
     likes = int(raw.get("likesCount") or raw.get("likes") or 0)
     comments = int(raw.get("commentsCount") or raw.get("comments") or 0)
     views = int(raw.get("videoViewCount") or raw.get("videoPlayCount") or raw.get("viewCount") or 0)
+    # Lógica de visualizações mínimas: se curtiu ou comentou, certamente visualizou
+    views = max(views, likes + comments)
     caption = raw.get("caption") or raw.get("captionText") or raw.get("text") or ""
     
     # URL
@@ -363,7 +388,7 @@ def extrair_dados_post(raw, default_username):
     }
 
 
-def processar_busca(username, data_coleta_str, force_api=False):
+def processar_busca(username, data_coleta_str, force_api=False, post_url=None):
     username_clean = username.strip().lstrip("@").lower()
     data_coleta_dt = parse_datetime(data_coleta_str)
     
@@ -374,19 +399,33 @@ def processar_busca(username, data_coleta_str, force_api=False):
     janela_inicio = data_coleta_dt - timedelta(hours=72)
     janela_fim = data_coleta_dt
 
+    origem = "BANCO_LOCAL"
+
+    # Se um post_url específico foi informado, busca diretamente via Apify se force_api ou se não existir com métricas no banco
+    if post_url:
+        sc_target = post_url.rstrip('/').split('/')[-1]
+        local_posts = get_local_posts(username_clean, data_coleta_dt)
+        post_existente = next((p for p in local_posts if p.get("shortcode") == sc_target or (p.get("url") and sc_target in p["url"])), None)
+        
+        precisa_buscar_api = force_api or not post_existente or (post_existente["views"] == 0 and post_existente["likes"] == 0)
+        
+        if precisa_buscar_api:
+            post_especifico = buscar_post_especifico_apify(post_url, username_clean)
+            if post_especifico:
+                salvar_posts_no_banco(username_clean, [post_especifico])
+                origem = "APIFY_URL_DIRETA"
+
     # 1. Busca primeiro no banco local
     local_posts = get_local_posts(username_clean, data_coleta_dt)
     
-    # Filtra posts locais dentro da janela de 48h
+    # Filtra posts locais dentro da janela de 72h
     posts_na_janela = [
         p for p in local_posts 
         if p["data_postagem_dt"] and (janela_inicio <= p["data_postagem_dt"] <= janela_fim)
     ]
 
-    origem = "BANCO_LOCAL"
-
     # 2. Se não encontrar no banco local ou se foi forçado, chama o Apify
-    if (not posts_na_janela or force_api):
+    if (not posts_na_janela or force_api) and origem != "APIFY_URL_DIRETA":
         # Busca 15 posts para garantir que posts mais antigos (até 72h) sejam encontrados
         apify_posts = buscar_posts_apify(username_clean, limit=15)
         if apify_posts:
@@ -414,6 +453,14 @@ def processar_busca(username, data_coleta_str, force_api=False):
     # Ordena posts na janela por tração
     posts_na_janela.sort(key=lambda x: x["score_tracao"], reverse=True)
     top_post = posts_na_janela[0] if posts_na_janela else None
+
+    # Se uma URL específica foi solicitada, prioriza esse post como top_post
+    if post_url:
+        sc_target = post_url.rstrip('/').split('/')[-1]
+        for p in local_posts:
+            if (p.get("shortcode") and p["shortcode"] == sc_target) or (p.get("url") and sc_target in p["url"]):
+                top_post = p
+                break
 
     # Posts recentes fora da janela, ordenados por tração
     outros_posts = [p for p in local_posts if not any(w["post_id"] == p["post_id"] for w in posts_na_janela)]
@@ -457,11 +504,12 @@ if __name__ == "__main__":
     parser.add_argument("--username", required=True, help="Username do perfil")
     parser.add_argument("--data_coleta", required=True, help="Data da coleta (ex: '2026-07-09 09:11:09')")
     parser.add_argument("--force_api", action="store_true", help="Força consulta na API mesmo se houver dados locais")
+    parser.add_argument("--post_url", help="URL específica de um post informado manualmente")
 
     args = parser.parse_args()
 
     try:
-        res = processar_busca(args.username, args.data_coleta, args.force_api)
+        res = processar_busca(args.username, args.data_coleta, args.force_api, post_url=args.post_url)
         print(json.dumps(res, ensure_ascii=False, indent=2))
     except Exception as e:
         erro_json = {

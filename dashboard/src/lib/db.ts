@@ -81,6 +81,15 @@ async function ensureSchema(db: Db): Promise<void> {
     if (!postColNames.has("thumbnail_url")) {
       await db.exec(`ALTER TABLE posts_historico ADD COLUMN thumbnail_url TEXT`);
     }
+    // Sanitiza visualizações lógicas mínimas (se alguém curtiu ou comentou, ou reach medido, certamente visualizou)
+    await db.exec(`
+      UPDATE posts_historico 
+      SET views = MAX(COALESCE(views, 0), COALESCE(reach, 0), COALESCE(likes, 0) + COALESCE(comentarios, 0)) 
+      WHERE (views IS NULL OR views < (COALESCE(likes, 0) + COALESCE(comentarios, 0)));
+      UPDATE posts_metricas_snapshots 
+      SET views = MAX(COALESCE(views, 0), COALESCE(reach, 0), COALESCE(likes, 0) + COALESCE(comentarios, 0)) 
+      WHERE (views IS NULL OR views < (COALESCE(likes, 0) + COALESCE(comentarios, 0)));
+    `).catch(() => {});
   } catch (err) {
     console.error("[ensureSchema] Erro em posts_historico:", err);
   }

@@ -9,7 +9,7 @@ export const revalidate = 0;
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { username, data_coleta, force_api } = body;
+    const { username, data_coleta, force_api, post_url } = body;
 
     if (!username) {
       return NextResponse.json({ success: false, error: 'Username é obrigatório' }, { status: 400 });
@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
 
     const sanitizedUsername = username.replace(/[^a-zA-Z0-9_.-]/g, '');
     const sanitizedData = (data_coleta || '').replace(/['"\\]/g, '');
+    const sanitizedPostUrl = (post_url || '').trim().replace(/['"\\]/g, '');
 
     const rootDir = fs.existsSync(path.resolve(process.cwd(), '..', 'buscar_viral.py'))
       ? path.resolve(process.cwd(), '..')
@@ -34,6 +35,9 @@ export async function POST(request: NextRequest) {
     }
     if (force_api) {
       command += ` --force_api`;
+    }
+    if (sanitizedPostUrl) {
+      command += ` --post_url "${sanitizedPostUrl}"`;
     }
 
     console.log(`[API Buscar Viral] Executando: ${command}`);

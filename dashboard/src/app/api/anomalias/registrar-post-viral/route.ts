@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { formatToBrazilDateTime } from '@/lib/timezone';
 import { getDb } from '@/lib/db';
+import { exec } from 'child_process';
+import path from 'path';
+import fs from 'fs';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -49,10 +52,67 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const usernameClean = username.trim().replace(/^@/, '').toLowerCase();
+    const sanitizedUrl = post_url.trim().replace(/['"\\]/g, '');
+    const sanitizedData = (data_coleta || '').replace(/['"\\]/g, '');
+
+    // 1. Tenta buscar e raspar o post real via buscar_viral.py (Apify com directUrls)
+    const rootDir = fs.existsSync(path.resolve(process.cwd(), '..', 'buscar_viral.py'))
+      ? path.resolve(process.cwd(), '..')
+      : process.cwd();
+    const scriptPath = path.resolve(rootDir, 'buscar_viral.py');
+    const pythonCmd = process.env.PYTHON_BIN || (process.platform === 'win32' ? 'python' : 'python3');
+    const dbPath =
+      process.env.DB_PATH && path.isAbsolute(process.env.DB_PATH)
+        ? process.env.DB_PATH
+        : path.resolve(rootDir, 'instagram_tracker.db');
+
+    let command = `${pythonCmd} "${scriptPath}" --username "${usernameClean}" --post_url "${sanitizedUrl}"`;
+    if (sanitizedData) {
+      command += ` --data_coleta "${sanitizedData}"`;
+    }
+
+    try {
+      const pythonResult = await new Promise<any>((resolve, reject) => {
+        exec(
+          command,
+          {
+            cwd: rootDir,
+            maxBuffer: 10 * 1024 * 1024,
+            timeout: 50000,
+            env: { ...process.env, DB_PATH: dbPath }
+          },
+          (error, stdout, stderr) => {
+            if (error) {
+              console.warn('[registrar-post-viral] Falha no script python:', error.message, stderr);
+              return reject(error);
+            }
+            try {
+              const res = JSON.parse(stdout);
+              resolve(res);
+            } catch (err) {
+              reject(err);
+            }
+          }
+        );
+      });
+
+      if (pythonResult?.success && pythonResult?.top_post) {
+        return NextResponse.json({
+          success: true,
+          post: pythonResult.top_post,
+          shortcode,
+          ja_existia: pythonResult.origem === 'BANCO_LOCAL'
+        });
+      }
+    } catch (e) {
+      console.warn('[registrar-post-viral] Falha ao raspar post via Apify, aplicando fallback local no SQLite:', e);
+    }
+
+    // 2. Fallback defensivo no banco local SQLite caso o script Python/Apify não responda
     const postId = shortcodeToId(shortcode);
     const formato = detectFormat(post_url);
 
-    // Data estimada: data_coleta - 24h como melhor estimativa
     let dataPostagem: string;
     if (data_coleta) {
       const dt = new Date(data_coleta.replace(' ', 'T'));
@@ -68,7 +128,6 @@ export async function POST(request: NextRequest) {
 
     const agora = formatToBrazilDateTime(new Date());
     const url = `https://www.instagram.com/p/${shortcode}/`;
-    const usernameClean = username.trim().replace(/^@/, '').toLowerCase();
 
     const db = await getDb();
 
@@ -91,7 +150,7 @@ export async function POST(request: NextRequest) {
 
     // Verifica se já existe pelo shortcode ou post_id
     const existing = await db.get(
-      'SELECT post_id, data_postagem, formato, shortcode FROM posts_historico WHERE post_id = ? OR shortcode = ?',
+      'SELECT post_id, data_postagem, formato, shortcode, likes, comentarios, views FROM posts_historico WHERE post_id = ? OR shortcode = ?',
       [postId, shortcode]
     );
 
@@ -104,6 +163,10 @@ export async function POST(request: NextRequest) {
         return Math.round((dtColeta.getTime() - dtPost.getTime()) / 3600000 * 10) / 10;
       })();
 
+      const likesNum = Number(existing.likes || 0);
+      const comNum = Number(existing.comentarios || 0);
+      const viewsNum = Number(existing.views || 0);
+
       const post = {
         post_id: existing.post_id,
         shortcode,
@@ -111,10 +174,10 @@ export async function POST(request: NextRequest) {
         data_postagem: existing.data_postagem,
         formato: existing.formato || formato,
         legenda: '',
-        likes: 0,
-        comentarios: 0,
-        views: 0,
-        score_tracao: 0,
+        likes: likesNum,
+        comentarios: comNum,
+        views: viewsNum,
+        score_tracao: viewsNum + (likesNum * 3) + (comNum * 5),
         horas_antes_coleta: horasAntesColeta,
         ja_existia: true,
         data_estimada: false
@@ -151,7 +214,7 @@ export async function POST(request: NextRequest) {
       score_tracao: 0,
       horas_antes_coleta: horasAntesColeta,
       ja_existia: false,
-      data_estimada: true // sinaliza que a data é estimada (data_coleta - 24h)
+      data_estimada: true
     };
 
     return NextResponse.json({ success: true, post, shortcode, ja_existia: false });

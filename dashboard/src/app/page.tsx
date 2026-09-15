@@ -1981,6 +1981,14 @@ export default function Dashboard() {
     return false;
   });
 
+  const [userRole, setUserRole] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('st_pin_role') || '';
+    }
+    return '';
+  });
+  const isMaster2802 = userRole === '2802';
+
   const handleToggleOcultarMinhasModelos = () => {
     setOcultarMinhasModelosVirais(prev => {
       const next = !prev;
@@ -2686,6 +2694,18 @@ export default function Dashboard() {
       .then(r => r.json())
       .then(json => { if (json.success) setAnomaliasCount(json.total_pendentes || 0); })
       .catch(() => { });
+
+    fetch('/api/auth/session')
+      .then(res => res.json())
+      .then(data => {
+        if (data?.role) {
+          setUserRole(data.role);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('st_pin_role', data.role);
+          }
+        }
+      })
+      .catch(e => console.error('Erro ao verificar sessão:', e));
   }, []);
   // ====================================================================
   // 🔥 LÓGICA DE SEGUIDORES
@@ -3705,38 +3725,40 @@ export default function Dashboard() {
                 Gerencie os perfis monitorados, veja o histórico de coletas e adicione novos.
               </p>
             </div>
-            <button
-              onClick={() => handleRunIngestion()}
-              disabled={ingestingAll || ingestingProfile !== null}
-              style={{
-                padding: "10px 20px",
-                borderRadius: 8,
-                border: "none",
-                background: ingestingAll ? "#30363D" : "#238636",
-                color: "white",
-                cursor: (ingestingAll || ingestingProfile !== null) ? "not-allowed" : "pointer",
-                fontSize: 13,
-                fontWeight: 700,
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                transition: "background 0.2s"
-              }}
-              onMouseEnter={e => { if (!ingestingAll && ingestingProfile === null) e.currentTarget.style.background = "#2ea043"; }}
-              onMouseLeave={e => { if (!ingestingAll && ingestingProfile === null) e.currentTarget.style.background = "#238636"; }}
-            >
-              {ingestingAll ? (
-                <>
-                  <span className="spinner-mini" style={{ display: "inline-block", width: 12, height: 12, border: "2px solid white", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 1s linear infinite" }}></span>
-                  Rodando Ingestão...
-                </>
-              ) : (
-                <>
-                  <Play size={14} fill="white" />
-                  Rodar Ingestão (Todos Ativos)
-                </>
-              )}
-            </button>
+            {isMaster2802 && (
+              <button
+                onClick={() => handleRunIngestion()}
+                disabled={ingestingAll || ingestingProfile !== null}
+                style={{
+                  padding: "10px 20px",
+                  borderRadius: 8,
+                  border: "none",
+                  background: ingestingAll ? "#30363D" : "#238636",
+                  color: "white",
+                  cursor: (ingestingAll || ingestingProfile !== null) ? "not-allowed" : "pointer",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  transition: "background 0.2s"
+                }}
+                onMouseEnter={e => { if (!ingestingAll && ingestingProfile === null) e.currentTarget.style.background = "#2ea043"; }}
+                onMouseLeave={e => { if (!ingestingAll && ingestingProfile === null) e.currentTarget.style.background = "#238636"; }}
+              >
+                {ingestingAll ? (
+                  <>
+                    <span className="spinner-mini" style={{ display: "inline-block", width: 12, height: 12, border: "2px solid white", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 1s linear infinite" }}></span>
+                    Rodando Ingestão...
+                  </>
+                ) : (
+                  <>
+                    <Play size={14} fill="white" />
+                    Rodar Ingestão (Todos Ativos)
+                  </>
+                )}
+              </button>
+            )}
           </div>
 
           {/* Placar de Status dos Perfis */}
@@ -4048,7 +4070,9 @@ export default function Dashboard() {
             {/* Cabeçalho */}
             <div style={{
               display: "grid",
-              gridTemplateColumns: "1.3fr 85px 90px 120px 70px 110px 110px 125px 110px 80px 80px 44px 95px 85px",
+              gridTemplateColumns: isMaster2802
+                ? "1.3fr 85px 90px 120px 70px 110px 110px 125px 110px 80px 80px 44px 95px 85px"
+                : "1.3fr 85px 90px 120px 70px 110px 110px 125px 110px 80px 80px 44px",
               padding: "12px 16px",
               borderBottom: "1px solid #30363D",
               color: "#8B949E",
@@ -4057,7 +4081,7 @@ export default function Dashboard() {
               textTransform: "uppercase",
               letterSpacing: "0.05em",
               alignItems: "center",
-              minWidth: 1420
+              minWidth: isMaster2802 ? 1420 : 1240
             }}>
               {([
                 { key: 'username', label: 'Perfil', align: 'left' },
@@ -4098,8 +4122,8 @@ export default function Dashboard() {
                   )}
                 </button>
               ))}
-              <span style={{ textAlign: "center" }}>Coletar</span>
-              <span style={{ textAlign: "center" }}>Ações</span>
+              {isMaster2802 && <span style={{ textAlign: "center" }}>Coletar</span>}
+              {isMaster2802 && <span style={{ textAlign: "center" }}>Ações</span>}
             </div>
 
             {/* Linhas */}
@@ -4119,11 +4143,13 @@ export default function Dashboard() {
                     key={perfil.username}
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "1.3fr 85px 90px 120px 70px 110px 110px 125px 110px 80px 80px 44px 95px 85px",
+                      gridTemplateColumns: isMaster2802
+                        ? "1.3fr 85px 90px 120px 70px 110px 110px 125px 110px 80px 80px 44px 95px 85px"
+                        : "1.3fr 85px 90px 120px 70px 110px 110px 125px 110px 80px 80px 44px",
                       padding: "14px 16px",
                       borderBottom: idx < profilesFiltrados.length - 1 ? "1px solid #21262D" : "none",
                       alignItems: "center",
-                      minWidth: 1420,
+                      minWidth: isMaster2802 ? 1420 : 1240,
                       transition: "background 0.15s",
                       background: isMorreu ? 'rgba(248,81,73,0.08)' : (isYellowRow ? 'rgba(245,158,11,0.08)' : (isGreenRow ? 'rgba(46,160,67,0.08)' : 'transparent')),
                       borderLeft: isMorreu ? '3px solid #F85149' : (isYellowRow ? '3px solid #F59E0B' : (isGreenRow ? '3px solid #2ea043' : '3px solid transparent')),
@@ -4669,90 +4695,94 @@ export default function Dashboard() {
                     </div>
 
                     {/* Coletar (Ingestion) */}
-                    <div style={{ display: "flex", justifyContent: "center" }}>
-                      <button
-                        onClick={() => handleRunIngestion(perfil.username)}
-                        disabled={ingestingAll || ingestingProfile !== null}
-                        title="Rodar Ingestão para este perfil"
-                        style={{
-                          background: ingestingProfile === perfil.username ? "#1b2d1d" : "#23863620",
-                          border: `1px solid ${ingestingProfile === perfil.username ? "#2ea043" : "#2ea043"}`,
-                          borderRadius: 6, padding: "5px 12px", cursor: (ingestingAll || ingestingProfile !== null) ? "not-allowed" : "pointer",
-                          color: "#2ea043", fontSize: 11, fontWeight: 700,
-                          display: "flex", alignItems: "center", gap: 4,
-                          transition: "all 0.2s"
-                        }}
-                        onMouseEnter={e => {
-                          if (!ingestingAll && ingestingProfile === null) {
-                            e.currentTarget.style.background = "#2ea043";
-                            e.currentTarget.style.color = "white";
-                          }
-                        }}
-                        onMouseLeave={e => {
-                          if (!ingestingAll && ingestingProfile === null) {
-                            e.currentTarget.style.background = "#23863620";
-                            e.currentTarget.style.color = "#2ea043";
-                          }
-                        }}
-                      >
-                        {ingestingProfile === perfil.username ? (
-                          <span style={{ display: "inline-block", width: 12, height: 12, border: "2px solid #2ea043", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 1s linear infinite" }}></span>
-                        ) : (
-                          <>
-                            <Play size={10} fill="currentColor" />
-                            Rodar
-                          </>
-                        )}
-                      </button>
-                    </div>
+                    {isMaster2802 && (
+                      <div style={{ display: "flex", justifyContent: "center" }}>
+                        <button
+                          onClick={() => handleRunIngestion(perfil.username)}
+                          disabled={ingestingAll || ingestingProfile !== null}
+                          title="Rodar Ingestão para este perfil"
+                          style={{
+                            background: ingestingProfile === perfil.username ? "#1b2d1d" : "#23863620",
+                            border: `1px solid ${ingestingProfile === perfil.username ? "#2ea043" : "#2ea043"}`,
+                            borderRadius: 6, padding: "5px 12px", cursor: (ingestingAll || ingestingProfile !== null) ? "not-allowed" : "pointer",
+                            color: "#2ea043", fontSize: 11, fontWeight: 700,
+                            display: "flex", alignItems: "center", gap: 4,
+                            transition: "all 0.2s"
+                          }}
+                          onMouseEnter={e => {
+                            if (!ingestingAll && ingestingProfile === null) {
+                              e.currentTarget.style.background = "#2ea043";
+                              e.currentTarget.style.color = "white";
+                            }
+                          }}
+                          onMouseLeave={e => {
+                            if (!ingestingAll && ingestingProfile === null) {
+                              e.currentTarget.style.background = "#23863620";
+                              e.currentTarget.style.color = "#2ea043";
+                            }
+                          }}
+                        >
+                          {ingestingProfile === perfil.username ? (
+                            <span style={{ display: "inline-block", width: 12, height: 12, border: "2px solid #2ea043", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 1s linear infinite" }}></span>
+                          ) : (
+                            <>
+                              <Play size={10} fill="currentColor" />
+                              Rodar
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
 
                     {/* Ações */}
-                    <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
-                      <button
-                        onClick={() => setEditTarget(perfil)}
-                        title="Editar"
-                        style={{
-                          background: "#21262D", border: "1px solid #30363D",
-                          borderRadius: 6, padding: "5px 9px", cursor: "pointer",
-                          color: "#8B949E", fontSize: 13
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.background = "#30363D"; e.currentTarget.style.color = "white"; }}
-                        onMouseLeave={e => { e.currentTarget.style.background = "#21262D"; e.currentTarget.style.color = "#8B949E"; }}
-                      >✏️</button>
-
-                      {perfil.exibir === 0 ? (
+                    {isMaster2802 && (
+                      <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
                         <button
-                          onClick={async () => {
-                            setProfiles(prev => prev.map(p => p.username === perfil.username ? { ...p, exibir: 1, status: p.status === 'INATIVO' ? 'ATIVO' : p.status } : p));
-                            await fetch('/api/data', {
-                              method: 'PUT',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ username: perfil.username, exibir: 1, status: perfil.status === 'INATIVO' ? 'ATIVO' : perfil.status })
-                            });
-                          }}
-                          title="Restaurar perfil para a visualização ativa (exibir=1)"
-                          style={{
-                            background: "rgba(0, 240, 255, 0.12)", border: "1px solid rgba(0, 240, 255, 0.35)",
-                            borderRadius: 6, padding: "5px 9px", cursor: "pointer",
-                            color: "#00F0FF", fontSize: 13
-                          }}
-                          onMouseEnter={e => { e.currentTarget.style.background = "rgba(0, 240, 255, 0.25)"; }}
-                          onMouseLeave={e => { e.currentTarget.style.background = "rgba(0, 240, 255, 0.12)"; }}
-                        >👁️</button>
-                      ) : (
-                        <button
-                          onClick={() => setDeleteTarget(perfil.username)}
-                          title="Tirar da visualização / Desativar"
+                          onClick={() => setEditTarget(perfil)}
+                          title="Editar"
                           style={{
                             background: "#21262D", border: "1px solid #30363D",
                             borderRadius: 6, padding: "5px 9px", cursor: "pointer",
                             color: "#8B949E", fontSize: 13
                           }}
-                          onMouseEnter={e => { e.currentTarget.style.background = "#F8514920"; e.currentTarget.style.color = "#F85149"; e.currentTarget.style.borderColor = "#F85149"; }}
-                          onMouseLeave={e => { e.currentTarget.style.background = "#21262D"; e.currentTarget.style.color = "#8B949E"; e.currentTarget.style.borderColor = "#30363D"; }}
-                        >🗑️</button>
-                      )}
-                    </div>
+                          onMouseEnter={e => { e.currentTarget.style.background = "#30363D"; e.currentTarget.style.color = "white"; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = "#21262D"; e.currentTarget.style.color = "#8B949E"; }}
+                        >✏️</button>
+
+                        {perfil.exibir === 0 ? (
+                          <button
+                            onClick={async () => {
+                              setProfiles(prev => prev.map(p => p.username === perfil.username ? { ...p, exibir: 1, status: p.status === 'INATIVO' ? 'ATIVO' : p.status } : p));
+                              await fetch('/api/data', {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ username: perfil.username, exibir: 1, status: perfil.status === 'INATIVO' ? 'ATIVO' : perfil.status })
+                              });
+                            }}
+                            title="Restaurar perfil para a visualização ativa (exibir=1)"
+                            style={{
+                              background: "rgba(0, 240, 255, 0.12)", border: "1px solid rgba(0, 240, 255, 0.35)",
+                              borderRadius: 6, padding: "5px 9px", cursor: "pointer",
+                              color: "#00F0FF", fontSize: 13
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.background = "rgba(0, 240, 255, 0.25)"; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = "rgba(0, 240, 255, 0.12)"; }}
+                          >👁️</button>
+                        ) : (
+                          <button
+                            onClick={() => setDeleteTarget(perfil.username)}
+                            title="Tirar da visualização / Desativar"
+                            style={{
+                              background: "#21262D", border: "1px solid #30363D",
+                              borderRadius: 6, padding: "5px 9px", cursor: "pointer",
+                              color: "#8B949E", fontSize: 13
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.background = "#F8514920"; e.currentTarget.style.color = "#F85149"; e.currentTarget.style.borderColor = "#F85149"; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = "#21262D"; e.currentTarget.style.color = "#8B949E"; e.currentTarget.style.borderColor = "#30363D"; }}
+                          >🗑️</button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })

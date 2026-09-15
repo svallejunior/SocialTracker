@@ -32,12 +32,24 @@ interface DiaSemanaView {
   dia: string;
   diaCurto: string;
   diaIndex: number;
-  viewsMedia: number;
-  viewsMediana: number;
+  viewsMedia?: number;
+  viewsMediana?: number;
   viewsTotal?: number;
-  postsCount: number;
+  seguidoresTotal?: number;
+  seguidoresMedia?: number;
+  postsCount?: number;
+  amostras?: number;
   percentual: number;
   destaque: boolean;
+}
+
+interface GrupoDiaSemana {
+  dias: DiaSemanaView[];
+  diasIndicados: string[];
+  houveDiscrepancia: boolean;
+  totalViews?: number;
+  totalSeguidores?: number;
+  totalPosts?: number;
 }
 
 interface HorariosData {
@@ -70,6 +82,9 @@ interface HorariosData {
     totalPostsAnalisados: number;
     faixas: FaixaView[];
     diasSemana: DiaSemanaView[];
+    diasAudiencia?: GrupoDiaSemana;
+    diasSeguidores?: GrupoDiaSemana;
+    diasPostagem?: GrupoDiaSemana;
     houveDiscrepancia: boolean;
     diasIndicados: string[];
     temDados: boolean;
@@ -100,6 +115,7 @@ export default function ModalMelhoresHorarios({ modelo, onClose }: ModalMelhores
   const [data, setData] = useState<HorariosData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tabVisual, setTabVisual] = useState<'geral' | 'faixas_seguidores' | 'faixas_views' | 'dias'>('geral');
+  const [modoDiaSemana, setModoDiaSemana] = useState<'audiencia' | 'seguidores' | 'postagem'>('audiencia');
 
   useEffect(() => {
     if (!modelo?.username) return;
@@ -514,146 +530,299 @@ export default function ModalMelhoresHorarios({ modelo, onClose }: ModalMelhores
               </div>
 
               {/* ─────────────────────────────────────────────────────────────
-                  CARD 3: DISCREPÂNCIA EM DIAS DE SEMANA (REQUISITO EXPLÍCITO)
+                  CARD 3: DESEMPENHO POR DIA DA SEMANA COM SELETOR
               ───────────────────────────────────────────────────────────── */}
-              {data.visualizacoes.temDados && (
-                <div
-                  style={{
-                    background: '#161B22',
-                    border: data.visualizacoes.houveDiscrepancia ? '1px solid #F59E0B' : '1px solid #30363D',
-                    borderRadius: 14,
-                    padding: '16px 18px',
-                    boxShadow: data.visualizacoes.houveDiscrepancia ? '0 4px 20px rgba(245, 158, 11, 0.12)' : 'none'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <Calendar size={16} color={data.visualizacoes.houveDiscrepancia ? '#FBBF24' : '#58A6FF'} />
-                      <span style={{ fontSize: 13, fontWeight: 800, color: '#FFFFFF' }}>
-                        Desempenho por Dia da Semana
-                      </span>
+              {(() => {
+                const dadosModo = (() => {
+                  if (modoDiaSemana === 'seguidores') {
+                    const grupo = data.visualizacoes.diasSeguidores;
+                    return {
+                      dias: grupo?.dias || [],
+                      houveDiscrepancia: grupo?.houveDiscrepancia ?? false,
+                      diasIndicados: grupo?.diasIndicados || [],
+                      tituloDiscrepancia: 'Dias com maior ganho de novos seguidores:',
+                      corTema: '#10B981',
+                      corTemaBg: 'rgba(16, 185, 129, 0.15)',
+                      corDestaque: '#34D399',
+                      unidade: 'seguidores',
+                      tipoValor: 'seguidores' as const
+                    };
+                  }
+                  if (modoDiaSemana === 'postagem') {
+                    const grupo = data.visualizacoes.diasPostagem;
+                    return {
+                      dias: grupo?.dias || [],
+                      houveDiscrepancia: grupo?.houveDiscrepancia ?? false,
+                      diasIndicados: grupo?.diasIndicados || [],
+                      tituloDiscrepancia: 'Dias de postagem com maior média de visualizações por post:',
+                      corTema: '#A855F7',
+                      corTemaBg: 'rgba(168, 85, 247, 0.15)',
+                      corDestaque: '#C084FC',
+                      unidade: 'views/post',
+                      tipoValor: 'postagem' as const
+                    };
+                  }
+                  // Default: Audiência (Views)
+                  const grupo = data.visualizacoes.diasAudiencia;
+                  return {
+                    dias: grupo?.dias || data.visualizacoes.diasSemana || [],
+                    houveDiscrepancia: grupo?.houveDiscrepancia ?? data.visualizacoes.houveDiscrepancia,
+                    diasIndicados: grupo?.diasIndicados || data.visualizacoes.diasIndicados || [],
+                    tituloDiscrepancia: 'Dias com maior audiência (visualizações assistidas):',
+                    corTema: '#F59E0B',
+                    corTemaBg: 'rgba(245, 158, 11, 0.15)',
+                    corDestaque: '#FBBF24',
+                    unidade: 'views',
+                    tipoValor: 'audiencia' as const
+                  };
+                })();
+
+                return (
+                  <div
+                    style={{
+                      background: '#161B22',
+                      border: dadosModo.houveDiscrepancia ? `1px solid ${dadosModo.corTema}` : '1px solid #30363D',
+                      borderRadius: 14,
+                      padding: '16px 18px',
+                      boxShadow: dadosModo.houveDiscrepancia ? `0 4px 20px ${dadosModo.corTemaBg}` : 'none'
+                    }}
+                  >
+                    {/* Header do Card com Título e Chave Seletora */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Calendar size={16} color={dadosModo.houveDiscrepancia ? dadosModo.corDestaque : '#58A6FF'} />
+                        <div>
+                          <span style={{ fontSize: 13, fontWeight: 800, color: '#FFFFFF' }}>
+                            Desempenho por Dia da Semana
+                          </span>
+                          <span style={{ marginLeft: 8, fontSize: 11, color: '#8B949E' }}>
+                            {modoDiaSemana === 'audiencia' && '(Audiência de visualizações)'}
+                            {modoDiaSemana === 'seguidores' && '(Ganhos de novos seguidores)'}
+                            {modoDiaSemana === 'postagem' && '(Performance por data publicada)'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Chave Seletora de Modo (Audiência vs Seguidores vs Dia da Postagem) */}
+                      <div style={{ display: 'flex', background: '#0D1117', padding: 2, borderRadius: 8, border: '1px solid #30363D', gap: 2 }}>
+                        <button
+                          type="button"
+                          onClick={() => setModoDiaSemana('audiencia')}
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: 6,
+                            border: modoDiaSemana === 'audiencia' ? '1px solid #F59E0B' : '1px solid transparent',
+                            background: modoDiaSemana === 'audiencia' ? 'rgba(245, 158, 11, 0.2)' : 'transparent',
+                            color: modoDiaSemana === 'audiencia' ? '#FBBF24' : '#8B949E',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4
+                          }}
+                        >
+                          <Eye size={12} />
+                          Audiência (Views)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setModoDiaSemana('seguidores')}
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: 6,
+                            border: modoDiaSemana === 'seguidores' ? '1px solid #10B981' : '1px solid transparent',
+                            background: modoDiaSemana === 'seguidores' ? 'rgba(16, 185, 129, 0.2)' : 'transparent',
+                            color: modoDiaSemana === 'seguidores' ? '#34D399' : '#8B949E',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4
+                          }}
+                        >
+                          <Users size={12} />
+                          Seguidores
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setModoDiaSemana('postagem')}
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: 6,
+                            border: modoDiaSemana === 'postagem' ? '1px solid #A855F7' : '1px solid transparent',
+                            background: modoDiaSemana === 'postagem' ? 'rgba(168, 85, 247, 0.2)' : 'transparent',
+                            color: modoDiaSemana === 'postagem' ? '#C084FC' : '#8B949E',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4
+                          }}
+                        >
+                          <Calendar size={12} />
+                          Dia da Postagem
+                        </button>
+                      </div>
                     </div>
 
-                    {data.visualizacoes.houveDiscrepancia ? (
-                      <span
+                    {/* Status de Discrepância */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                      {dadosModo.houveDiscrepancia ? (
+                        <span
+                          style={{
+                            fontSize: 10.5,
+                            fontWeight: 800,
+                            padding: '3px 10px',
+                            borderRadius: 12,
+                            background: dadosModo.corTemaBg,
+                            color: dadosModo.corDestaque,
+                            border: `1px solid ${dadosModo.corTema}66`,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 5
+                          }}
+                        >
+                          <Sparkles size={12} />
+                          Discrepância Detectada
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: 11, color: '#8B949E' }}>
+                          Distribuição relativamente homogênea entre os dias
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Banner de Dias Indicados caso haja discrepância */}
+                    {dadosModo.houveDiscrepancia && dadosModo.diasIndicados.length > 0 && (
+                      <div
                         style={{
-                          fontSize: 10.5,
-                          fontWeight: 800,
-                          padding: '3px 10px',
-                          borderRadius: 12,
-                          background: 'rgba(245, 158, 11, 0.18)',
-                          color: '#FBBF24',
-                          border: '1px solid rgba(245, 158, 11, 0.4)',
+                          background: dadosModo.corTemaBg,
+                          border: `1px solid ${dadosModo.corTema}44`,
+                          borderRadius: 10,
+                          padding: '10px 14px',
+                          marginBottom: 14,
                           display: 'flex',
                           alignItems: 'center',
-                          gap: 5
+                          justifyContent: 'space-between',
+                          flexWrap: 'wrap',
+                          gap: 8
                         }}
                       >
-                        <Sparkles size={12} />
-                        Discrepância Detectada
-                      </span>
-                    ) : (
-                      <span style={{ fontSize: 11, color: '#8B949E' }}>
-                        Distribuição homogênea entre dias
-                      </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: dadosModo.corDestaque }}>
+                          <Flame size={16} color={dadosModo.corTema} />
+                          <span><strong>{dadosModo.tituloDiscrepancia}</strong></span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          {dadosModo.diasIndicados.map(d => (
+                            <span
+                              key={d}
+                              style={{
+                                background: dadosModo.corTema,
+                                color: '#0B0E14',
+                                fontWeight: 800,
+                                fontSize: 11,
+                                padding: '3px 9px',
+                                borderRadius: 6
+                              }}
+                            >
+                              ⭐ {d}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
                     )}
-                  </div>
 
-                  {/* Banner de Dias Indicados caso haja discrepância */}
-                  {data.visualizacoes.houveDiscrepancia && (
+                    {/* 7 Colunas dos Dias da Semana (Seg a Dom) */}
                     <div
                       style={{
-                        background: 'rgba(245, 158, 11, 0.08)',
-                        border: '1px solid rgba(245, 158, 11, 0.25)',
-                        borderRadius: 10,
-                        padding: '10px 14px',
-                        marginBottom: 14,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        flexWrap: 'wrap',
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
                         gap: 8
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#FCD34D' }}>
-                        <Flame size={16} color="#F59E0B" />
-                        <span><strong>Dias com maior volume de visualizações:</strong></span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                        {data.visualizacoes.diasIndicados.map(d => (
-                          <span
-                            key={d}
+                      {dadosModo.dias.map(d => {
+                        let valorPrincipalStr = '-';
+                        let subtexto = '';
+                        let temValor = false;
+
+                        if (dadosModo.tipoValor === 'seguidores') {
+                          const seg = d.seguidoresTotal ?? 0;
+                          temValor = seg > 0;
+                          valorPrincipalStr = temValor ? `+${formatNumber(seg)}` : '-';
+                          subtexto = d.amostras ? `${d.amostras} medições` : 'seguidores';
+                        } else if (dadosModo.tipoValor === 'postagem') {
+                          const vMed = d.viewsMedia ?? 0;
+                          temValor = (d.postsCount ?? 0) > 0;
+                          valorPrincipalStr = temValor ? (vMed > 0 ? formatNumber(vMed) : '0') : '-';
+                          subtexto = `${d.postsCount ?? 0} ${(d.postsCount === 1) ? 'post' : 'posts'}`;
+                        } else {
+                          const vTot = d.viewsTotal ?? d.viewsMedia ?? 0;
+                          temValor = vTot > 0;
+                          valorPrincipalStr = temValor ? formatNumber(vTot) : '-';
+                          subtexto = 'views';
+                        }
+
+                        return (
+                          <div
+                            key={d.dia}
                             style={{
-                              background: '#F59E0B',
-                              color: '#0B0E14',
-                              fontWeight: 800,
-                              fontSize: 11,
-                              padding: '3px 9px',
-                              borderRadius: 6
+                              background: d.destaque ? dadosModo.corTemaBg : '#0D1117',
+                              border: d.destaque ? `1px solid ${dadosModo.corTema}` : '1px solid #21262D',
+                              borderRadius: 8,
+                              padding: '8px 6px',
+                              textAlign: 'center',
+                              transition: 'all 0.15s ease'
                             }}
                           >
-                            ⭐ {d}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 7 Colunas dos Dias da Semana (Seg a Dom) */}
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
-                      gap: 8
-                    }}
-                  >
-                    {data.visualizacoes.diasSemana.map(d => (
-                      <div
-                        key={d.dia}
-                        style={{
-                          background: d.destaque ? 'rgba(245, 158, 11, 0.12)' : '#0D1117',
-                          border: d.destaque ? '1px solid rgba(245, 158, 11, 0.5)' : '1px solid #21262D',
-                          borderRadius: 8,
-                          padding: '8px 6px',
-                          textAlign: 'center',
-                          transition: 'transform 0.15s ease'
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: 10,
-                            fontWeight: 800,
-                            color: d.destaque ? '#FBBF24' : '#8B949E',
-                            marginBottom: 4,
-                            textTransform: 'uppercase'
-                          }}
-                        >
-                          {d.diaCurto}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: 13,
-                            fontWeight: 800,
-                            color: ((d.viewsTotal ?? d.viewsMedia) > 0) ? '#FFFFFF' : '#6E7681'
-                          }}
-                        >
-                          {((d.viewsTotal ?? d.viewsMedia) > 0) ? formatNumber(d.viewsTotal ?? d.viewsMedia) : '-'}
-                        </div>
-                        <div style={{ fontSize: 9.5, color: '#8B949E', marginTop: 2 }}>
-                          {d.viewsTotal !== undefined ? 'views' : `${d.postsCount} ${d.postsCount === 1 ? 'post' : 'posts'}`}
-                        </div>
-                        {d.destaque && (
-                          <div style={{ marginTop: 4 }}>
-                            <span style={{ fontSize: 8.5, fontWeight: 900, color: '#0B0E14', background: '#F59E0B', padding: '1px 4px', borderRadius: 4 }}>
-                              TOP
-                            </span>
+                            <div
+                              style={{
+                                fontSize: 10,
+                                fontWeight: 800,
+                                color: d.destaque ? dadosModo.corDestaque : '#8B949E',
+                                marginBottom: 4,
+                                textTransform: 'uppercase'
+                              }}
+                            >
+                              {d.diaCurto}
+                            </div>
+                            <div
+                              style={{
+                                fontSize: 13,
+                                fontWeight: 800,
+                                color: temValor ? '#FFFFFF' : '#6E7681'
+                              }}
+                            >
+                              {valorPrincipalStr}
+                            </div>
+                            <div style={{ fontSize: 9.5, color: '#8B949E', marginTop: 2 }}>
+                              {subtexto}
+                            </div>
+                            {d.destaque && (
+                              <div style={{ marginTop: 4 }}>
+                                <span
+                                  style={{
+                                    fontSize: 8.5,
+                                    fontWeight: 900,
+                                    color: '#0B0E14',
+                                    background: dadosModo.corTema,
+                                    padding: '1px 4px',
+                                    borderRadius: 4
+                                  }}
+                                >
+                                  TOP
+                                </span>
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
-                    ))}
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* ─────────────────────────────────────────────────────────────
                   SELETOR DE DETALHAMENTO DAS FAIXAS DE 2H (DISTRIBUIÇÃO COMPLETA)

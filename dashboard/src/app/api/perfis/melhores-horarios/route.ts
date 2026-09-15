@@ -114,6 +114,16 @@ export async function GET(req: NextRequest) {
       faixasSeguidores[f] = { ganhoTotal: 0, amostras: 0, ganhoMedio: 0 };
     }
 
+    const diasSeguidoresMap: { [d: number]: { ganhoTotal: number; amostras: number } } = {
+      0: { ganhoTotal: 0, amostras: 0 },
+      1: { ganhoTotal: 0, amostras: 0 },
+      2: { ganhoTotal: 0, amostras: 0 },
+      3: { ganhoTotal: 0, amostras: 0 },
+      4: { ganhoTotal: 0, amostras: 0 },
+      5: { ganhoTotal: 0, amostras: 0 },
+      6: { ganhoTotal: 0, amostras: 0 }
+    };
+
     let totalGanhosAnalisados = 0;
 
     for (let i = 1; i < coletasOrdenadas.length; i++) {
@@ -143,11 +153,17 @@ export async function GET(req: NextRequest) {
         if (diffSeg > 0 && diffSeg < 10000) {
           const hora = dtCurr.getHours();
           const faixaInicio = Math.floor(hora / 2) * 2;
+          const diaSemana = dtCurr.getDay();
 
           if (faixasSeguidores[faixaInicio]) {
             faixasSeguidores[faixaInicio].ganhoTotal += diffSeg;
             faixasSeguidores[faixaInicio].amostras += 1;
             totalGanhosAnalisados++;
+          }
+
+          if (diasSeguidoresMap[diaSemana]) {
+            diasSeguidoresMap[diaSemana].ganhoTotal += diffSeg;
+            diasSeguidoresMap[diaSemana].amostras += 1;
           }
         }
       }
@@ -188,12 +204,12 @@ export async function GET(req: NextRequest) {
     }
 
     // 3. Análise de Visualizações baseada em Snapshots Periódicos de Métricas
-    // Mede os horários em que os vídeos são mais assistidos (consumo contínuo ao longo do dia),
-    // em vez dos horários em que foram postados (o que deixava várias faixas zeradas).
+    // Mede os horários e dias em que os posts são mais assistidos (audiência real ao longo do dia/semana),
+    // levando em conta fotos (onde views = max(views, reach, likes + comentarios)).
     const snapshotsRows = await db.all(
-      `SELECT post_id, data_carga, views
+      `SELECT post_id, data_carga, views, reach, likes, comentarios
        FROM posts_metricas_snapshots
-       WHERE (LOWER(username) = LOWER(?) OR username = ?) AND views > 0 AND data_carga LIKE '%:%'
+       WHERE (LOWER(username) = LOWER(?) OR username = ?) AND data_carga LIKE '%:%'
        ORDER BY post_id ASC, data_carga ASC`,
       [username, username]
     );
@@ -228,7 +244,11 @@ export async function GET(req: NextRequest) {
     const snapshotsPorPost: { [postId: string]: Array<{ dt: Date; views: number }> } = {};
     for (const snap of snapshotsRows) {
       const dt = parseSqliteDate(snap.data_carga);
-      const v = Number(snap.views) || 0;
+      const v = Math.max(
+        Number(snap.views) || 0,
+        Number(snap.reach) || 0,
+        (Number(snap.likes) || 0) + (Number(snap.comentarios) || 0)
+      );
       if (!dt || v <= 0) continue;
       if (!snapshotsPorPost[snap.post_id]) {
         snapshotsPorPost[snap.post_id] = [];
@@ -283,39 +303,67 @@ export async function GET(req: NextRequest) {
 
     let totalPostsAnalisados = Object.keys(snapshotsPorPost).length;
 
-    // Fallback: se o perfil não possuir snapshots periódicos registrados ainda,
-    // utiliza os dados históricos de postagens como contingência
-    if (totalViewsGanhas === 0) {
-      const postsFallback = await db.all(
-        `SELECT post_id, data_postagem, views
-         FROM posts_historico
-         WHERE LOWER(username) = LOWER(?) AND views > 0 AND data_postagem LIKE '%:%'`,
-        [username]
-      );
-      totalPostsAnalisados = postsFallback.length;
-      if (postsFallback.length > 0) {
-        for (const p of postsFallback) {
-          const dt = parseSqliteDate(p.data_postagem);
-          if (!dt) continue;
-          const v = Number(p.views) || 0;
-          if (v <= 0) continue;
-          const hora = dt.getHours();
-          const faixaInicio = Math.floor(hora / 2) * 2;
-          const diaSemana = dt.getDay();
+    // 4. Consulta posts_historico para Desempenho por Dia da Postagem e contingência
+    const postsHistoricoRows = await db.all(
+      `SELECT post_id, data_postagem, views, reach, likes, comentarios
+       FROM posts_historico
+       WHERE LOWER(username) = LOWER(?) AND data_postagem LIKE '%:%'
+       ORDER BY data_postagem DESC`,
+      [username]
+    );
 
-          faixasViews[faixaInicio].viewsTotal += v;
-          faixasViews[faixaInicio].amostras += 1;
-          diasViewsMap[diaSemana].viewsTotal += v;
-          diasViewsMap[diaSemana].amostras += 1;
-        }
-        for (let f = 0; f < 24; f += 2) {
-          const item = faixasViews[f];
-          item.viewsMedia = item.amostras > 0 ? Math.round(item.viewsTotal / item.amostras) : 0;
-          item.viewsMediana = item.viewsMedia;
-          if (item.viewsTotal > maxViewsFaixa) {
-            maxViewsFaixa = item.viewsTotal;
-            melhorFaixaViewsInicio = f;
-          }
+    const diasPostagemMap: { [d: number]: { viewsTotal: number; postsCount: number } } = {
+      0: { viewsTotal: 0, postsCount: 0 },
+      1: { viewsTotal: 0, postsCount: 0 },
+      2: { viewsTotal: 0, postsCount: 0 },
+      3: { viewsTotal: 0, postsCount: 0 },
+      4: { viewsTotal: 0, postsCount: 0 },
+      5: { viewsTotal: 0, postsCount: 0 },
+      6: { viewsTotal: 0, postsCount: 0 }
+    };
+
+    for (const p of postsHistoricoRows) {
+      const dt = parseSqliteDate(p.data_postagem);
+      if (!dt) continue;
+      const v = Math.max(
+        Number(p.views) || 0,
+        Number(p.reach) || 0,
+        (Number(p.likes) || 0) + (Number(p.comentarios) || 0)
+      );
+      const diaSemana = dt.getDay();
+      diasPostagemMap[diaSemana].viewsTotal += v;
+      diasPostagemMap[diaSemana].postsCount += 1;
+    }
+
+    // Fallback: se o perfil não possuir snapshots periódicos registrados ainda,
+    // utiliza os dados históricos de postagens como contingência para a audiência
+    if (totalViewsGanhas === 0 && postsHistoricoRows.length > 0) {
+      totalPostsAnalisados = postsHistoricoRows.length;
+      for (const p of postsHistoricoRows) {
+        const dt = parseSqliteDate(p.data_postagem);
+        if (!dt) continue;
+        const v = Math.max(
+          Number(p.views) || 0,
+          Number(p.reach) || 0,
+          (Number(p.likes) || 0) + (Number(p.comentarios) || 0)
+        );
+        if (v <= 0) continue;
+        const hora = dt.getHours();
+        const faixaInicio = Math.floor(hora / 2) * 2;
+        const diaSemana = dt.getDay();
+
+        faixasViews[faixaInicio].viewsTotal += v;
+        faixasViews[faixaInicio].amostras += 1;
+        diasViewsMap[diaSemana].viewsTotal += v;
+        diasViewsMap[diaSemana].amostras += 1;
+      }
+      for (let f = 0; f < 24; f += 2) {
+        const item = faixasViews[f];
+        item.viewsMedia = item.amostras > 0 ? Math.round(item.viewsTotal / item.amostras) : 0;
+        item.viewsMediana = item.viewsMedia;
+        if (item.viewsTotal > maxViewsFaixa) {
+          maxViewsFaixa = item.viewsTotal;
+          melhorFaixaViewsInicio = f;
         }
       }
     }
@@ -341,36 +389,30 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Análise de Dias da Semana & Discrepância
-    const somaViewsDias = Object.values(diasViewsMap).reduce((acc, cur) => acc + cur.viewsTotal, 0);
-    const mediaGeralViewsDia = somaViewsDias / 7;
-    const diasIndicados: string[] = [];
-    const listaDiasSemana = [];
-
+    // 5. Formatação dos 3 Modos de Dias da Semana (Audiência, Seguidores e Dia da Postagem)
+    // A) AUDIÊNCIA (visualizações consumidas ao longo da semana)
+    const somaViewsAud = Object.values(diasViewsMap).reduce((acc, cur) => acc + cur.viewsTotal, 0);
+    const mediaGeralViewsDia = somaViewsAud / 7;
+    const diasIndicadosAud: string[] = [];
     let maxDiaViews = -1;
     for (let d = 0; d < 7; d++) {
       if (diasViewsMap[d].viewsTotal > maxDiaViews) {
         maxDiaViews = diasViewsMap[d].viewsTotal;
       }
     }
-
+    const listaDiasAudiencia = [];
     for (const dIdx of ORDEM_DIAS) {
       const { nome, curto } = DIAS_NOMES[dIdx];
       const item = diasViewsMap[dIdx];
       const dTotal = item.viewsTotal;
       const dMedia = item.amostras > 0 ? Math.round(dTotal / item.amostras) : 0;
-
-      // Discrepância: dia com volume pelo menos 35% acima da média dos dias
       const pctSobreMedia = mediaGeralViewsDia > 0 ? ((dTotal - mediaGeralViewsDia) / mediaGeralViewsDia) * 100 : 0;
       const destaque = pctSobreMedia >= 35 && dTotal > 0;
-
       if (destaque) {
-        diasIndicados.push(`${nome} (+${Math.round(pctSobreMedia)}%)`);
+        diasIndicadosAud.push(`${nome} (+${Math.round(pctSobreMedia)}%)`);
       }
-
       const pctRelativo = maxDiaViews > 0 ? Math.round((dTotal / maxDiaViews) * 100) : 0;
-
-      listaDiasSemana.push({
+      listaDiasAudiencia.push({
         dia: nome,
         diaCurto: curto,
         diaIndex: dIdx,
@@ -379,6 +421,77 @@ export async function GET(req: NextRequest) {
         viewsMediana: dMedia,
         postsCount: item.amostras,
         amostras: item.amostras,
+        percentual: pctRelativo,
+        destaque
+      });
+    }
+
+    // B) SEGUIDORES (novos seguidores ganhos por dia da semana)
+    const somaSeguidoresDias = Object.values(diasSeguidoresMap).reduce((acc, cur) => acc + cur.ganhoTotal, 0);
+    const mediaGeralSeguidoresDia = somaSeguidoresDias / 7;
+    const diasIndicadosSeg: string[] = [];
+    let maxDiaSeguidores = -1;
+    for (let d = 0; d < 7; d++) {
+      if (diasSeguidoresMap[d].ganhoTotal > maxDiaSeguidores) {
+        maxDiaSeguidores = diasSeguidoresMap[d].ganhoTotal;
+      }
+    }
+    const listaDiasSeguidores = [];
+    for (const dIdx of ORDEM_DIAS) {
+      const { nome, curto } = DIAS_NOMES[dIdx];
+      const item = diasSeguidoresMap[dIdx];
+      const dTotal = item.ganhoTotal;
+      const dMedia = item.amostras > 0 ? Math.round((dTotal / item.amostras) * 10) / 10 : 0;
+      const pctSobreMedia = mediaGeralSeguidoresDia > 0 ? ((dTotal - mediaGeralSeguidoresDia) / mediaGeralSeguidoresDia) * 100 : 0;
+      const destaque = pctSobreMedia >= 35 && dTotal > 0;
+      if (destaque) {
+        diasIndicadosSeg.push(`${nome} (+${Math.round(pctSobreMedia)}%)`);
+      }
+      const pctRelativo = maxDiaSeguidores > 0 ? Math.round((dTotal / maxDiaSeguidores) * 100) : 0;
+      listaDiasSeguidores.push({
+        dia: nome,
+        diaCurto: curto,
+        diaIndex: dIdx,
+        seguidoresTotal: dTotal,
+        seguidoresMedia: dMedia,
+        amostras: item.amostras,
+        percentual: pctRelativo,
+        destaque
+      });
+    }
+
+    // C) DIA DA POSTAGEM (performance dos posts agrupados pela data de publicação)
+    const somaViewsPostagem = Object.values(diasPostagemMap).reduce((acc, cur) => acc + cur.viewsTotal, 0);
+    const somaPostsPostagem = Object.values(diasPostagemMap).reduce((acc, cur) => acc + cur.postsCount, 0);
+    const mediaGeralViewsPorPost = somaPostsPostagem > 0 ? somaViewsPostagem / somaPostsPostagem : 0;
+    const diasIndicadosPost: string[] = [];
+    let maxDiaPostMedia = -1;
+    for (let d = 0; d < 7; d++) {
+      const item = diasPostagemMap[d];
+      const med = item.postsCount > 0 ? item.viewsTotal / item.postsCount : 0;
+      if (med > maxDiaPostMedia) {
+        maxDiaPostMedia = med;
+      }
+    }
+    const listaDiasPostagem = [];
+    for (const dIdx of ORDEM_DIAS) {
+      const { nome, curto } = DIAS_NOMES[dIdx];
+      const item = diasPostagemMap[dIdx];
+      const dTotal = item.viewsTotal;
+      const dMedia = item.postsCount > 0 ? Math.round(dTotal / item.postsCount) : 0;
+      const pctSobreMedia = mediaGeralViewsPorPost > 0 ? ((dMedia - mediaGeralViewsPorPost) / mediaGeralViewsPorPost) * 100 : 0;
+      const destaque = pctSobreMedia >= 35 && item.postsCount > 0 && dMedia > 0;
+      if (destaque) {
+        diasIndicadosPost.push(`${nome} (+${Math.round(pctSobreMedia)}%)`);
+      }
+      const pctRelativo = maxDiaPostMedia > 0 ? Math.round((dMedia / maxDiaPostMedia) * 100) : 0;
+      listaDiasPostagem.push({
+        dia: nome,
+        diaCurto: curto,
+        diaIndex: dIdx,
+        viewsTotal: dTotal,
+        viewsMedia: dMedia,
+        postsCount: item.postsCount,
         percentual: pctRelativo,
         destaque
       });
@@ -422,9 +535,28 @@ export async function GET(req: NextRequest) {
         totalViewsGanhas,
         totalPostsAnalisados,
         faixas: listaFaixasViews,
-        diasSemana: listaDiasSemana,
-        houveDiscrepancia: diasIndicados.length > 0,
-        diasIndicados,
+        diasSemana: listaDiasAudiencia, // mantido para compatibilidade
+        diasAudiencia: {
+          dias: listaDiasAudiencia,
+          diasIndicados: diasIndicadosAud,
+          houveDiscrepancia: diasIndicadosAud.length > 0,
+          totalViews: somaViewsAud
+        },
+        diasSeguidores: {
+          dias: listaDiasSeguidores,
+          diasIndicados: diasIndicadosSeg,
+          houveDiscrepancia: diasIndicadosSeg.length > 0,
+          totalSeguidores: somaSeguidoresDias
+        },
+        diasPostagem: {
+          dias: listaDiasPostagem,
+          diasIndicados: diasIndicadosPost,
+          houveDiscrepancia: diasIndicadosPost.length > 0,
+          totalPosts: somaPostsPostagem,
+          totalViews: somaViewsPostagem
+        },
+        houveDiscrepancia: diasIndicadosAud.length > 0,
+        diasIndicados: diasIndicadosAud,
         temDados: temDadosViews,
         observacao: temDadosViews
           ? undefined
