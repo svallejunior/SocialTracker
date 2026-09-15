@@ -1955,6 +1955,7 @@ export default function Dashboard() {
   const [profiles, setProfiles] = useState<any[]>([]);
   const [posts, setPosts] = useState<any[]>([]);
   const [followersHistory, setFollowersHistory] = useState<any>({});
+  const [viewsHistory, setViewsHistory] = useState<any>({});
   const [ultimaAtualizacaoGeral, setUltimaAtualizacaoGeral] = useState<string>('');
 
   // Estados de Navegação e Filtros
@@ -2357,6 +2358,7 @@ export default function Dashboard() {
         });
 
         const fHistory = json.followersHistory || {};
+        const vHistory = json.viewsHistory || {};
 
         const enrichedProfiles = rawProfiles.map((prof: any) => {
           const u = (prof.username || '').toLowerCase();
@@ -2510,6 +2512,9 @@ export default function Dashboard() {
         }
         if (fHistory && Object.keys(fHistory).length > 0) {
           setFollowersHistory(fHistory);
+        }
+        if (vHistory && Object.keys(vHistory).length > 0) {
+          setViewsHistory(vHistory);
         }
 
         if (!json.ultimaAtualizacao && enrichedProfiles.length > 0) {
@@ -5062,15 +5067,20 @@ export default function Dashboard() {
                     seguidores: Number(pt.total_seguidores)
                   }));
 
-                // Histórico de engajamento dos posts recentes para o gráfico mini
-                const postsDoPerfil = posts
-                  .filter(p => p.username === perfil.username)
-                  .slice(0, 10) // 10 posts recentes
-                  .reverse() // Do antigo para o novo
-                  .map((p, idx) => ({
-                    idx: idx + 1,
-                    engajamento: p.likes + p.comentarios
-                  }));
+                // Histórico de visualizações diárias (Views ganhas por dia) para o mini-gráfico
+                const uKey = (perfil.username || '').toLowerCase();
+                const rawViewsHist = viewsHistory[uKey] || viewsHistory[perfil.username] || [];
+                const histViews = rawViewsHist
+                  .slice()
+                  .sort((a: any, b: any) => String(a.dia || '').localeCompare(String(b.dia || '')))
+                  .map((pt: any) => {
+                    const diaParts = (pt.dia || '').split('-');
+                    const labelDia = diaParts.length >= 3 ? `${diaParts[2]}/${diaParts[1]}` : pt.dia;
+                    return {
+                      dia: labelDia,
+                      views: Number(pt.views) || 0
+                    };
+                  });
                 // ── Modal de Lançamento ──────────────────────────────────
                 return (
                   <div key={perfil.username} className="profile-card">
@@ -5302,29 +5312,48 @@ export default function Dashboard() {
 
                       {/* Área lateral com os 2 mini-gráficos */}
                       <div className="mini-charts-area">
-                        {/* Mini Gráfico 1: Engajamento */}
+                        {/* Mini Gráfico 1: Visualizações Diárias */}
                         <div className="mini-chart-wrapper">
                           <div className="mini-chart-title">
-                            <span>Engajamento</span>
-                            <span className="val">
-                              {postsDoPerfil.length > 0 ? formatNumber(postsDoPerfil[postsDoPerfil.length - 1].engajamento) : '0'}
+                            <span title="Visualizações ganhas por dia (soma de views do dia)">Views / dia</span>
+                            <span className="val" title={`Visualizações hoje: ${formatNumber(perfil.views_dia || 0)}`}>
+                              {formatNumber(perfil.views_dia || 0)}
                             </span>
                           </div>
                           <div className="chart-container-mini">
-                            {postsDoPerfil.length > 0 ? (
+                            {histViews.length > 0 ? (
                               <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={postsDoPerfil}>
+                                <LineChart data={histViews}>
+                                  <YAxis
+                                    dataKey="views"
+                                    domain={['dataMin', 'dataMax']}
+                                    hide
+                                  />
+                                  <Tooltip
+                                    contentStyle={{
+                                      backgroundColor: '#161B22',
+                                      borderColor: '#30363D',
+                                      borderRadius: '8px',
+                                      fontSize: '11px',
+                                      color: 'white',
+                                      padding: '6px 10px'
+                                    }}
+                                    formatter={(value: any) => [`+${formatNumber(value)}`, 'Views']}
+                                    labelFormatter={(label: any) => `📅 ${label}`}
+                                  />
                                   <Line
                                     type="monotone"
-                                    dataKey="engajamento"
+                                    dataKey="views"
                                     stroke="#7100E2"
                                     strokeWidth={2}
-                                    dot={false}
+                                    dot={{ r: 2.5, fill: '#7100E2', strokeWidth: 0 }}
+                                    activeDot={{ r: 4.5, fill: '#A855F7' }}
+                                    isAnimationActive={false}
                                   />
                                 </LineChart>
                               </ResponsiveContainer>
                             ) : (
-                              <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Sem histórico de posts</div>
+                              <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Sem histórico de views</div>
                             )}
                           </div>
                         </div>

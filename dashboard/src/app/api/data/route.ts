@@ -77,11 +77,12 @@ export async function GET() {
     const postViewsDiaMap: Record<string, number> = {};
     const curvaViewsDiaMap: Record<string, number[]> = {};
     const viewsSempreMap: Record<string, number> = {};
+    let limiteHoje = '';
 
     try {
       // Data de hoje no fuso oficial de Brasília (America/Sao_Paulo)
       const hojeStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
-      let limiteHoje = `${hojeStr} 00:00:00`;
+      limiteHoje = `${hojeStr} 00:00:00`;
 
       // Fallback protetor: se ainda não houver cargas registradas no dia atual (ex: primeiros minutos após a meia-noite),
       // mantém como base o dia da última carga registrada para evitar que os dados zerem na tela
@@ -376,6 +377,64 @@ export async function GET() {
       }
     }
 
+    // Histórico de visualizações diárias (Views ganhas por dia) por perfil
+    const viewsHistory: Record<string, { dia: string; views: number }[]> = {};
+    try {
+      const dailyViewsRows = await db.all(`
+        WITH daily_post_views AS (
+          SELECT 
+            LOWER(username) as uname,
+            date(data_carga) as dia,
+            post_id,
+            MAX(views) as max_views
+          FROM posts_metricas_snapshots
+          GROUP BY LOWER(username), date(data_carga), post_id
+        ),
+        with_prev AS (
+          SELECT 
+            uname,
+            dia,
+            post_id,
+            max_views,
+            LAG(max_views) OVER (PARTITION BY uname, post_id ORDER BY dia) as prev_views
+          FROM daily_post_views
+        )
+        SELECT 
+          uname,
+          dia,
+          SUM(CASE WHEN prev_views IS NOT NULL THEN MAX(0, max_views - prev_views) ELSE 0 END) as views_ganhas_dia
+        FROM with_prev
+        GROUP BY uname, dia
+        ORDER BY uname, dia ASC
+      `).catch(() => []);
+
+      for (const row of dailyViewsRows) {
+        const u = row.uname;
+        if (!viewsHistory[u]) viewsHistory[u] = [];
+        viewsHistory[u].push({
+          dia: row.dia,
+          views: Number(row.views_ganhas_dia) || 0
+        });
+      }
+
+      // Garante sincronia com viewsDiaMap do dia atual
+      const hojeDiaStr = limiteHoje.split(' ')[0];
+      for (const [u, vDia] of Object.entries(viewsDiaMap)) {
+        if (!vDia || vDia <= 0) continue;
+        if (!viewsHistory[u]) viewsHistory[u] = [];
+        const ultimoPonto = viewsHistory[u][viewsHistory[u].length - 1];
+        if (ultimoPonto && ultimoPonto.dia === hojeDiaStr) {
+          ultimoPonto.views = Math.max(ultimoPonto.views, Number(vDia) || 0);
+        } else {
+          viewsHistory[u].push({
+            dia: hojeDiaStr,
+            views: Number(vDia) || 0
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("Aviso ao calcular viewsHistory:", e);
+    }
 
     // Consulta comentários e mensagens pendentes por modelo
     const comentariosPendentes = await db.all(`
@@ -681,6 +740,7 @@ export async function GET() {
       profiles: profilesEnriquecidos,
       history: history || [],
       followersHistory: followersHistory,
+      viewsHistory: viewsHistory,
       posts: posts || []
     });
   } catch (error: any) {
@@ -691,6 +751,7 @@ export async function GET() {
       profiles: [],
       history: [],
       followersHistory: {},
+      viewsHistory: {},
       posts: []
     }, { status: 500 });
   }
