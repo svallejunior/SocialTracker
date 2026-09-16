@@ -49,6 +49,7 @@ export default function AgendarMobileModal({ perfil, onClose, onCreated }: Props
     file: File;
     imageUrl: string;
     fileName: string;
+    initialRatio?: '4:5' | '3:4' | '5:7' | '1:1' | '9:16';
   } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -70,7 +71,7 @@ export default function AgendarMobileModal({ perfil, onClose, onCreated }: Props
     if (tipo !== 'FEED') return false;
     const r = aspectRatios[idx];
     if (r === undefined) return false;
-    return r < 0.79 || r > 1.92;
+    return r < 0.70 || r > 1.92;
   };
 
   const handleApplyCrop = (croppedFile: File, newPreviewUrl: string) => {
@@ -87,7 +88,13 @@ export default function AgendarMobileModal({ perfil, onClose, onCreated }: Props
       copy[targetIdx] = newPreviewUrl;
       return copy;
     });
-    setAspectRatios(prev => ({ ...prev, [targetIdx]: 0.8 }));
+    const img = new Image();
+    img.onload = () => {
+      if (img.naturalWidth && img.naturalHeight) {
+        setAspectRatios(prev => ({ ...prev, [targetIdx]: img.naturalWidth / img.naturalHeight }));
+      }
+    };
+    img.src = newPreviewUrl;
     setCropModalData(null);
     setErro('');
   };
@@ -125,9 +132,10 @@ export default function AgendarMobileModal({ perfil, onClose, onCreated }: Props
           idx: invalidIdx,
           file: arquivos[invalidIdx],
           imageUrl: previews[invalidIdx],
-          fileName: arquivos[invalidIdx]?.name || 'foto.jpg'
+          fileName: arquivos[invalidIdx]?.name || 'foto.jpg',
+          initialRatio: '4:5'
         });
-        setErro('A foto possui proporção 9:16 incompatível com o Feed. Ajuste o corte para 4:5 antes de continuar.');
+        setErro('A foto possui proporção vertical muito estreita (9:16) incompatível com o Feed. Ajuste o corte para 4:5, 3:4 ou 5:7 antes de continuar.');
         return;
       }
     }
@@ -342,7 +350,8 @@ export default function AgendarMobileModal({ perfil, onClose, onCreated }: Props
                           idx,
                           file: arquivos[idx],
                           imageUrl: url,
-                          fileName: arquivos[idx]?.name || 'foto.jpg'
+                          fileName: arquivos[idx]?.name || 'foto.jpg',
+                          initialRatio: tipo === 'STORIES' ? '9:16' : '4:5'
                         })}
                         aria-label="Ajustar corte"
                         style={{
@@ -355,7 +364,7 @@ export default function AgendarMobileModal({ perfil, onClose, onCreated }: Props
                         }}
                       >
                         <Crop size={10} />
-                        {isInvalidoFeed(idx) ? 'Cortar 4:5' : 'Cortar'}
+                        {isInvalidoFeed(idx) ? 'Cortar' : (tipo === 'STORIES' ? 'Corte 9:16' : 'Cortar')}
                       </button>
                     </div>
                   ))}
@@ -493,6 +502,7 @@ export default function AgendarMobileModal({ perfil, onClose, onCreated }: Props
           file={cropModalData.file}
           imageUrl={cropModalData.imageUrl}
           fileName={cropModalData.fileName}
+          initialRatio={cropModalData.initialRatio || (tipo === 'STORIES' ? '9:16' : '4:5')}
           onClose={() => setCropModalData(null)}
           onApplyCrop={handleApplyCrop}
         />

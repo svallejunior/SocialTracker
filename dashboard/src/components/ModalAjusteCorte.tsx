@@ -2,24 +2,36 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Check, Crop, RotateCw, ZoomIn, ZoomOut, Move, ArrowUp, ArrowDown, AlignCenter } from 'lucide-react';
 
+export type AspectRatioType = '4:5' | '3:4' | '5:7' | '1:1' | '9:16';
+
 interface ModalAjusteCorteProps {
   isOpen: boolean;
   file?: File | null;
   imageUrl: string;
   fileName: string;
+  initialRatio?: AspectRatioType;
   onClose: () => void;
   onApplyCrop: (croppedFile: File, newPreviewUrl: string) => void;
 }
+
+const RATIO_CONFIG: Record<AspectRatioType, { label: string; ratio: number; tag: string; color: string; bg: string }> = {
+  '4:5': { label: '📱 4:5 (Feed)', ratio: 4 / 5, tag: '4x5', color: '#A855F7', bg: 'rgba(113, 0, 226, 0.25)' },
+  '3:4': { label: '📐 3:4 (Câmera)', ratio: 3 / 4, tag: '3x4', color: '#00F0FF', bg: 'rgba(0, 240, 255, 0.2)' },
+  '5:7': { label: '📏 5:7 (Alto)', ratio: 5 / 7, tag: '5x7', color: '#FBBF24', bg: 'rgba(245, 158, 11, 0.2)' },
+  '1:1': { label: '⏹️ 1:1 (Quadrado)', ratio: 1 / 1, tag: '1x1', color: '#38BDF8', bg: 'rgba(56, 189, 248, 0.2)' },
+  '9:16': { label: '📲 9:16 (Stories)', ratio: 9 / 16, tag: '9x16', color: '#F43F5E', bg: 'rgba(244, 63, 94, 0.2)' }
+};
 
 export default function ModalAjusteCorte({
   isOpen,
   file,
   imageUrl,
   fileName,
+  initialRatio = '4:5',
   onClose,
   onApplyCrop
 }: ModalAjusteCorteProps) {
-  const [aspectRatioMode, setAspectRatioMode] = useState<'4:5' | '1:1'>('4:5');
+  const [aspectRatioMode, setAspectRatioMode] = useState<AspectRatioType>(initialRatio);
   const [originalDimensions, setOriginalDimensions] = useState<{ width: number; height: number } | null>(null);
   const [offsetPercent, setOffsetPercent] = useState<number>(50); // 0 = topo/esquerda, 50 = centro, 100 = base/direita
   const [isProcessing, setIsProcessing] = useState(false);
@@ -28,11 +40,12 @@ export default function ModalAjusteCorte({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Alvo numérico de aspect ratio (largura / altura)
-  const targetRatio = aspectRatioMode === '4:5' ? 4 / 5 : 1 / 1;
+  const targetRatio = RATIO_CONFIG[aspectRatioMode]?.ratio || (4 / 5);
 
   useEffect(() => {
     if (!isOpen || !imageUrl) return;
 
+    setAspectRatioMode(initialRatio);
     setOffsetPercent(50); // Reset para o centro ao abrir
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -40,7 +53,7 @@ export default function ModalAjusteCorte({
       setOriginalDimensions({ width: img.naturalWidth, height: img.naturalHeight });
     };
     img.src = imageUrl;
-  }, [isOpen, imageUrl]);
+  }, [isOpen, imageUrl, initialRatio]);
 
   if (!isOpen || !imageUrl) return null;
 
@@ -127,7 +140,8 @@ export default function ModalAjusteCorte({
           }
 
           const cleanBaseName = fileName.replace(/\.[^/.]+$/, '');
-          const newName = `${cleanBaseName}_corte_${aspectRatioMode === '4:5' ? '4x5' : '1x1'}.jpg`;
+          const tag = RATIO_CONFIG[aspectRatioMode]?.tag || 'corte';
+          const newName = `${cleanBaseName}_corte_${tag}.jpg`;
           const croppedFile = new File([blob], newName, { type: 'image/jpeg', lastModified: Date.now() });
           const newPreviewUrl = URL.createObjectURL(blob);
 
@@ -212,10 +226,10 @@ export default function ModalAjusteCorte({
             </div>
             <div>
               <h3 style={{ margin: 0, fontSize: 13, fontWeight: 800, color: 'white' }}>
-                Ajustar Corte para Feed do Instagram
+                Ajustar Corte da Imagem
               </h3>
               <p style={{ margin: 0, fontSize: 11, color: '#8B949E' }}>
-                O Feed exige proporção entre 4:5 (vertical) e 1.91:1 (horizontal). Escolha a área de corte:
+                Escolha a proporção desejada e ajuste a área de enquadramento:
               </p>
             </div>
           </div>
@@ -245,52 +259,40 @@ export default function ModalAjusteCorte({
             overflowY: 'auto'
           }}
         >
-          {/* Seletor de Formato Alvo (4:5 vs 1:1) */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+          {/* Seletor de Formato Alvo (4:5, 3:4, 5:7, 1:1, 9:16) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <span style={{ fontSize: 11, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase' }}>
               Proporção Alvo:
             </span>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                type="button"
-                onClick={() => setAspectRatioMode('4:5')}
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: 6,
-                  border: aspectRatioMode === '4:5' ? '1px solid #7100E2' : '1px solid #30363D',
-                  background: aspectRatioMode === '4:5' ? 'rgba(113, 0, 226, 0.25)' : '#0D1117',
-                  color: aspectRatioMode === '4:5' ? '#A855F7' : '#8B949E',
-                  fontSize: 11,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  boxShadow: aspectRatioMode === '4:5' ? '0 0 10px rgba(113, 0, 226, 0.3)' : 'none'
-                }}
-              >
-                <span>📱 4:5 (Retrato Oficial)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setAspectRatioMode('1:1')}
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: 6,
-                  border: aspectRatioMode === '1:1' ? '1px solid #00F0FF' : '1px solid #30363D',
-                  background: aspectRatioMode === '1:1' ? 'rgba(0, 240, 255, 0.2)' : '#0D1117',
-                  color: aspectRatioMode === '1:1' ? '#00F0FF' : '#8B949E',
-                  fontSize: 11,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  boxShadow: aspectRatioMode === '1:1' ? '0 0 10px rgba(0, 240, 255, 0.25)' : 'none'
-                }}
-              >
-                <span>⏹️ 1:1 (Quadrado)</span>
-              </button>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {(Object.keys(RATIO_CONFIG) as AspectRatioType[]).map(r => {
+                const cfg = RATIO_CONFIG[r];
+                const active = aspectRatioMode === r;
+                return (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setAspectRatioMode(r)}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: 6,
+                      border: active ? `1px solid ${cfg.color}` : '1px solid #30363D',
+                      background: active ? cfg.bg : '#0D1117',
+                      color: active ? cfg.color : '#8B949E',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      boxShadow: active ? `0 0 10px ${cfg.bg}` : 'none',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <span>{cfg.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 

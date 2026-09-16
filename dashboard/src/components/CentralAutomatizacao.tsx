@@ -3862,6 +3862,7 @@ function FormularioAgendamento({
     file?: File | null;
     imageUrl: string;
     fileName: string;
+    initialRatio?: '4:5' | '3:4' | '5:7' | '1:1' | '9:16';
   } | null>(null);
 
   // Estados para hover de mídia (tamanho maior / zoom) e modal lightbox em tela cheia
@@ -3939,14 +3940,15 @@ function FormularioAgendamento({
     });
   }, [arquivos, metaAccountId]);
 
-  // Se o tipo for Feed, o Instagram exige proporção entre 4:5 (0.8) e 1.91:1 (1.91). Stories não tem restrição!
+  // Proporções aceitas no Feed: clássico 4:5 (0.80), 3:4 (0.75), 5:7 (0.714) e até quadrado/horizontal (1.91:1).
+  // Fotos de Stories (9:16 ~ 0.56) são muito verticais e causam erro da Meta se postadas no Feed.
   const isInvalidoParaFeed = (arq: AgendamentoArquivo, idx: number) => {
     if (tipoPostagem !== 'FEED') return false;
     if (isVideoFile(arq)) return false;
     const key = `${idx}_${arq.name || arq.savedName || idx}`;
     const ratio = aspectRatiosMap[key];
     if (ratio === undefined) return false;
-    return ratio < 0.79 || ratio > 1.92;
+    return ratio < 0.70 || ratio > 1.92;
   };
 
   const temFotoInvalidaFeed = tipoPostagem === 'FEED' && arquivos.some((arq, idx) => isInvalidoParaFeed(arq, idx));
@@ -3971,10 +3973,13 @@ function FormularioAgendamento({
       return copy;
     });
     const key = `${targetIdx}_${croppedFile.name}`;
-    setAspectRatiosMap(prev => ({
-      ...prev,
-      [key]: 0.8 // Atualiza para proporção válida
-    }));
+    const img = new Image();
+    img.onload = () => {
+      if (img.naturalWidth && img.naturalHeight) {
+        setAspectRatiosMap(prev => ({ ...prev, [key]: img.naturalWidth / img.naturalHeight }));
+      }
+    };
+    img.src = newPreviewUrl;
     setCropModalData(null);
   };
 
@@ -4160,14 +4165,15 @@ function FormularioAgendamento({
         const invalidoArq = arquivos[invalidIdx];
         const url = getMediaUrl(invalidoArq, metaAccountId);
         const desejaCortar = confirm(
-          `⚠️ A imagem "${invalidoArq.name || 'selecionada'}" possui proporção inválida para o Feed do Instagram (o Instagram rejeita fotos verticais 9:16 no Feed).\n\nDeseja abrir a ferramenta de corte agora para ajustá-la para 4:5?`
+          `⚠️ A imagem "${invalidoArq.name || 'selecionada'}" possui proporção vertical muito estreita (9:16) incompatível com o Feed do Instagram.\n\nDeseja abrir a ferramenta de corte agora para ajustá-la?`
         );
         if (desejaCortar) {
           setCropModalData({
             idx: invalidIdx,
             file: invalidoArq.file,
             imageUrl: url,
-            fileName: invalidoArq.name || 'foto.jpg'
+            fileName: invalidoArq.name || 'foto.jpg',
+            initialRatio: '4:5'
           });
         }
         return;
@@ -4440,7 +4446,7 @@ function FormularioAgendamento({
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <AlertCircle size={14} style={{ flexShrink: 0 }} />
-              <span>Foto vertical detectada (9:16). O Feed do Instagram exige proporção 4:5.</span>
+              <span>Foto vertical muito estreita detectada (9:16). O Feed aceita cortes 4:5, 3:4 ou 5:7.</span>
             </div>
             <button
               type="button"
@@ -4452,7 +4458,8 @@ function FormularioAgendamento({
                     idx: primeiroInvalidoIdx,
                     file: arq.file,
                     imageUrl: getMediaUrl(arq, metaAccountId),
-                    fileName: arq.name || 'foto.jpg'
+                    fileName: arq.name || 'foto.jpg',
+                    initialRatio: '4:5'
                   });
                 }
               }}
@@ -4472,7 +4479,7 @@ function FormularioAgendamento({
               }}
             >
               <Crop size={11} />
-              <span>Ajustar corte (4:5)</span>
+              <span>Ajustar corte</span>
             </button>
           </div>
         )}
@@ -4578,15 +4585,22 @@ function FormularioAgendamento({
                           idx,
                           file: arq.file,
                           imageUrl: url,
-                          fileName: arq.name || 'foto.jpg'
+                          fileName: arq.name || 'foto.jpg',
+                          initialRatio: tipoPostagem === 'STORIES' ? '9:16' : '4:5'
                         })}
-                        title={isInvalidoParaFeed(arq, idx) ? "Proporção incompatível com o Feed! Clique para cortar para 4:5" : "Ajustar corte (4:5 / 1:1)"}
+                        title={
+                          isInvalidoParaFeed(arq, idx)
+                            ? "Proporção incompatível com o Feed! Clique para cortar"
+                            : tipoPostagem === 'STORIES'
+                            ? "Ajustar corte opcional para Stories (9:16)"
+                            : "Ajustar corte da imagem (4:5, 3:4, 5:7, 1:1)"
+                        }
                         style={{
                           background: isInvalidoParaFeed(arq, idx) ? 'rgba(245, 158, 11, 0.2)' : 'none',
                           border: isInvalidoParaFeed(arq, idx) ? '1px solid #F59E0B' : 'none',
                           color: isInvalidoParaFeed(arq, idx) ? '#FBBF24' : '#8B949E',
                           cursor: 'pointer',
-                          padding: isInvalidoParaFeed(arq, idx) ? '2px 6px' : 3,
+                          padding: isInvalidoParaFeed(arq, idx) ? '2px 6px' : (tipoPostagem === 'STORIES' ? '2px 6px' : 3),
                           display: 'flex',
                           alignItems: 'center',
                           gap: 3,
@@ -4602,7 +4616,8 @@ function FormularioAgendamento({
                         }}
                       >
                         <Crop size={12} />
-                        {isInvalidoParaFeed(arq, idx) && <span>Cortar 4:5</span>}
+                        {isInvalidoParaFeed(arq, idx) && <span>Cortar Foto</span>}
+                        {!isInvalidoParaFeed(arq, idx) && tipoPostagem === 'STORIES' && <span style={{ fontSize: 9 }}>Corte 9:16</span>}
                       </button>
                     )}
 
@@ -5490,13 +5505,14 @@ function FormularioAgendamento({
         </div>
       )}
 
-      {/* MODAL INTERATIVO DE CORTE DE ASPECT RATIO (4:5 / 1:1) */}
+      {/* MODAL INTERATIVO DE CORTE DE ASPECT RATIO */}
       {cropModalData && (
         <ModalAjusteCorte
           isOpen={!!cropModalData}
           file={cropModalData.file}
           imageUrl={cropModalData.imageUrl}
           fileName={cropModalData.fileName}
+          initialRatio={cropModalData.initialRatio || (tipoPostagem === 'STORIES' ? '9:16' : '4:5')}
           onClose={() => setCropModalData(null)}
           onApplyCrop={handleApplyCrop}
         />
