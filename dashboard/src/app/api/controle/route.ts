@@ -156,7 +156,7 @@ export async function GET() {
             sp.views as v_p,
             p.data_postagem,
             CASE 
-              WHEN sp.views IS NOT NULL AND sp.views > 0 THEN MAX(0, su.views - sp.views)
+              WHEN sp.views IS NOT NULL THEN MAX(0, su.views - sp.views)
               WHEN p.data_postagem >= ? THEN su.views
               ELSE 0 
             END as delta_real
@@ -169,6 +169,26 @@ export async function GET() {
         for (const row of postDiffRows) {
           const delta = Math.max(0, Number(row.delta_real) || 0);
           viewsDeltaMap[row.uname] = (viewsDeltaMap[row.uname] || 0) + delta;
+        }
+      }
+
+      // Mapeia posts publicados hoje e suas métricas efetivas
+      const postsControle = await db.all(`
+        SELECT post_id, LOWER(username) as uname, data_postagem, views, reach, likes, comentarios
+        FROM posts_historico
+        WHERE (is_deleted IS NULL OR is_deleted = 0)
+      `).catch(() => []);
+
+      const postDateMapControle: Record<string, string> = {};
+      const postViewsEfetivasControle: Record<string, number> = {};
+      for (const p of postsControle) {
+        if (p.post_id) {
+          postDateMapControle[p.post_id] = p.data_postagem || '';
+          postViewsEfetivasControle[p.post_id] = Math.max(
+            Number(p.views) || 0,
+            Number(p.reach) || 0,
+            (Number(p.likes) || 0) + (Number(p.comentarios) || 0)
+          );
         }
       }
 
@@ -198,13 +218,40 @@ export async function GET() {
         }
       }
 
+      const countedPostsControle = new Set<string>();
+
       for (const s of snapHoje) {
         const u = s.uname;
-        const maxV = Number(s.max_views) || 0;
-        const baseV = antesMap[s.post_id] !== undefined ? antesMap[s.post_id] : (Number(s.min_views) || 0);
-        const delta = maxV - baseV;
+        const pid = s.post_id;
+        const pDate = postDateMapControle[pid] || '';
+        const isPostHoje = pDate >= limiteHoje;
+        const maxV = Math.max(Number(s.max_views) || 0, postViewsEfetivasControle[pid] || 0);
+
+        let baseV = 0;
+        if (isPostHoje) {
+          baseV = 0;
+        } else if (antesMap[pid] !== undefined) {
+          baseV = antesMap[pid];
+        } else {
+          baseV = Number(s.min_views) || 0;
+        }
+
+        const delta = Math.max(0, maxV - baseV);
         if (delta > 0) {
           viewsDiaMap[u] = (viewsDiaMap[u] || 0) + delta;
+          countedPostsControle.add(pid);
+        }
+      }
+
+      for (const p of postsControle) {
+        const pid = p.post_id;
+        const pDate = p.data_postagem || '';
+        if (pDate >= limiteHoje && !countedPostsControle.has(pid)) {
+          const vEfetivo = postViewsEfetivasControle[pid] || 0;
+          if (vEfetivo > 0) {
+            viewsDiaMap[p.uname] = (viewsDiaMap[p.uname] || 0) + vEfetivo;
+            countedPostsControle.add(pid);
+          }
         }
       }
 

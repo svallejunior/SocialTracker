@@ -59,36 +59,81 @@ export async function GET(req: NextRequest) {
     `);
 
     // 4b. Calcular Views Ganhas no Dia via posts_metricas_snapshots
+    const hojeStrMobile = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+    const limiteHojeMobile = `${hojeStrMobile} 00:00:00`;
+
+    const postDateMapMobile: Record<string, string> = {};
+    const postViewsEfetivasMobile: Record<string, number> = {};
+    for (const p of rawPosts) {
+      if (p.post_id) {
+        postDateMapMobile[p.post_id] = p.data_postagem || '';
+        postViewsEfetivasMobile[p.post_id] = Math.max(
+          Number(p.views) || 0,
+          Number(p.reach) || 0,
+          (Number(p.likes) || 0) + (Number(p.comentarios) || 0)
+        );
+      }
+    }
+
     // Máximo de views hoje por post
     const snapHoje = await db.all(`
       SELECT username, post_id, MAX(views) as max_hoje, MIN(views) as min_hoje
       FROM posts_metricas_snapshots
-      WHERE date(data_carga) = date('now', 'localtime')
+      WHERE data_carga >= ?
       GROUP BY username, post_id
-    `).catch(() => [] as any[]);
+    `, [limiteHojeMobile]).catch(() => [] as any[]);
 
     // Última views antes de hoje por post (base de comparação)
     const snapAntes = await db.all(`
-      SELECT post_id, MAX(views) as views_antes
+      SELECT post_id, views as views_antes
       FROM posts_metricas_snapshots
-      WHERE date(data_carga) < date('now', 'localtime')
-      GROUP BY post_id
-    `).catch(() => [] as any[]);
+      WHERE data_carga < ?
+      ORDER BY data_carga DESC
+    `, [limiteHojeMobile]).catch(() => [] as any[]);
 
     const viewsAntesByPost: Record<string, number> = {};
     for (const s of snapAntes) {
-      viewsAntesByPost[s.post_id] = Number(s.views_antes) || 0;
+      if (viewsAntesByPost[s.post_id] === undefined) {
+        viewsAntesByPost[s.post_id] = Number(s.views_antes) || 0;
+      }
     }
 
+    const countedPostsMobile = new Set<string>();
     const viewsDiaByUser: Record<string, number> = {};
+
     for (const s of snapHoje) {
       const u = (s.username || '').toLowerCase();
-      const maxHoje = Number(s.max_hoje) || 0;
-      const minHoje = Number(s.min_hoje) || 0;
-      const antes = viewsAntesByPost[s.post_id] !== undefined ? viewsAntesByPost[s.post_id] : minHoje;
-      const delta = maxHoje - antes;
+      const pid = s.post_id;
+      const pDate = postDateMapMobile[pid] || '';
+      const isPostHoje = pDate >= limiteHojeMobile;
+      const maxHoje = Math.max(Number(s.max_hoje) || 0, postViewsEfetivasMobile[pid] || 0);
+
+      let antes = 0;
+      if (isPostHoje) {
+        antes = 0;
+      } else if (viewsAntesByPost[pid] !== undefined) {
+        antes = viewsAntesByPost[pid];
+      } else {
+        antes = Number(s.min_hoje) || 0;
+      }
+
+      const delta = Math.max(0, maxHoje - antes);
       if (delta > 0) {
         viewsDiaByUser[u] = (viewsDiaByUser[u] || 0) + delta;
+        countedPostsMobile.add(pid);
+      }
+    }
+
+    for (const p of rawPosts) {
+      const pid = p.post_id;
+      const pDate = p.data_postagem || '';
+      if (pDate >= limiteHojeMobile && !countedPostsMobile.has(pid)) {
+        const vEfetivo = postViewsEfetivasMobile[pid] || 0;
+        if (vEfetivo > 0) {
+          const u = (p.username || '').toLowerCase();
+          viewsDiaByUser[u] = (viewsDiaByUser[u] || 0) + vEfetivo;
+          countedPostsMobile.add(pid);
+        }
       }
     }
 

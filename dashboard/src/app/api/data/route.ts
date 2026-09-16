@@ -79,6 +79,19 @@ export async function GET() {
     const viewsSempreMap: Record<string, number> = {};
     let limiteHoje = '';
 
+    const postDateMap: Record<string, string> = {};
+    const postViewsEfetivasMap: Record<string, number> = {};
+    for (const p of rawPosts) {
+      if (p.post_id) {
+        postDateMap[p.post_id] = p.data_postagem || '';
+        postViewsEfetivasMap[p.post_id] = Math.max(
+          Number(p.views) || 0,
+          Number(p.reach) || 0,
+          (Number(p.likes) || 0) + (Number(p.comentarios) || 0)
+        );
+      }
+    }
+
     try {
       // Data de hoje no fuso oficial de Brasília (America/Sao_Paulo)
       const hojeStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
@@ -132,7 +145,6 @@ export async function GET() {
         `, distinctCargas).catch(() => []);
 
         const snapViewsMap: Record<string, Record<string, Record<string, number>>> = {};
-        const postDateMap: Record<string, string> = {};
 
         for (const s of recentSnaps) {
           const u = s.uname;
@@ -140,7 +152,6 @@ export async function GET() {
           if (!snapViewsMap[u]) snapViewsMap[u] = {};
           if (!snapViewsMap[u][pid]) snapViewsMap[u][pid] = {};
           snapViewsMap[u][pid][s.data_carga] = Number(s.views) || 0;
-          postDateMap[pid] = s.data_postagem || '';
         }
 
         for (const [u, pair] of Object.entries(userCargasPair)) {
@@ -157,7 +168,7 @@ export async function GET() {
             const postDate = postDateMap[pid] || '';
 
             let deltaReal = 0;
-            if (vP !== undefined && vP > 0) {
+            if (vP !== undefined) {
               deltaReal = Math.max(0, vU - vP);
             } else if (postDate >= limiteHoje) {
               deltaReal = vU;
@@ -198,12 +209,39 @@ export async function GET() {
 
       for (const s of snapHoje) {
         const u = s.uname;
-        const maxV = Number(s.max_views) || 0;
-        const baseV = antesMap[s.post_id] !== undefined ? antesMap[s.post_id] : (Number(s.min_views) || 0);
-        const delta = maxV - baseV;
+        const pid = s.post_id;
+        const pDate = postDateMap[pid] || '';
+        const isPostHoje = pDate >= limiteHoje;
+        const maxV = Math.max(Number(s.max_views) || 0, postViewsEfetivasMap[pid] || 0);
+
+        let baseV = 0;
+        if (isPostHoje) {
+          // Publicações feitas hoje não existiam antes de hoje: toda visualização de hoje é ganho de hoje
+          baseV = 0;
+        } else if (antesMap[pid] !== undefined) {
+          baseV = antesMap[pid];
+        } else {
+          baseV = Number(s.min_views) || 0;
+        }
+
+        const delta = Math.max(0, maxV - baseV);
         if (delta > 0) {
           viewsDiaMap[u] = (viewsDiaMap[u] || 0) + delta;
-          postViewsDiaMap[s.post_id] = delta;
+          postViewsDiaMap[pid] = delta;
+        }
+      }
+
+      // Garante que posts publicados hoje que ainda não tenham snapshots registrados hoje também pontuem
+      for (const p of rawPosts) {
+        const pid = p.post_id;
+        const pDate = p.data_postagem || '';
+        if (pDate >= limiteHoje && !postViewsDiaMap[pid]) {
+          const vEfetivo = postViewsEfetivasMap[pid] || 0;
+          if (vEfetivo > 0) {
+            const u = (p.username || '').toLowerCase();
+            postViewsDiaMap[pid] = vEfetivo;
+            viewsDiaMap[u] = (viewsDiaMap[u] || 0) + vEfetivo;
+          }
         }
       }
 
@@ -234,13 +272,21 @@ export async function GET() {
           let viewsGanhasDc = 0;
           for (const [pid, v] of Object.entries(postsDc)) {
             if (localBaseMap[pid] === undefined) {
-              localBaseMap[pid] = v;
+              const pDate = postDateMap[pid] || '';
+              const isPostHoje = pDate >= limiteHoje;
+              localBaseMap[pid] = isPostHoje ? 0 : v;
             }
             const diff = Math.max(0, v - localBaseMap[pid]);
             viewsGanhasDc += diff;
           }
           curva.push(viewsGanhasDc);
         }
+
+        // Garante que a curva reflita no último ponto o acumulado consolidado do dia
+        if (viewsDiaMap[u] && curva.length > 1 && viewsDiaMap[u] > curva[curva.length - 1]) {
+          curva[curva.length - 1] = viewsDiaMap[u];
+        }
+
         curvaViewsDiaMap[u] = curva;
       }
     } catch (e) {
