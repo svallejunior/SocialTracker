@@ -49,7 +49,7 @@ export default function AgendarMobileModal({ perfil, onClose, onCreated }: Props
     file: File;
     imageUrl: string;
     fileName: string;
-    initialRatio?: '4:5' | '3:4' | '5:7' | '1:1' | '9:16';
+    initialRatio?: '4:5' | '3:4' | '5:7' | '7:10' | '1:1' | '9:16';
   } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -71,7 +71,7 @@ export default function AgendarMobileModal({ perfil, onClose, onCreated }: Props
     if (tipo !== 'FEED') return false;
     const r = aspectRatios[idx];
     if (r === undefined) return false;
-    return r < 0.70 || r > 1.92;
+    return r < 0.69 || r > 1.92;
   };
 
   const handleApplyCrop = (croppedFile: File, newPreviewUrl: string) => {

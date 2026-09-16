@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Check, Crop, RotateCw, ZoomIn, ZoomOut, Move, ArrowUp, ArrowDown, AlignCenter } from 'lucide-react';
 
-export type AspectRatioType = '4:5' | '3:4' | '5:7' | '1:1' | '9:16';
+export type AspectRatioType = '4:5' | '3:4' | '5:7' | '7:10' | '1:1' | '9:16';
 
 interface ModalAjusteCorteProps {
   isOpen: boolean;
@@ -18,6 +18,7 @@ const RATIO_CONFIG: Record<AspectRatioType, { label: string; ratio: number; tag:
   '4:5': { label: '📱 4:5 (Feed)', ratio: 4 / 5, tag: '4x5', color: '#A855F7', bg: 'rgba(113, 0, 226, 0.25)' },
   '3:4': { label: '📐 3:4 (Câmera)', ratio: 3 / 4, tag: '3x4', color: '#00F0FF', bg: 'rgba(0, 240, 255, 0.2)' },
   '5:7': { label: '📏 5:7 (Alto)', ratio: 5 / 7, tag: '5x7', color: '#FBBF24', bg: 'rgba(245, 158, 11, 0.2)' },
+  '7:10': { label: '🚀 7:10 (0.70)', ratio: 7 / 10, tag: '7x10', color: '#10B981', bg: 'rgba(16, 185, 129, 0.2)' },
   '1:1': { label: '⏹️ 1:1 (Quadrado)', ratio: 1 / 1, tag: '1x1', color: '#38BDF8', bg: 'rgba(56, 189, 248, 0.2)' },
   '9:16': { label: '📲 9:16 (Stories)', ratio: 9 / 16, tag: '9x16', color: '#F43F5E', bg: 'rgba(244, 63, 94, 0.2)' }
 };

@@ -1369,7 +1369,7 @@ def publicar_item_meta(agendamento, config, dry_run=False):
                             if tipo_postagem == "FEED":
                                 w, h = rgb.size
                                 r = w / h if h > 0 else 1.0
-                                if r < 0.70:
+                                if r < 0.69:
                                     novo_h = int(w / 0.8)
                                     if novo_h < h:
                                         top = (h - novo_h) // 2

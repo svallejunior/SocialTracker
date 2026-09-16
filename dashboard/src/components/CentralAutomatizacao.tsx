@@ -3862,7 +3862,7 @@ function FormularioAgendamento({
     file?: File | null;
     imageUrl: string;
     fileName: string;
-    initialRatio?: '4:5' | '3:4' | '5:7' | '1:1' | '9:16';
+    initialRatio?: '4:5' | '3:4' | '5:7' | '7:10' | '1:1' | '9:16';
   } | null>(null);
 
   // Estados para hover de mídia (tamanho maior / zoom) e modal lightbox em tela cheia
@@ -3940,7 +3940,7 @@ function FormularioAgendamento({
     });
   }, [arquivos, metaAccountId]);
 
-  // Proporções aceitas no Feed: clássico 4:5 (0.80), 3:4 (0.75), 5:7 (0.714) e até quadrado/horizontal (1.91:1).
+  // Proporções aceitas no Feed: clássico 4:5 (0.80), 3:4 (0.75), 5:7 (0.714), 7:10 (0.70) e até quadrado/horizontal (1.91:1).
   // Fotos de Stories (9:16 ~ 0.56) são muito verticais e causam erro da Meta se postadas no Feed.
   const isInvalidoParaFeed = (arq: AgendamentoArquivo, idx: number) => {
     if (tipoPostagem !== 'FEED') return false;
@@ -3948,7 +3948,7 @@ function FormularioAgendamento({
     const key = `${idx}_${arq.name || arq.savedName || idx}`;
     const ratio = aspectRatiosMap[key];
     if (ratio === undefined) return false;
-    return ratio < 0.70 || ratio > 1.92;
+    return ratio < 0.69 || ratio > 1.92;
   };
 
   const temFotoInvalidaFeed = tipoPostagem === 'FEED' && arquivos.some((arq, idx) => isInvalidoParaFeed(arq, idx));

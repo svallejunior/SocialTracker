@@ -131,11 +131,11 @@ def gerar_nome_arquivo_celular(perfil=None, extensao=".jpg"):
         return f"IMG_{data_compacta}_{hora_compacta}_{rand4}{extensao}"
 
 
-def ajustar_aspect_ratio_feed(img, target_min=0.70, target_max=1.91, fallback_ratio=0.80):
+def ajustar_aspect_ratio_feed(img, target_min=0.69, target_max=1.91, fallback_ratio=0.80):
     """
     Verifica e ajusta defensivamente a proporção da imagem para o Feed do Instagram:
-    - O Feed aceita proporções até ~5:7 (0.714) e 3:4 (0.75), além do clássico 4:5 (0.80).
-    - Se a imagem for muito alta/estreita (ex: 9:16 ~ 0.56 < 0.70), corta defensivamente no centro para 4:5 (0.80).
+    - O Feed aceita proporções até ~7:10 (0.70), 5:7 (0.714) e 3:4 (0.75), além do clássico 4:5 (0.80).
+    - Se a imagem for muito alta/estreita (ex: 9:16 ~ 0.56 < 0.69), corta defensivamente no centro para 4:5 (0.80).
     - Se for muito panorâmica (ex: > 1.91), corta a largura no centro para 1.91:1.
     Retorna: (img_ajustada, foi_cortada)
     """
