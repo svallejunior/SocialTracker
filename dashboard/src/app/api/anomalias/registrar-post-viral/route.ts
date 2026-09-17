@@ -10,8 +10,11 @@ export const revalidate = 0;
 
 /** Extrai o shortcode de uma URL do Instagram. */
 function extractShortcode(url: string): string | null {
-  const match = url.match(/instagram\.com\/(?:p|reel|tv)\/([A-Za-z0-9_-]+)/);
-  return match ? match[1] : null;
+  const match = url.match(/(?:p|reel|tv)\/([A-Za-z0-9_-]+)/);
+  if (match) return match[1];
+  const clean = url.split('?')[0].split('#')[0].replace(/\/+$/, '');
+  const lastPart = clean.split('/').pop();
+  return lastPart && /^[A-Za-z0-9_-]+$/.test(lastPart) ? lastPart : null;
 }
 
 /** Converte shortcode base64url → ID numérico. */
@@ -88,8 +91,14 @@ export async function POST(request: NextRequest) {
               return reject(error);
             }
             try {
-              const res = JSON.parse(stdout);
-              resolve(res);
+              const start = stdout.indexOf('{');
+              const end = stdout.lastIndexOf('}');
+              if (start !== -1 && end !== -1 && end > start) {
+                const res = JSON.parse(stdout.substring(start, end + 1));
+                resolve(res);
+                return;
+              }
+              reject(new Error('Nenhum JSON retornado pelo script'));
             } catch (err) {
               reject(err);
             }
@@ -180,7 +189,7 @@ export async function POST(request: NextRequest) {
         score_tracao: viewsNum + (likesNum * 3) + (comNum * 5),
         horas_antes_coleta: horasAntesColeta,
         ja_existia: true,
-        data_estimada: false
+        data_estimada: likesNum === 0 && viewsNum === 0
       };
       return NextResponse.json({ success: true, post, shortcode, ja_existia: true });
     }

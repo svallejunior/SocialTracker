@@ -85,6 +85,21 @@ def format_datetime(dt):
     return dt.strftime('%Y-%m-%d %H:%M:%S')
 
 
+import re
+
+def extrair_shortcode(url_or_code):
+    """Extrai o shortcode de uma URL do Instagram (/p/CODE/, /reel/CODE/, /tv/CODE/) ou retorna o próprio código."""
+    if not url_or_code:
+        return ""
+    val = str(url_or_code).strip()
+    m = re.search(r'/(?:p|reel|tv)/([A-Za-z0-9_-]+)', val)
+    if m:
+        return m.group(1)
+    clean = val.split('?')[0].split('#')[0].strip('/')
+    last_segment = clean.split('/')[-1]
+    return last_segment if last_segment else val
+
+
 def id_to_shortcode(media_id):
     try:
         clean_id = int(str(media_id).split('_')[0])
@@ -187,6 +202,8 @@ def salvar_posts_no_banco(username, posts_data):
                     media_url, thumbnail_url, permalink
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(post_id) DO UPDATE SET
+                    data_postagem = excluded.data_postagem,
+                    formato = excluded.formato,
                     likes = excluded.likes,
                     comentarios = excluded.comentarios,
                     views = excluded.views,
@@ -236,10 +253,15 @@ def buscar_reels_apify(username, limit=5):
 
         run = client.actor("apify/instagram-reel-scraper").call(
             run_input=run_input,
-            timeout_secs=60
+            timeout_secs=60,
+            logger=None
         )
 
-        dataset_items = list(client.dataset(run.default_dataset_id).iterate_items())
+        dataset_id = run.get("defaultDatasetId") if isinstance(run, dict) else getattr(run, "default_dataset_id", None)
+        if not dataset_id:
+            return []
+
+        dataset_items = list(client.dataset(dataset_id).iterate_items())
         reels_parsed = []
         for item in dataset_items:
             if item.get("error") or not (item.get("id") or item.get("shortCode") or item.get("code") or item.get("url")):
@@ -260,11 +282,22 @@ def buscar_post_especifico_apify(post_url, default_username=""):
     try:
         from apify_client import ApifyClient
         client = ApifyClient(APIFY_TOKEN)
+
+        clean_url = post_url.strip()
+        sc = extrair_shortcode(clean_url)
+        if sc:
+            clean_url = f"https://www.instagram.com/p/{sc}/"
+
         run = client.actor("apify/instagram-scraper").call(
-            run_input={"directUrls": [post_url.strip()]},
-            timeout_secs=60
+            run_input={"directUrls": [clean_url]},
+            timeout_secs=60,
+            logger=None
         )
-        items = list(client.dataset(run["defaultDatasetId"]).iterate_items())
+        dataset_id = run.get("defaultDatasetId") if isinstance(run, dict) else getattr(run, "default_dataset_id", None)
+        if not dataset_id:
+            return None
+
+        items = list(client.dataset(dataset_id).iterate_items())
         if items:
             raw = items[0]
             owner = raw.get("ownerUsername") or default_username
@@ -298,21 +331,24 @@ def buscar_posts_apify(username, limit=5):
 
         run = client.actor("apify/instagram-scraper").call(
             run_input=run_input,
-            timeout_secs=60
+            timeout_secs=60,
+            logger=None
         )
 
-        dataset_items = list(client.dataset(run.default_dataset_id).iterate_items())
-        for item in dataset_items:
-            latest_posts = item.get("latestPosts") or []
-            if latest_posts:
-                for p in latest_posts:
-                    parsed = extrair_dados_post(p, username_clean)
+        dataset_id = run.get("defaultDatasetId") if isinstance(run, dict) else getattr(run, "default_dataset_id", None)
+        if dataset_id:
+            dataset_items = list(client.dataset(dataset_id).iterate_items())
+            for item in dataset_items:
+                latest_posts = item.get("latestPosts") or []
+                if latest_posts:
+                    for p in latest_posts:
+                        parsed = extrair_dados_post(p, username_clean)
+                        if parsed:
+                            posts_total.append(parsed)
+                else:
+                    parsed = extrair_dados_post(item, username_clean)
                     if parsed:
                         posts_total.append(parsed)
-            else:
-                parsed = extrair_dados_post(item, username_clean)
-                if parsed:
-                    posts_total.append(parsed)
     except Exception:
         pass
 
@@ -403,11 +439,11 @@ def processar_busca(username, data_coleta_str, force_api=False, post_url=None):
 
     # Se um post_url específico foi informado, busca diretamente via Apify se force_api ou se não existir com métricas no banco
     if post_url:
-        sc_target = post_url.rstrip('/').split('/')[-1]
+        sc_target = extrair_shortcode(post_url)
         local_posts = get_local_posts(username_clean, data_coleta_dt)
-        post_existente = next((p for p in local_posts if p.get("shortcode") == sc_target or (p.get("url") and sc_target in p["url"])), None)
+        post_existente = next((p for p in local_posts if (p.get("shortcode") and p["shortcode"] == sc_target) or (p.get("url") and sc_target and sc_target in p["url"])), None)
         
-        precisa_buscar_api = force_api or not post_existente or (post_existente["views"] == 0 and post_existente["likes"] == 0)
+        precisa_buscar_api = force_api or not post_existente or (post_existente.get("views", 0) == 0 and post_existente.get("likes", 0) == 0)
         
         if precisa_buscar_api:
             post_especifico = buscar_post_especifico_apify(post_url, username_clean)
@@ -456,10 +492,12 @@ def processar_busca(username, data_coleta_str, force_api=False, post_url=None):
 
     # Se uma URL específica foi solicitada, prioriza esse post como top_post
     if post_url:
-        sc_target = post_url.rstrip('/').split('/')[-1]
+        sc_target = extrair_shortcode(post_url)
         for p in local_posts:
-            if (p.get("shortcode") and p["shortcode"] == sc_target) or (p.get("url") and sc_target in p["url"]):
+            if (p.get("shortcode") and p["shortcode"] == sc_target) or (p.get("url") and sc_target and sc_target in p["url"]):
                 top_post = p
+                if not any(w["post_id"] == p["post_id"] for w in posts_na_janela):
+                    posts_na_janela.insert(0, p)
                 break
 
     # Posts recentes fora da janela, ordenados por tração

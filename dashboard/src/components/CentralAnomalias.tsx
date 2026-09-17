@@ -167,8 +167,12 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
         setViralData((prev: any) => ({
           ...prev,
           top_post: json.post,
+          posts_na_janela: [
+            json.post,
+            ...(prev?.posts_na_janela || []).filter((p: any) => p.post_id !== json.post.post_id && p.shortcode !== json.post.shortcode)
+          ],
           sugestao_viral: null,
-          total_posts_janela: 1,
+          total_posts_janela: Math.max(1, prev?.total_posts_janela || 1),
           registrado_manualmente: true,
           ja_existia: json.ja_existia
         }));
@@ -1381,14 +1385,14 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                           <div style={{ background: '#0D1117', padding: '10px 8px', borderRadius: 8, textAlign: 'center', border: '1px solid #21262D' }}>
                             <span style={{ fontSize: 10, color: '#8B949E', display: 'block', fontWeight: 600 }}>❤️ CURTIDAS</span>
                             <strong style={{ fontSize: 15, color: 'white', marginTop: 4, display: 'block' }}>
-                              {activePost.likes.toLocaleString('pt-BR')}
+                              {(activePost.likes ?? 0).toLocaleString('pt-BR')}
                             </strong>
                           </div>
 
                           <div style={{ background: '#0D1117', padding: '10px 8px', borderRadius: 8, textAlign: 'center', border: '1px solid #21262D' }}>
                             <span style={{ fontSize: 10, color: '#8B949E', display: 'block', fontWeight: 600 }}>💬 COMENTÁRIOS</span>
                             <strong style={{ fontSize: 15, color: 'white', marginTop: 4, display: 'block' }}>
-                              {activePost.comentarios.toLocaleString('pt-BR')}
+                              {(activePost.comentarios ?? 0).toLocaleString('pt-BR')}
                             </strong>
                           </div>
 
@@ -1402,7 +1406,7 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                           <div style={{ background: '#0D1117', padding: '10px 8px', borderRadius: 8, textAlign: 'center', border: '1px solid #21262D' }}>
                             <span style={{ fontSize: 10, color: '#8B949E', display: 'block', fontWeight: 600 }}>⚡ SCORE TRAÇÃO</span>
                             <strong style={{ fontSize: 15, color: '#39FF14', marginTop: 4, display: 'block' }}>
-                              {activePost.score_tracao.toLocaleString('pt-BR')}
+                              {(activePost.score_tracao ?? 0).toLocaleString('pt-BR')}
                             </strong>
                           </div>
                         </div>

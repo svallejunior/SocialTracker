@@ -54,21 +54,31 @@ export async function POST(request: NextRequest) {
           if (error) {
             console.error(`[API Buscar Viral] Erro:`, error.message, stderr);
             try {
-              const errJson = JSON.parse(stdout);
-              resolve(NextResponse.json(errJson, { status: 500 }));
-            } catch {
-              resolve(NextResponse.json({
-                success: false,
-                error: error.message,
-                stderr
-              }, { status: 500 }));
-            }
+              const start = stdout.indexOf('{');
+              const end = stdout.lastIndexOf('}');
+              if (start !== -1 && end !== -1 && end > start) {
+                const errJson = JSON.parse(stdout.substring(start, end + 1));
+                resolve(NextResponse.json(errJson, { status: 500 }));
+                return;
+              }
+            } catch {}
+            resolve(NextResponse.json({
+              success: false,
+              error: error.message,
+              stderr
+            }, { status: 500 }));
             return;
           }
 
           try {
-            const resultJson = JSON.parse(stdout);
-            resolve(NextResponse.json(resultJson));
+            const start = stdout.indexOf('{');
+            const end = stdout.lastIndexOf('}');
+            if (start !== -1 && end !== -1 && end > start) {
+              const resultJson = JSON.parse(stdout.substring(start, end + 1));
+              resolve(NextResponse.json(resultJson));
+              return;
+            }
+            throw new Error('Nenhum JSON retornado pelo script');
           } catch (parseErr: any) {
             console.error(`[API Buscar Viral] Falha ao fazer parse do JSON:`, stdout);
             resolve(NextResponse.json({
