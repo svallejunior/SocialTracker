@@ -239,6 +239,32 @@ def salvar_posts_no_banco(username, posts_data):
     return salvos
 
 
+def chamar_actor_apify(client, actor_id, run_input):
+    """Executa um actor no Apify de forma compatível entre diferentes versões da biblioteca."""
+    actor = client.actor(actor_id)
+    try:
+        return actor.call(run_input=run_input, logger=None)
+    except TypeError:
+        try:
+            return actor.call(run_input=run_input)
+        except Exception as e:
+            print(f"Erro ao invocar actor {actor_id}: {e}", file=sys.stderr)
+            return None
+
+
+def obter_dataset_id_apify(run):
+    """Recupera o defaultDatasetId com segurança independente do formato retornado."""
+    if not run:
+        return None
+    if isinstance(run, dict):
+        return run.get("defaultDatasetId") or run.get("default_dataset_id")
+    return (
+        getattr(run, "default_dataset_id", None)
+        or getattr(run, "defaultDatasetId", None)
+        or (getattr(run, "data", {}) or {}).get("defaultDatasetId")
+    )
+
+
 def buscar_reels_apify(username, limit=5):
     """Executa scraping na aba exclusiva de Reels do perfil (/reels/)."""
     try:
@@ -251,13 +277,8 @@ def buscar_reels_apify(username, limit=5):
             "resultsLimit": limit
         }
 
-        run = client.actor("apify/instagram-reel-scraper").call(
-            run_input=run_input,
-            timeout_secs=60,
-            logger=None
-        )
-
-        dataset_id = run.get("defaultDatasetId") if isinstance(run, dict) else getattr(run, "default_dataset_id", None)
+        run = chamar_actor_apify(client, "apify/instagram-reel-scraper", run_input)
+        dataset_id = obter_dataset_id_apify(run)
         if not dataset_id:
             return []
 
@@ -288,12 +309,8 @@ def buscar_post_especifico_apify(post_url, default_username=""):
         if sc:
             clean_url = f"https://www.instagram.com/p/{sc}/"
 
-        run = client.actor("apify/instagram-scraper").call(
-            run_input={"directUrls": [clean_url]},
-            timeout_secs=60,
-            logger=None
-        )
-        dataset_id = run.get("defaultDatasetId") if isinstance(run, dict) else getattr(run, "default_dataset_id", None)
+        run = chamar_actor_apify(client, "apify/instagram-scraper", {"directUrls": [clean_url]})
+        dataset_id = obter_dataset_id_apify(run)
         if not dataset_id:
             return None
 
@@ -329,13 +346,8 @@ def buscar_posts_apify(username, limit=5):
             "scrapeComments": False
         }
 
-        run = client.actor("apify/instagram-scraper").call(
-            run_input=run_input,
-            timeout_secs=60,
-            logger=None
-        )
-
-        dataset_id = run.get("defaultDatasetId") if isinstance(run, dict) else getattr(run, "default_dataset_id", None)
+        run = chamar_actor_apify(client, "apify/instagram-scraper", run_input)
+        dataset_id = obter_dataset_id_apify(run)
         if dataset_id:
             dataset_items = list(client.dataset(dataset_id).iterate_items())
             for item in dataset_items:
