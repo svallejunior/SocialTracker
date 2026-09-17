@@ -304,10 +304,13 @@ def buscar_post_especifico_apify(post_url, default_username=""):
         from apify_client import ApifyClient
         client = ApifyClient(APIFY_TOKEN)
 
-        clean_url = post_url.strip()
+        clean_url = post_url.strip().split('?')[0].split('#')[0]
         sc = extrair_shortcode(clean_url)
         if sc:
-            clean_url = f"https://www.instagram.com/p/{sc}/"
+            if '/reel/' in post_url:
+                clean_url = f"https://www.instagram.com/reel/{sc}/"
+            else:
+                clean_url = f"https://www.instagram.com/p/{sc}/"
 
         run = chamar_actor_apify(client, "apify/instagram-scraper", {"directUrls": [clean_url]})
         dataset_id = obter_dataset_id_apify(run)
@@ -377,25 +380,32 @@ def buscar_posts_apify(username, limit=5):
 
 
 def extrair_dados_post(raw, default_username):
-    """Extrai e normaliza os dados de um post retornado pelo Apify."""
-    post_id = str(raw.get("id") or raw.get("postId") or raw.get("shortCode") or "")
+    """Extrai e normaliza os dados de um post retornado pelo Apify, incluindo fallback de restricted_page."""
+    url = raw.get("url") or ""
+    shortcode = raw.get("shortCode") or raw.get("shortcode") or raw.get("code") or extrair_shortcode(url)
+    post_id = str(raw.get("id") or raw.get("postId") or raw.get("media_id") or raw.get("shared_entity_id") or "")
+    if not post_id and shortcode:
+        post_id = shortcode
     if not post_id:
         return None
 
-    shortcode = raw.get("shortCode") or raw.get("shortcode") or raw.get("code")
     if not shortcode and post_id:
         shortcode = post_id.split('_')[0] if '_' in post_id else post_id
 
-    # Data
-    raw_date = raw.get("timestamp") or raw.get("takenAt") or raw.get("postedAt") or raw.get("takenAtTimestamp")
-    dt_post = parse_datetime(raw_date) if raw_date else agora_brasil()
-    data_postagem_str = format_datetime(dt_post)
-
     # Formato
     raw_type = str(raw.get("type") or raw.get("productType") or "").lower()
-    is_video = raw.get("isVideo", False) or raw.get("videoPlayCount") or raw.get("videoViewCount") or 'video' in raw_type or 'clips' in raw_type
+    raw_title = str(raw.get("title") or "").lower()
+    is_video = (
+        raw.get("isVideo", False)
+        or raw.get("videoPlayCount")
+        or raw.get("videoViewCount")
+        or 'video' in raw_type
+        or 'clips' in raw_type
+        or '/reel/' in url
+        or 'reel' in raw_title
+    )
     is_carousel = 'sidecar' in raw_type or 'carousel' in raw_type or raw.get("childPosts") or raw.get("images")
-    
+
     if is_video:
         formato = "Reels"
     elif is_carousel:
@@ -407,16 +417,51 @@ def extrair_dados_post(raw, default_username):
     likes = int(raw.get("likesCount") or raw.get("likes") or 0)
     comments = int(raw.get("commentsCount") or raw.get("comments") or 0)
     views = int(raw.get("videoViewCount") or raw.get("videoPlayCount") or raw.get("viewCount") or 0)
+
+    # Fallback para restricted_page ou dados no description OpenGraph
+    desc = raw.get("description") or ""
+    if desc and (likes == 0 or comments == 0):
+        m_likes = re.search(r'([\d,.]+)\s*(?:likes|curtidas)', desc, re.IGNORECASE)
+        if m_likes:
+            try:
+                likes = int(m_likes.group(1).replace(',', '').replace('.', ''))
+            except Exception:
+                pass
+        m_comm = re.search(r'([\d,.]+)\s*(?:comments|coment[aá]rios)', desc, re.IGNORECASE)
+        if m_comm:
+            try:
+                comments = int(m_comm.group(1).replace(',', '').replace('.', ''))
+            except Exception:
+                pass
+
     # Lógica de visualizações mínimas: se curtiu ou comentou, certamente visualizou
     views = max(views, likes + comments)
-    caption = raw.get("caption") or raw.get("captionText") or raw.get("text") or ""
-    
+    caption = raw.get("caption") or raw.get("captionText") or raw.get("text") or desc or ""
+
+    # Data
+    raw_date = raw.get("timestamp") or raw.get("takenAt") or raw.get("postedAt") or raw.get("takenAtTimestamp")
+    dt_post = parse_datetime(raw_date) if raw_date else None
+    if not dt_post and desc:
+        m_date = re.search(r'on\s+([A-Za-z]+\s+\d{1,2},\s+\d{4})', desc)
+        if m_date:
+            try:
+                dt_post = datetime.strptime(m_date.group(1), '%B %d, %Y')
+            except Exception:
+                pass
+    if not dt_post:
+        dt_post = agora_brasil()
+    data_postagem_str = format_datetime(dt_post)
+
     # URL
-    url = raw.get("url") or (f"https://www.instagram.com/p/{shortcode}/" if shortcode else f"https://www.instagram.com/p/{post_id}/")
+    if not url:
+        if formato == 'Reels':
+            url = f"https://www.instagram.com/reel/{shortcode}/" if shortcode else f"https://www.instagram.com/p/{post_id}/"
+        else:
+            url = f"https://www.instagram.com/p/{shortcode}/" if shortcode else f"https://www.instagram.com/p/{post_id}/"
 
     # Mídia / Thumbnail
-    media_url = raw.get("videoUrl") or raw.get("displayUrl") or raw.get("display_url") or ""
-    thumbnail_url = raw.get("displayUrl") or raw.get("thumbnailUrl") or raw.get("display_url") or media_url or ""
+    media_url = raw.get("videoUrl") or raw.get("displayUrl") or raw.get("display_url") or raw.get("image") or ""
+    thumbnail_url = raw.get("displayUrl") or raw.get("thumbnailUrl") or raw.get("display_url") or raw.get("image") or media_url or ""
 
     return {
         "post_id": post_id,

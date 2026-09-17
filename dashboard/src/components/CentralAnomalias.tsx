@@ -1300,7 +1300,7 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
             </div>
 
             {/* Corpo do Modal (com rolagem fluida e ocupando o espaço livre) */}
-            <div style={{ padding: '20px 24px', flex: 1, overflowY: 'auto' }}>
+            <div style={{ padding: '16px 20px', flex: 1, overflowY: 'auto' }}>
               {(() => {
                 const activePost = viralData.top_post || viralData.sugestao_viral;
                 const isSuggestion = !viralData.top_post && !!viralData.sugestao_viral;
@@ -1358,19 +1358,20 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                               boxShadow: '0 2px 8px rgba(113, 0, 226, 0.4)'
                             }}
                           >
-                            Abrir Post <ExternalLink size={12} />
+                            <span>Abrir Post</span>
+                            <ExternalLink size={13} />
                           </a>
                         </div>
 
-                        {/* Legenda do Post */}
+                        {/* Legenda/Preview do Post */}
                         {activePost.legenda && (
                           <div style={{
-                            background: '#0D1117',
-                            border: '1px solid #21262D',
-                            borderRadius: 8,
-                            padding: 10,
                             fontSize: 12,
                             color: '#C9D1D9',
+                            background: '#0D1117',
+                            padding: '10px 12px',
+                            borderRadius: 8,
+                            border: '1px solid #21262D',
                             maxHeight: 100,
                             overflowY: 'auto',
                             marginBottom: 14,
@@ -1416,16 +1417,16 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                 }
 
                 return (
-                  <div style={{ background: 'rgba(255, 107, 53, 0.08)', border: '1px solid rgba(255, 107, 53, 0.3)', borderRadius: 12, padding: 18, marginBottom: 16 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                      <span style={{ fontSize: 20 }}>⚠️</span>
-                      <strong style={{ fontSize: 14, color: '#FF6B35' }}>Nenhum post encontrado na janela de 72h antes da coleta.</strong>
+                  <div style={{ background: 'rgba(255, 107, 53, 0.08)', border: '1px solid rgba(255, 107, 53, 0.3)', borderRadius: 12, padding: 16, marginBottom: 14 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                      <span style={{ fontSize: 18 }}>⚠️</span>
+                      <strong style={{ fontSize: 13, color: '#FF6B35' }}>Nenhum post encontrado na janela de 72h antes da coleta.</strong>
                     </div>
-                    <p style={{ fontSize: 12, color: '#8B949E', margin: '0 0 14px 0', lineHeight: 1.5 }}>
+                    <p style={{ fontSize: 12, color: '#8B949E', margin: '0 0 12px 0', lineHeight: 1.4 }}>
                       Não identificamos nenhuma publicação nas 72 horas anteriores à leitura. Isso pode indicar <strong>Tráfego Pago (ADS)</strong>, crescimento retroativo de posts antigos, ou um viral que ainda não está no banco.
                     </p>
                     {/* Input de link manual */}
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexDirection: 'column' }}>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', flexDirection: 'column' }}>
                       <span style={{ fontSize: 11, fontWeight: 700, color: '#FFB800', textTransform: 'uppercase' }}>
                         🔗 Já sabe o link do post viral? Cole aqui:
                       </span>
@@ -1464,7 +1465,8 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: 5,
-                            opacity: !linkManual.trim() ? 0.5 : 1
+                            opacity: !linkManual.trim() ? 0.5 : 1,
+                            boxShadow: linkManual.trim() ? '0 2px 8px rgba(113,0,226,0.4)' : 'none'
                           }}
                         >
                           {linkManualLoading ? <RefreshCw size={12} className="anomalias-spin" /> : <ExternalLink size={12} />}
@@ -1472,33 +1474,91 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                         </button>
                       </div>
                       {linkManualErro && (
-                        <span style={{ fontSize: 11, color: '#FF007A' }}>❌ {linkManualErro}</span>
+                        <div style={{ fontSize: 11, color: '#FF007A', marginTop: 4 }}>❌ {linkManualErro}</div>
+                      )}
+                      {viralData?.registrado_manualmente && (
+                        <div style={{ fontSize: 11, color: '#39FF14', marginTop: 4 }}>
+                          ✅ Post registrado com sucesso!
+                        </div>
                       )}
                     </div>
                   </div>
                 );
               })()}
 
-              {/* Outros posts recentes (caso haja) */}
-              {viralData.outros_posts_recentes && viralData.outros_posts_recentes.length > 0 && (
-                <div style={{ marginTop: 14 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>
-                    Outras publicações recentes encontradas ({viralData.outros_posts_recentes.length})
-                  </span>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto' }}>
-                    {viralData.outros_posts_recentes.map((op: any, opi: number) => {
-                      const isViral = (op.views >= 5000 || op.likes >= 200 || (op.score_tracao && op.score_tracao >= 1500));
+              {/* Lista de Outros Posts na Janela */}
+              {viralData.posts_na_janela && viralData.posts_na_janela.length > 1 && (
+                <div style={{ marginTop: 16 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', marginBottom: 10, letterSpacing: 0.5 }}>
+                    Outras Publicações na Janela ({viralData.posts_na_janela.length})
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {viralData.posts_na_janela.map((p: any, idx: number) => {
+                      const isTop = viralData.top_post && viralData.top_post.post_id === p.post_id;
+                      if (isTop) return null;
                       return (
-                        <div key={opi} style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          background: isViral ? 'rgba(255, 184, 0, 0.08)' : '#161B22',
-                          border: isViral ? '1px solid rgba(255, 184, 0, 0.3)' : '1px solid transparent',
-                          padding: '10px 14px',
-                          borderRadius: 8,
-                          fontSize: 12
-                        }}>
+                        <div
+                          key={p.post_id || idx}
+                          style={{
+                            background: '#161B22',
+                            border: '1px solid #30363D',
+                            borderRadius: 8,
+                            padding: '10px 14px',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            fontSize: 12
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ color: 'white', fontWeight: 600 }}>
+                              {p.formato} • {formatDateTimeBR(p.data_postagem)}
+                            </span>
+                            {p.horas_antes_coleta !== null && (
+                              <span style={{ fontSize: 10, color: '#8B949E' }}>
+                                ({p.horas_antes_coleta < 0 ? `${Math.abs(p.horas_antes_coleta)}h pós` : `${p.horas_antes_coleta}h pré`})
+                              </span>
+                            )}
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ color: '#8B949E' }}>
+                              ❤️ {p.likes.toLocaleString('pt-BR')} | 👁️ {p.views ? p.views.toLocaleString('pt-BR') : '—'}
+                            </span>
+                            <a href={p.url} target="_blank" rel="noopener noreferrer" style={{ color: '#00F0FF', textDecoration: 'none', fontWeight: 700 }}>
+                              Ver 🔗
+                            </a>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Sugestões Recentes de Posts com Alta Tração (Fora da Janela Direta) */}
+              {!viralData.top_post && viralData.outros_posts_recentes && viralData.outros_posts_recentes.length > 0 && (
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#FFB800', textTransform: 'uppercase', marginBottom: 10, letterSpacing: 0.5, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span>💡 Sugestões: Posts Recentes com Alta Tração</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {viralData.outros_posts_recentes.map((op: any, idx: number) => {
+                      const isViral = viralData.sugestao_viral && viralData.sugestao_viral.post_id === op.post_id;
+                      return (
+                        <div
+                          key={op.post_id || idx}
+                          style={{
+                            background: isViral ? 'rgba(255, 184, 0, 0.08)' : '#161B22',
+                            border: isViral ? '1px solid #FFB80080' : '1px solid #30363D',
+                            borderRadius: 8,
+                            padding: '10px 14px',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            fontSize: 12
+                          }}
+                        >
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             {isViral && (
                               <span style={{ background: '#FFB800', color: '#000', fontSize: 10, fontWeight: 900, padding: '2px 6px', borderRadius: 4 }}>
@@ -1526,72 +1586,74 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
               )}
             </div>
 
-            {/* Rodapé do Modal: Link manual + Ações de Triagem */}
+            {/* Rodapé do Modal: Link manual (se houver post) + Ações de Triagem */}
             <div style={{ borderTop: '1px solid #30363D', background: '#0D1117', flexShrink: 0 }}>
 
-              {/* Campo de Link Manual (sempre visível no rodapé) */}
-              <div style={{ padding: '14px 22px', borderBottom: '1px solid #21262D' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', marginBottom: 8 }}>
-                  🔗 Registrar post por link (opcional)
-                </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <input
-                    type="text"
-                    value={linkManual}
-                    onChange={e => { setLinkManual(e.target.value); setLinkManualErro(null); }}
-                    placeholder="https://www.instagram.com/p/ABC123/ ou /reel/..."
-                    onKeyDown={e => e.key === 'Enter' && handleRegistrarPorLink()}
-                    style={{
-                      flex: 1,
-                      background: '#161B22',
-                      border: linkManualErro ? '1px solid #FF007A' : '1px solid #30363D',
-                      borderRadius: 8,
-                      padding: '8px 12px',
-                      color: 'white',
-                      fontSize: 12,
-                      outline: 'none',
-                      fontFamily: 'monospace'
-                    }}
-                  />
-                  <button
-                    onClick={handleRegistrarPorLink}
-                    disabled={linkManualLoading || !linkManual.trim()}
-                    style={{
-                      background: linkManual.trim() ? '#7100E2' : '#21262D',
-                      border: 'none',
-                      color: 'white',
-                      borderRadius: 8,
-                      padding: '8px 14px',
-                      fontSize: 12,
-                      fontWeight: 700,
-                      cursor: linkManualLoading || !linkManual.trim() ? 'not-allowed' : 'pointer',
-                      whiteSpace: 'nowrap',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 5,
-                      opacity: !linkManual.trim() ? 0.5 : 1,
-                      boxShadow: linkManual.trim() ? '0 2px 8px rgba(113,0,226,0.4)' : 'none'
-                    }}
-                  >
-                    {linkManualLoading ? <RefreshCw size={12} className="anomalias-spin" /> : <ExternalLink size={12} />}
-                    {linkManualLoading ? 'Registrando...' : 'Registrar Post'}
-                  </button>
-                </div>
-                {linkManualErro && (
-                  <div style={{ fontSize: 11, color: '#FF007A', marginTop: 6 }}>❌ {linkManualErro}</div>
-                )}
-                {viralData?.registrado_manualmente && (
-                  <div style={{ fontSize: 11, color: '#39FF14', marginTop: 6 }}>
-                    ✅ Post {viralData?.ja_existia ? 'já existia no banco e foi' : 'registrado com sucesso!'} {viralData?.ja_existia ? 'recuperado.' : ''}
-                    {viralData?.top_post?.data_estimada && (
-                      <> <span style={{ color: '#F59E0B' }}>(data de postagem estimada: coleta − 24h)</span></>
-                    )}
+              {/* Campo de Link Manual no rodapé (apenas quando já há post exibido, para permitir troca) */}
+              {!!(viralData.top_post || viralData.sugestao_viral) && (
+                <div style={{ padding: '10px 20px', borderBottom: '1px solid #21262D' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', marginBottom: 6 }}>
+                    🔗 Registrar outro post por link (opcional)
                   </div>
-                )}
-              </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input
+                      type="text"
+                      value={linkManual}
+                      onChange={e => { setLinkManual(e.target.value); setLinkManualErro(null); }}
+                      placeholder="https://www.instagram.com/p/ABC123/ ou /reel/..."
+                      onKeyDown={e => e.key === 'Enter' && handleRegistrarPorLink()}
+                      style={{
+                        flex: 1,
+                        background: '#161B22',
+                        border: linkManualErro ? '1px solid #FF007A' : '1px solid #30363D',
+                        borderRadius: 8,
+                        padding: '7px 12px',
+                        color: 'white',
+                        fontSize: 12,
+                        outline: 'none',
+                        fontFamily: 'monospace'
+                      }}
+                    />
+                    <button
+                      onClick={handleRegistrarPorLink}
+                      disabled={linkManualLoading || !linkManual.trim()}
+                      style={{
+                        background: linkManual.trim() ? '#7100E2' : '#21262D',
+                        border: 'none',
+                        color: 'white',
+                        borderRadius: 8,
+                        padding: '7px 14px',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: linkManualLoading || !linkManual.trim() ? 'not-allowed' : 'pointer',
+                        whiteSpace: 'nowrap',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 5,
+                        opacity: !linkManual.trim() ? 0.5 : 1,
+                        boxShadow: linkManual.trim() ? '0 2px 8px rgba(113,0,226,0.4)' : 'none'
+                      }}
+                    >
+                      {linkManualLoading ? <RefreshCw size={12} className="anomalias-spin" /> : <ExternalLink size={12} />}
+                      {linkManualLoading ? 'Registrando...' : 'Registrar Post'}
+                    </button>
+                  </div>
+                  {linkManualErro && (
+                    <div style={{ fontSize: 11, color: '#FF007A', marginTop: 4 }}>❌ {linkManualErro}</div>
+                  )}
+                  {viralData?.registrado_manualmente && (
+                    <div style={{ fontSize: 11, color: '#39FF14', marginTop: 4 }}>
+                      ✅ Post {viralData?.ja_existia ? 'já existia no banco e foi' : 'registrado com sucesso!'} {viralData?.ja_existia ? 'recuperado.' : ''}
+                      {viralData?.top_post?.data_estimada && (
+                        <> <span style={{ color: '#F59E0B' }}>(data de postagem estimada: coleta − 24h)</span></>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Botões de Triagem */}
-              <div style={{ padding: '14px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+              <div style={{ padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
               <button
                 onClick={() => handleBuscarViral(viralModalItem, true)}
                 disabled={viralLoadingApi}
