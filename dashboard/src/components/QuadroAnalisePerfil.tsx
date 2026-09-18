@@ -2,9 +2,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   TrendingUp, Users, Calendar, Eye, Target, Percent,
-  FileText, Activity, MousePointerClick, MessageSquare,
-  PlusCircle, Check, Trash2, Edit, RefreshCw, Sparkles,
-  BarChart3, ArrowRight, ShieldCheck
+  Activity, MessageSquare, Check, Trash2, Edit, RefreshCw,
+  Hash, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import AvatarModelo from './AvatarModelo';
 
@@ -18,17 +17,35 @@ export interface RegistroAnalise {
   username: string;
   data_inicio: string;
   data_fim: string;
-  seguidores: number;
   visualizacoes: number;
-  contas_alcancadas: number;
-  nao_seguidores_pct: number;
-  conteudo_principal: string;
-  impressoes: number;
-  visitas_perfil: number;
-  engajamento: number;
+  seguidores: number;
   interacoes: number;
+  nao_seguidores_pct: number;
+  contas_alcancadas: number; // Visualizadores
+  conteudo_principal: number | string;
+  impressoes?: number;
+  visitas_perfil?: number;
+  engajamento?: number;
   criado_em?: string;
   atualizado_em?: string;
+}
+
+// Helper para calcular período semanal de Sábado a Sexta-feira
+function getPeriodoSabSex(offsetSemanas: number = 0) {
+  const hoje = new Date();
+  const diaSemana = hoje.getDay(); // 0 = Domingo, 1 = Seg, ..., 5 = Sex, 6 = Sáb
+  // Última sexta-feira (ou hoje se for sexta)
+  const diasAteSexta = (diaSemana + 7 - 5) % 7;
+  const fim = new Date(hoje);
+  fim.setDate(hoje.getDate() - diasAteSexta - (offsetSemanas * 7));
+
+  const ini = new Date(fim);
+  ini.setDate(fim.getDate() - 6); // Sábado (6 dias antes da sexta)
+
+  return {
+    data_inicio: ini.toISOString().substring(0, 10),
+    data_fim: fim.toISOString().substring(0, 10)
+  };
 }
 
 export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }: QuadroAnalisePerfilProps) {
@@ -64,6 +81,7 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
   // Modelo selecionada
   const [selectedUsername, setSelectedUsername] = useState<string>('');
   const [searchModel, setSearchModel] = useState<string>('');
+  const [offsetSemana, setOffsetSemana] = useState<number>(0);
 
   // Seleciona automaticamente a primeira modelo ao carregar
   useEffect(() => {
@@ -83,41 +101,36 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
     return modelos.find(m => m.username.toLowerCase() === selectedUsername.toLowerCase()) || null;
   }, [modelos, selectedUsername]);
 
-  // Estado inicial do formulário (calcula default dos últimos 7 dias)
-  const getPeriodoPadrao = () => {
-    const fim = new Date();
-    const ini = new Date();
-    ini.setDate(fim.getDate() - 7);
-    return {
-      data_inicio: ini.toISOString().substring(0, 10),
-      data_fim: fim.toISOString().substring(0, 10)
-    };
-  };
-
+  // Estado do formulário na exata ordem solicitada:
+  // 1. Período (Sáb a Sex)
+  // 2. Visualizações
+  // 3. Seguidores (manual - não preenche automaticamente)
+  // 4. Interações
+  // 5. Não seguidores (%)
+  // 6. Visualizadores (antigo contas alcançadas)
+  // 7. Conteúdo principal (número)
   const [form, setForm] = useState({
     id: null as number | null,
-    data_inicio: getPeriodoPadrao().data_inicio,
-    data_fim: getPeriodoPadrao().data_fim,
-    seguidores: '',
+    data_inicio: getPeriodoSabSex(0).data_inicio,
+    data_fim: getPeriodoSabSex(0).data_fim,
     visualizacoes: '',
-    contas_alcancadas: '',
+    seguidores: '',
+    interacoes: '',
     nao_seguidores_pct: '',
-    conteudo_principal: '',
-    impressoes: '',
-    visitas_perfil: '',
-    engajamento: '',
-    interacoes: ''
+    contas_alcancadas: '', // Visualizadores
+    conteudo_principal: ''  // Número
   });
 
-  // Atualiza seguidores sugeridos ao trocar modelo selecionada
-  useEffect(() => {
-    if (activeModelo && !form.id) {
-      setForm(f => ({
-        ...f,
-        seguidores: activeModelo.seguidores > 0 ? String(activeModelo.seguidores) : f.seguidores
-      }));
-    }
-  }, [activeModelo, form.id]);
+  // Atualiza período ao mudar offset de semana
+  const mudarSemana = (novoOffset: number) => {
+    setOffsetSemana(novoOffset);
+    const p = getPeriodoSabSex(novoOffset);
+    setForm(f => ({
+      ...f,
+      data_inicio: p.data_inicio,
+      data_fim: p.data_fim
+    }));
+  };
 
   // Busca registros da API
   const carregarRegistros = useCallback(async (username?: string) => {
@@ -150,32 +163,30 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
       return {
         totalSemanas: 0,
         visualizacoes: 0,
-        contas_alcancadas: 0,
-        impressoes: 0,
-        visitas_perfil: 0,
+        seguidores: 0,
         interacoes: 0,
         mediaNaoSeguidores: 0,
-        mediaEngajamento: 0
+        visualizadores: 0,
+        conteudoPrincipal: 0
       };
     }
 
     const totalViews = registros.reduce((acc, r) => acc + (Number(r.visualizacoes) || 0), 0);
-    const totalAlcancadas = registros.reduce((acc, r) => acc + (Number(r.contas_alcancadas) || 0), 0);
-    const totalImpressoes = registros.reduce((acc, r) => acc + (Number(r.impressoes) || 0), 0);
-    const totalVisitas = registros.reduce((acc, r) => acc + (Number(r.visitas_perfil) || 0), 0);
+    // Último valor de seguidores registrado ou média
+    const ultimosSeguidores = registros[0]?.seguidores ? Number(registros[0].seguidores) : 0;
     const totalInteracoes = registros.reduce((acc, r) => acc + (Number(r.interacoes) || 0), 0);
     const mediaNaoSeg = registros.reduce((acc, r) => acc + (Number(r.nao_seguidores_pct) || 0), 0) / totalSemanas;
-    const mediaEng = registros.reduce((acc, r) => acc + (Number(r.engajamento) || 0), 0) / totalSemanas;
+    const totalVisualizadores = registros.reduce((acc, r) => acc + (Number(r.contas_alcancadas) || 0), 0);
+    const totalConteudo = registros.reduce((acc, r) => acc + (Number(r.conteudo_principal) || 0), 0);
 
     return {
       totalSemanas,
       visualizacoes: totalViews,
-      contas_alcancadas: totalAlcancadas,
-      impressoes: totalImpressoes,
-      visitas_perfil: totalVisitas,
+      seguidores: ultimosSeguidores,
       interacoes: totalInteracoes,
       mediaNaoSeguidores: mediaNaoSeg,
-      mediaEngajamento: mediaEng
+      visualizadores: totalVisualizadores,
+      conteudoPrincipal: totalConteudo
     };
   }, [registros]);
 
@@ -201,7 +212,7 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
       return;
     }
     if (!form.data_inicio || !form.data_fim) {
-      alert('Por favor, informe o período (data início e fim).');
+      alert('Por favor, informe o período (de sábado a sexta).');
       return;
     }
 
@@ -213,15 +224,15 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
         username: selectedUsername,
         data_inicio: form.data_inicio,
         data_fim: form.data_fim,
-        seguidores: Number(form.seguidores) || 0,
         visualizacoes: Number(form.visualizacoes) || 0,
-        contas_alcancadas: Number(form.contas_alcancadas) || 0,
+        seguidores: Number(form.seguidores) || 0,
+        interacoes: Number(form.interacoes) || 0,
         nao_seguidores_pct: Number(form.nao_seguidores_pct) || 0,
-        conteudo_principal: form.conteudo_principal || '',
-        impressoes: Number(form.impressoes) || 0,
-        visitas_perfil: Number(form.visitas_perfil) || 0,
-        engajamento: Number(form.engajamento) || 0,
-        interacoes: Number(form.interacoes) || 0
+        contas_alcancadas: Number(form.contas_alcancadas) || 0, // Visualizadores
+        conteudo_principal: Number(form.conteudo_principal) || 0,
+        impressoes: 0,
+        visitas_perfil: 0,
+        engajamento: 0
       };
 
       const metodo = form.id ? 'PUT' : 'POST';
@@ -237,21 +248,18 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
           tipo: 'ok',
           texto: form.id ? 'Análise atualizada com sucesso!' : 'Novo período registrado com sucesso!'
         });
-        // Limpa para novo período
-        const p = getPeriodoPadrao();
+        // Limpa para novo período mantendo o período padrão
+        const p = getPeriodoSabSex(offsetSemana);
         setForm({
           id: null,
           data_inicio: p.data_inicio,
           data_fim: p.data_fim,
-          seguidores: activeModelo?.seguidores ? String(activeModelo.seguidores) : '',
           visualizacoes: '',
-          contas_alcancadas: '',
+          seguidores: '', // Usuário informa manualmente
+          interacoes: '',
           nao_seguidores_pct: '',
-          conteudo_principal: '',
-          impressoes: '',
-          visitas_perfil: '',
-          engajamento: '',
-          interacoes: ''
+          contas_alcancadas: '',
+          conteudo_principal: ''
         });
         carregarRegistros(selectedUsername);
         setTimeout(() => setMsgFeedback(null), 4000);
@@ -271,15 +279,12 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
       id: r.id,
       data_inicio: r.data_inicio,
       data_fim: r.data_fim,
-      seguidores: String(r.seguidores || ''),
       visualizacoes: String(r.visualizacoes || ''),
-      contas_alcancadas: String(r.contas_alcancadas || ''),
+      seguidores: String(r.seguidores || ''),
+      interacoes: String(r.interacoes || ''),
       nao_seguidores_pct: String(r.nao_seguidores_pct || ''),
-      conteudo_principal: r.conteudo_principal || '',
-      impressoes: String(r.impressoes || ''),
-      visitas_perfil: String(r.visitas_perfil || ''),
-      engajamento: String(r.engajamento || ''),
-      interacoes: String(r.interacoes || '')
+      contas_alcancadas: String(r.contas_alcancadas || ''),
+      conteudo_principal: String(r.conteudo_principal || '')
     });
     // Rola suavemente até o formulário
     const el = document.getElementById('quadro-analise-form');
@@ -355,7 +360,7 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
               Análise do Perfil
             </h2>
             <p style={{ color: '#8B949E', fontSize: '13px', margin: '3px 0 0 0' }}>
-              Acompanhamento de métricas semanais, alcance, engajamento e histórico consolidado das modelos.
+              Acompanhamento semanal de métricas (Sábado a Sexta) e histórico consolidado das modelos.
             </p>
           </div>
         </div>
@@ -474,20 +479,17 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                       setSelectedUsername(m.username);
                       // Se estava editando, limpa formulário ao trocar
                       if (form.id) {
-                        const p = getPeriodoPadrao();
+                        const p = getPeriodoSabSex(offsetSemana);
                         setForm({
                           id: null,
                           data_inicio: p.data_inicio,
                           data_fim: p.data_fim,
-                          seguidores: m.seguidores ? String(m.seguidores) : '',
                           visualizacoes: '',
-                          contas_alcancadas: '',
+                          seguidores: '',
+                          interacoes: '',
                           nao_seguidores_pct: '',
-                          conteudo_principal: '',
-                          impressoes: '',
-                          visitas_perfil: '',
-                          engajamento: '',
-                          interacoes: ''
+                          contas_alcancadas: '',
+                          conteudo_principal: ''
                         });
                       }
                     }}
@@ -549,7 +551,7 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
           </div>
         </div>
 
-        {/* ─── 3. SOMATÓRIO SEMANAL (CARDS DE SCORE) ─── */}
+        {/* ─── 3. SOMATÓRIO SEMANAL (CARDS DE SCORE NA NOVA ORDEM) ─── */}
         <div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
             <span style={{ fontSize: '11px', fontWeight: 800, color: '#8B949E', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
@@ -562,7 +564,7 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
             gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
             gap: '12px'
           }}>
-            {/* Card: Visualizações */}
+            {/* 1. Visualizações */}
             <div style={{
               background: '#0D1117',
               border: '1px solid rgba(0, 240, 255, 0.25)',
@@ -596,41 +598,7 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
               </div>
             </div>
 
-            {/* Card: Contas Alcançadas */}
-            <div style={{
-              background: '#0D1117',
-              border: '1px solid rgba(168, 85, 247, 0.25)',
-              borderRadius: '12px',
-              padding: '14px 16px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px'
-            }}>
-              <div style={{
-                width: '40px',
-                height: '40px',
-                borderRadius: '10px',
-                background: 'rgba(168, 85, 247, 0.12)',
-                color: '#A855F7',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0
-              }}>
-                <Target size={20} />
-              </div>
-              <div style={{ minWidth: 0 }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: '#8B949E', textTransform: 'uppercase' }}>
-                  Contas Alcançadas
-                </span>
-                <div style={{ fontSize: '20px', fontWeight: 800, color: '#A855F7', lineHeight: 1.1, marginTop: '2px' }}>
-                  {fmtNum(somatorioSemanal.contas_alcancadas)}
-                </div>
-                <span style={{ fontSize: '10px', color: '#586069' }}>Alcance somado</span>
-              </div>
-            </div>
-
-            {/* Card: Impressões */}
+            {/* 2. Seguidores */}
             <div style={{
               background: '#0D1117',
               border: '1px solid rgba(16, 185, 129, 0.25)',
@@ -651,54 +619,20 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                 justifyContent: 'center',
                 flexShrink: 0
               }}>
-                <Activity size={20} />
+                <Users size={20} />
               </div>
               <div style={{ minWidth: 0 }}>
                 <span style={{ fontSize: '11px', fontWeight: 700, color: '#8B949E', textTransform: 'uppercase' }}>
-                  Impressões
+                  Seguidores
                 </span>
                 <div style={{ fontSize: '20px', fontWeight: 800, color: '#10B981', lineHeight: 1.1, marginTop: '2px' }}>
-                  {fmtNum(somatorioSemanal.impressoes)}
+                  {somatorioSemanal.seguidores > 0 ? fmtNum(somatorioSemanal.seguidores) : '—'}
                 </div>
-                <span style={{ fontSize: '10px', color: '#586069' }}>Total de impressões</span>
+                <span style={{ fontSize: '10px', color: '#586069' }}>Último informado</span>
               </div>
             </div>
 
-            {/* Card: Visitas ao Perfil */}
-            <div style={{
-              background: '#0D1117',
-              border: '1px solid rgba(245, 158, 11, 0.25)',
-              borderRadius: '12px',
-              padding: '14px 16px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px'
-            }}>
-              <div style={{
-                width: '40px',
-                height: '40px',
-                borderRadius: '10px',
-                background: 'rgba(245, 158, 11, 0.12)',
-                color: '#F59E0B',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0
-              }}>
-                <MousePointerClick size={20} />
-              </div>
-              <div style={{ minWidth: 0 }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: '#8B949E', textTransform: 'uppercase' }}>
-                  Visitas Perfil
-                </span>
-                <div style={{ fontSize: '20px', fontWeight: 800, color: '#F59E0B', lineHeight: 1.1, marginTop: '2px' }}>
-                  {fmtNum(somatorioSemanal.visitas_perfil)}
-                </div>
-                <span style={{ fontSize: '10px', color: '#586069' }}>Cliques no perfil</span>
-              </div>
-            </div>
-
-            {/* Card: Interações */}
+            {/* 3. Interações */}
             <div style={{
               background: '#0D1117',
               border: '1px solid rgba(255, 0, 122, 0.25)',
@@ -728,11 +662,11 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                 <div style={{ fontSize: '20px', fontWeight: 800, color: '#FF007A', lineHeight: 1.1, marginTop: '2px' }}>
                   {fmtNum(somatorioSemanal.interacoes)}
                 </div>
-                <span style={{ fontSize: '10px', color: '#586069' }}>Engajamento direto</span>
+                <span style={{ fontSize: '10px', color: '#586069' }}>Total de interações</span>
               </div>
             </div>
 
-            {/* Card: Não Seguidores % Médio */}
+            {/* 4. Não Seguidores % Médio */}
             <div style={{
               background: '#0D1117',
               border: '1px solid rgba(59, 130, 246, 0.25)',
@@ -762,13 +696,81 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                 <div style={{ fontSize: '20px', fontWeight: 800, color: '#3B82F6', lineHeight: 1.1, marginTop: '2px' }}>
                   {somatorioSemanal.mediaNaoSeguidores.toFixed(1)}%
                 </div>
-                <span style={{ fontSize: '10px', color: '#586069' }}>Novos públicos</span>
+                <span style={{ fontSize: '10px', color: '#586069' }}>Média de novos públicos</span>
+              </div>
+            </div>
+
+            {/* 5. Visualizadores (antigo contas alcançadas) */}
+            <div style={{
+              background: '#0D1117',
+              border: '1px solid rgba(168, 85, 247, 0.25)',
+              borderRadius: '12px',
+              padding: '14px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
+            }}>
+              <div style={{
+                width: '40px',
+                height: '40px',
+                borderRadius: '10px',
+                background: 'rgba(168, 85, 247, 0.12)',
+                color: '#A855F7',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <Target size={20} />
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: '#8B949E', textTransform: 'uppercase' }}>
+                  Visualizadores
+                </span>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: '#A855F7', lineHeight: 1.1, marginTop: '2px' }}>
+                  {fmtNum(somatorioSemanal.visualizadores)}
+                </div>
+                <span style={{ fontSize: '10px', color: '#586069' }}>Total de visualizadores</span>
+              </div>
+            </div>
+
+            {/* 6. Conteúdo Principal (Número) */}
+            <div style={{
+              background: '#0D1117',
+              border: '1px solid rgba(245, 158, 11, 0.25)',
+              borderRadius: '12px',
+              padding: '14px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
+            }}>
+              <div style={{
+                width: '40px',
+                height: '40px',
+                borderRadius: '10px',
+                background: 'rgba(245, 158, 11, 0.12)',
+                color: '#F59E0B',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <Hash size={20} />
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: '#8B949E', textTransform: 'uppercase' }}>
+                  Conteúdo Total
+                </span>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: '#F59E0B', lineHeight: 1.1, marginTop: '2px' }}>
+                  {fmtNum(somatorioSemanal.conteudoPrincipal)}
+                </div>
+                <span style={{ fontSize: '10px', color: '#586069' }}>Qtd. conteúdos somados</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* ─── 4. FORMULÁRIO E CAMPOS DE ENTRADA DE ANÁLISE ─── */}
+        {/* ─── 4. FORMULÁRIO E CAMPOS DE ENTRADA NA ORDEM EXATA SOLICITADA ─── */}
         <div id="quadro-analise-form" style={{
           background: '#0D1117',
           border: '1px solid #21262D',
@@ -786,39 +788,97 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
               </h3>
             </div>
 
-            {form.id && (
-              <button
-                type="button"
-                onClick={() => {
-                  const p = getPeriodoPadrao();
-                  setForm({
-                    id: null,
-                    data_inicio: p.data_inicio,
-                    data_fim: p.data_fim,
-                    seguidores: activeModelo?.seguidores ? String(activeModelo.seguidores) : '',
-                    visualizacoes: '',
-                    contas_alcancadas: '',
-                    nao_seguidores_pct: '',
-                    conteudo_principal: '',
-                    impressoes: '',
-                    visitas_perfil: '',
-                    engajamento: '',
-                    interacoes: ''
-                  });
-                }}
-                style={{
-                  background: 'transparent',
-                  border: '1px solid #30363D',
-                  color: '#8B949E',
-                  borderRadius: '6px',
-                  padding: '6px 12px',
-                  fontSize: '12px',
-                  cursor: 'pointer'
-                }}
-              >
-                Cancelar Edição
-              </button>
-            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {/* Botões de navegação rápida de semana de Sáb a Sex */}
+              <div style={{ display: 'flex', alignItems: 'center', background: '#161B22', borderRadius: '8px', border: '1px solid #30363D', padding: '2px' }}>
+                <button
+                  type="button"
+                  onClick={() => mudarSemana(offsetSemana + 1)}
+                  title="Semana anterior (Sáb a Sex)"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#8B949E',
+                    padding: '6px 10px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    fontSize: '11px',
+                    fontWeight: 600
+                  }}
+                >
+                  <ChevronLeft size={14} /> Ant.
+                </button>
+                <button
+                  type="button"
+                  onClick={() => mudarSemana(0)}
+                  title="Semana mais recente (Sáb a Sex)"
+                  style={{
+                    background: offsetSemana === 0 ? '#21262D' : 'transparent',
+                    border: 'none',
+                    color: offsetSemana === 0 ? '#00F0FF' : '#8B949E',
+                    padding: '6px 10px',
+                    cursor: 'pointer',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    borderRadius: '6px'
+                  }}
+                >
+                  Atual
+                </button>
+                <button
+                  type="button"
+                  onClick={() => mudarSemana(Math.max(0, offsetSemana - 1))}
+                  title="Próxima semana (Sáb a Sex)"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#8B949E',
+                    padding: '6px 10px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    fontSize: '11px',
+                    fontWeight: 600
+                  }}
+                >
+                  Próx. <ChevronRight size={14} />
+                </button>
+              </div>
+
+              {form.id && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const p = getPeriodoSabSex(offsetSemana);
+                    setForm({
+                      id: null,
+                      data_inicio: p.data_inicio,
+                      data_fim: p.data_fim,
+                      visualizacoes: '',
+                      seguidores: '',
+                      interacoes: '',
+                      nao_seguidores_pct: '',
+                      contas_alcancadas: '',
+                      conteudo_principal: ''
+                    });
+                  }}
+                  style={{
+                    background: 'transparent',
+                    border: '1px solid #30363D',
+                    color: '#8B949E',
+                    borderRadius: '6px',
+                    padding: '6px 12px',
+                    fontSize: '12px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancelar Edição
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Feedback message */}
@@ -848,10 +908,10 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
               gap: '16px',
               marginBottom: '20px'
             }}>
-              {/* 1. Período de x a y */}
+              {/* 1. PERÍODO (DE SÁB A SEX) */}
               <div>
-                <label style={{ fontSize: '11px', color: '#8B949E', fontWeight: 700, display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
-                  Período (Início)
+                <label style={{ fontSize: '11px', color: '#00F0FF', fontWeight: 800, display: 'block', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  1. Período Início (Sábado)
                 </label>
                 <input
                   type="date"
@@ -873,8 +933,8 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
               </div>
 
               <div>
-                <label style={{ fontSize: '11px', color: '#8B949E', fontWeight: 700, display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
-                  Período (Fim)
+                <label style={{ fontSize: '11px', color: '#00F0FF', fontWeight: 800, display: 'block', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  1. Período Fim (Sexta)
                 </label>
                 <input
                   type="date"
@@ -895,34 +955,10 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                 />
               </div>
 
-              {/* 2. Seguidores */}
+              {/* 2. VISUALIZAÇÕES */}
               <div>
                 <label style={{ fontSize: '11px', color: '#8B949E', fontWeight: 700, display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
-                  Seguidores
-                </label>
-                <input
-                  type="number"
-                  placeholder="Ex: 25400"
-                  value={form.seguidores}
-                  onChange={e => setForm(f => ({ ...f, seguidores: e.target.value }))}
-                  style={{
-                    width: '100%',
-                    background: '#161B22',
-                    border: '1px solid #30363D',
-                    borderRadius: '8px',
-                    padding: '10px 12px',
-                    color: 'white',
-                    fontSize: '13px',
-                    outline: 'none',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-
-              {/* 3. Visualizações */}
-              <div>
-                <label style={{ fontSize: '11px', color: '#8B949E', fontWeight: 700, display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
-                  Visualizações
+                  2. Visualizações
                 </label>
                 <input
                   type="number"
@@ -943,16 +979,16 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                 />
               </div>
 
-              {/* 4. Contas Alcançadas */}
+              {/* 3. SEGUIDORES (MANUAL - NÃO AUTOMÁTICO) */}
               <div>
                 <label style={{ fontSize: '11px', color: '#8B949E', fontWeight: 700, display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
-                  Contas Alcançadas
+                  3. Seguidores
                 </label>
                 <input
                   type="number"
-                  placeholder="Ex: 89000"
-                  value={form.contas_alcancadas}
-                  onChange={e => setForm(f => ({ ...f, contas_alcancadas: e.target.value }))}
+                  placeholder="Digite os seguidores..."
+                  value={form.seguidores}
+                  onChange={e => setForm(f => ({ ...f, seguidores: e.target.value }))}
                   style={{
                     width: '100%',
                     background: '#161B22',
@@ -967,10 +1003,34 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                 />
               </div>
 
-              {/* 5. Não seguidores % */}
+              {/* 4. INTERAÇÕES */}
               <div>
                 <label style={{ fontSize: '11px', color: '#8B949E', fontWeight: 700, display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
-                  Não Seguidores (%)
+                  4. Interações
+                </label>
+                <input
+                  type="number"
+                  placeholder="Ex: 3200"
+                  value={form.interacoes}
+                  onChange={e => setForm(f => ({ ...f, interacoes: e.target.value }))}
+                  style={{
+                    width: '100%',
+                    background: '#161B22',
+                    border: '1px solid #30363D',
+                    borderRadius: '8px',
+                    padding: '10px 12px',
+                    color: 'white',
+                    fontSize: '13px',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              {/* 5. NÃO SEGUIDORES (%) */}
+              <div>
+                <label style={{ fontSize: '11px', color: '#8B949E', fontWeight: 700, display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
+                  5. Não Seguidores (%)
                 </label>
                 <input
                   type="number"
@@ -992,113 +1052,40 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                 />
               </div>
 
-              {/* 6. Conteúdo Principal */}
+              {/* 6. VISUALIZADORES (ANTES CONTAS ALCANÇADAS) */}
               <div>
                 <label style={{ fontSize: '11px', color: '#8B949E', fontWeight: 700, display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
-                  Conteúdo Principal
+                  6. Visualizadores
                 </label>
                 <input
-                  type="text"
-                  placeholder="Ex: Reels Dancinha / Carrossel Foto"
+                  type="number"
+                  placeholder="Ex: 89000"
+                  value={form.contas_alcancadas}
+                  onChange={e => setForm(f => ({ ...f, contas_alcancadas: e.target.value }))}
+                  style={{
+                    width: '100%',
+                    background: '#161B22',
+                    border: '1px solid #30363D',
+                    borderRadius: '8px',
+                    padding: '10px 12px',
+                    color: 'white',
+                    fontSize: '13px',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              {/* 7. CONTEÚDO PRINCIPAL (EM NÚMERO) */}
+              <div>
+                <label style={{ fontSize: '11px', color: '#8B949E', fontWeight: 700, display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
+                  7. Conteúdo Principal (Número)
+                </label>
+                <input
+                  type="number"
+                  placeholder="Ex: 12"
                   value={form.conteudo_principal}
                   onChange={e => setForm(f => ({ ...f, conteudo_principal: e.target.value }))}
-                  style={{
-                    width: '100%',
-                    background: '#161B22',
-                    border: '1px solid #30363D',
-                    borderRadius: '8px',
-                    padding: '10px 12px',
-                    color: 'white',
-                    fontSize: '13px',
-                    outline: 'none',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-
-              {/* 7. Impressões */}
-              <div>
-                <label style={{ fontSize: '11px', color: '#8B949E', fontWeight: 700, display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
-                  Impressões
-                </label>
-                <input
-                  type="number"
-                  placeholder="Ex: 210000"
-                  value={form.impressoes}
-                  onChange={e => setForm(f => ({ ...f, impressoes: e.target.value }))}
-                  style={{
-                    width: '100%',
-                    background: '#161B22',
-                    border: '1px solid #30363D',
-                    borderRadius: '8px',
-                    padding: '10px 12px',
-                    color: 'white',
-                    fontSize: '13px',
-                    outline: 'none',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-
-              {/* 8. Visitas ao Perfil */}
-              <div>
-                <label style={{ fontSize: '11px', color: '#8B949E', fontWeight: 700, display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
-                  Visitas ao Perfil
-                </label>
-                <input
-                  type="number"
-                  placeholder="Ex: 1420"
-                  value={form.visitas_perfil}
-                  onChange={e => setForm(f => ({ ...f, visitas_perfil: e.target.value }))}
-                  style={{
-                    width: '100%',
-                    background: '#161B22',
-                    border: '1px solid #30363D',
-                    borderRadius: '8px',
-                    padding: '10px 12px',
-                    color: 'white',
-                    fontSize: '13px',
-                    outline: 'none',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-
-              {/* 9. Engajamento */}
-              <div>
-                <label style={{ fontSize: '11px', color: '#8B949E', fontWeight: 700, display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
-                  Engajamento
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  placeholder="Ex: 5.4"
-                  value={form.engajamento}
-                  onChange={e => setForm(f => ({ ...f, engajamento: e.target.value }))}
-                  style={{
-                    width: '100%',
-                    background: '#161B22',
-                    border: '1px solid #30363D',
-                    borderRadius: '8px',
-                    padding: '10px 12px',
-                    color: 'white',
-                    fontSize: '13px',
-                    outline: 'none',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-
-              {/* 10. Interações */}
-              <div>
-                <label style={{ fontSize: '11px', color: '#8B949E', fontWeight: 700, display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
-                  Interações
-                </label>
-                <input
-                  type="number"
-                  placeholder="Ex: 3200"
-                  value={form.interacoes}
-                  onChange={e => setForm(f => ({ ...f, interacoes: e.target.value }))}
                   style={{
                     width: '100%',
                     background: '#161B22',
@@ -1142,7 +1129,7 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
           </form>
         </div>
 
-        {/* ─── 5. HISTÓRICO DAS SEMANAS REGISTRADAS ─── */}
+        {/* ─── 5. HISTÓRICO DAS SEMANAS REGISTRADAS NA NOVA ORDEM ─── */}
         <div style={{
           background: '#0D1117',
           border: '1px solid #21262D',
@@ -1180,16 +1167,13 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid #30363D', color: '#8B949E', textTransform: 'uppercase', fontSize: '10px', letterSpacing: '0.05em' }}>
-                  <th style={{ padding: '10px 12px' }}>Período</th>
-                  <th style={{ padding: '10px 12px' }}>Seguidores</th>
-                  <th style={{ padding: '10px 12px' }}>Views</th>
-                  <th style={{ padding: '10px 12px' }}>Alcance</th>
-                  <th style={{ padding: '10px 12px' }}>Não Seg.</th>
-                  <th style={{ padding: '10px 12px' }}>Conteúdo Principal</th>
-                  <th style={{ padding: '10px 12px' }}>Impressões</th>
-                  <th style={{ padding: '10px 12px' }}>Visitas</th>
-                  <th style={{ padding: '10px 12px' }}>Engaj.</th>
-                  <th style={{ padding: '10px 12px' }}>Interações</th>
+                  <th style={{ padding: '10px 12px' }}>1. Período (Sáb a Sex)</th>
+                  <th style={{ padding: '10px 12px' }}>2. Visualizações</th>
+                  <th style={{ padding: '10px 12px' }}>3. Seguidores</th>
+                  <th style={{ padding: '10px 12px' }}>4. Interações</th>
+                  <th style={{ padding: '10px 12px' }}>5. Não Seg. (%)</th>
+                  <th style={{ padding: '10px 12px' }}>6. Visualizadores</th>
+                  <th style={{ padding: '10px 12px' }}>7. Conteúdo Principal</th>
                   <th style={{ padding: '10px 12px', textAlign: 'right' }}>Ações</th>
                 </tr>
               </thead>
@@ -1207,32 +1191,23 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                     <td style={{ padding: '10px 12px', fontWeight: 700, color: '#E6EDF3', whiteSpace: 'nowrap' }}>
                       📅 {fmtDataBr(r.data_inicio)} a {fmtDataBr(r.data_fim)}
                     </td>
-                    <td style={{ padding: '10px 12px', color: '#C9D1D9' }}>
-                      {r.seguidores > 0 ? r.seguidores.toLocaleString('pt-BR') : '—'}
-                    </td>
                     <td style={{ padding: '10px 12px', fontWeight: 700, color: '#00F0FF' }}>
                       {r.visualizacoes > 0 ? fmtNum(r.visualizacoes) : '—'}
                     </td>
-                    <td style={{ padding: '10px 12px', color: '#A855F7' }}>
-                      {r.contas_alcancadas > 0 ? fmtNum(r.contas_alcancadas) : '—'}
+                    <td style={{ padding: '10px 12px', color: '#10B981', fontWeight: 600 }}>
+                      {r.seguidores > 0 ? r.seguidores.toLocaleString('pt-BR') : '—'}
+                    </td>
+                    <td style={{ padding: '10px 12px', fontWeight: 700, color: '#FF007A' }}>
+                      {r.interacoes > 0 ? fmtNum(r.interacoes) : '—'}
                     </td>
                     <td style={{ padding: '10px 12px', color: '#3B82F6' }}>
                       {r.nao_seguidores_pct > 0 ? `${r.nao_seguidores_pct}%` : '—'}
                     </td>
-                    <td style={{ padding: '10px 12px', color: '#E6EDF3', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {r.conteudo_principal || '—'}
+                    <td style={{ padding: '10px 12px', color: '#A855F7' }}>
+                      {r.contas_alcancadas > 0 ? fmtNum(r.contas_alcancadas) : '—'}
                     </td>
-                    <td style={{ padding: '10px 12px', color: '#10B981' }}>
-                      {r.impressoes > 0 ? fmtNum(r.impressoes) : '—'}
-                    </td>
-                    <td style={{ padding: '10px 12px', color: '#F59E0B' }}>
-                      {r.visitas_perfil > 0 ? fmtNum(r.visitas_perfil) : '—'}
-                    </td>
-                    <td style={{ padding: '10px 12px', color: '#C9D1D9' }}>
-                      {r.engajamento > 0 ? `${r.engajamento}%` : '—'}
-                    </td>
-                    <td style={{ padding: '10px 12px', fontWeight: 700, color: '#FF007A' }}>
-                      {r.interacoes > 0 ? fmtNum(r.interacoes) : '—'}
+                    <td style={{ padding: '10px 12px', color: '#F59E0B', fontWeight: 700 }}>
+                      {r.conteudo_principal ? String(r.conteudo_principal) : '—'}
                     </td>
                     <td style={{ padding: '10px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                       <button
