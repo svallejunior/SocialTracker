@@ -25,6 +25,7 @@ import AvatarModelo from "../components/AvatarModelo";
 import ModalEvolucaoPost from "../components/ModalEvolucaoPost";
 import FloatingLogButton from "../components/FloatingLogButton";
 import LogoSplash from "../components/LogoSplash";
+import QuadroAnalisePerfil from "../components/QuadroAnalisePerfil";
 
 function generateSparklinePath(points: number[], width: number = 160, height: number = 38): { strokePath: string; fillPath: string } {
   if (!points || points.length === 0) {
@@ -1059,15 +1060,30 @@ function psStatusInfo(score: number): { color: string; bg: string; border: strin
 
 function ModalControleEditInline({
   perfil,
+  controleData,
   onClose,
   onSave,
   onOpenFinanceiro
 }: {
   perfil: any;
+  controleData?: any[];
   onClose: () => void;
   onSave: (d: any) => void;
   onOpenFinanceiro?: (username: string) => void;
 }) {
+  const perfilAtualizado = (controleData || []).find(
+    (c: any) => (c.username || '').toLowerCase() === (perfil.username || '').toLowerCase()
+  );
+  const lancamentos = perfilAtualizado?.lancamentos || perfil?.lancamentos || [];
+  const saldo = lancamentos.reduce((acc: number, l: any) => {
+    const v = Number(l.valor_brl ?? l.valor_original ?? 0);
+    return acc + (l.tipo === 'despesa' ? -v : v);
+  }, 0);
+
+  const formatarSaldo = (v: number) => {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0);
+  };
+
   const [form, setForm] = useState({
     username: perfil.username,
     nome: perfil.nome || '',
@@ -1207,33 +1223,33 @@ function ModalControleEditInline({
             <button
               type="button"
               onClick={() => onOpenFinanceiro(form.username || perfil.username)}
-              title="Abrir Lançamentos Financeiros (Receitas e Despesas) deste perfil"
+              title={`Saldo deste perfil: ${formatarSaldo(saldo)} (clique para abrir Lançamentos Financeiros)`}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: 6,
                 padding: '6px 12px',
                 borderRadius: 8,
-                background: 'rgba(16, 185, 129, 0.12)',
-                border: '1px solid #10B981',
-                color: '#34D399',
+                background: saldo < 0 ? 'rgba(248, 81, 73, 0.12)' : 'rgba(16, 185, 129, 0.12)',
+                border: saldo < 0 ? '1px solid #F85149' : '1px solid #10B981',
+                color: saldo < 0 ? '#F85149' : '#34D399',
                 fontSize: 12,
                 fontWeight: 700,
                 cursor: 'pointer',
                 transition: 'all 0.2s',
-                boxShadow: '0 2px 8px rgba(16, 185, 129, 0.15)'
+                boxShadow: saldo < 0 ? '0 2px 8px rgba(248, 81, 73, 0.15)' : '0 2px 8px rgba(16, 185, 129, 0.15)'
               }}
               onMouseEnter={e => {
-                e.currentTarget.style.background = 'rgba(16, 185, 129, 0.22)';
+                e.currentTarget.style.background = saldo < 0 ? 'rgba(248, 81, 73, 0.22)' : 'rgba(16, 185, 129, 0.22)';
                 e.currentTarget.style.transform = 'translateY(-1px)';
               }}
               onMouseLeave={e => {
-                e.currentTarget.style.background = 'rgba(16, 185, 129, 0.12)';
+                e.currentTarget.style.background = saldo < 0 ? 'rgba(248, 81, 73, 0.12)' : 'rgba(16, 185, 129, 0.12)';
                 e.currentTarget.style.transform = 'translateY(0)';
               }}
             >
               <DollarSign size={14} />
-              <span>Financeiro</span>
+              <span>{formatarSaldo(saldo)}</span>
             </button>
           )}
 
@@ -3325,7 +3341,7 @@ export default function Dashboard() {
               onClick={() => setActiveTab('graficos')}
             >
               <BarChart3 size={16} />
-              Gráficos
+              Análise
             </button>
             <button
               className={`tab-btn ${activeTab === 'cards' ? 'active' : ''}`}
@@ -5433,10 +5449,12 @@ export default function Dashboard() {
       )}
 
       {/* ====================================================
-          ABA: GRÁFICOS (SEGUIDORES + FINANCEIRO + CORRELAÇÃO)
+          ABA: ANÁLISE (QUADRO ANÁLISE DE PERFIL + SEGUIDORES + FINANCEIRO + CORRELAÇÃO)
           ==================================================== */}
       {activeTab === 'graficos' && (
-        <div className="followers-history-box">
+        <>
+          <QuadroAnalisePerfil profiles={profiles} controleData={controleData} />
+          <div className="followers-history-box">
           <div className="chart-title-area">
             <div>
               <h2 style={{ fontSize: '20px', fontWeight: '800' }}>
@@ -6298,6 +6316,7 @@ export default function Dashboard() {
           </div>
 
         </div>
+        </>
       )}
 
       {/* ====================================================
@@ -7070,6 +7089,7 @@ export default function Dashboard() {
       {modalControleEdit && (
         <ModalControleEditInline
           perfil={modalControleEdit}
+          controleData={controleData}
           onClose={() => setModalControleEdit(null)}
           onSave={salvarControleEdit}
           onOpenFinanceiro={(u) => {

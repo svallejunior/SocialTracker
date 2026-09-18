@@ -299,6 +299,28 @@ async function ensureSchema(db: Db): Promise<void> {
   } catch (err) {
     console.error("[ensureSchema] Erro no backfill de controle_perfis_obs:", err);
   }
+
+  // --- analise_perfil_semanal: Dados de análise semanal por perfil ---
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS analise_perfil_semanal (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL,
+      data_inicio TEXT NOT NULL,
+      data_fim TEXT NOT NULL,
+      seguidores INTEGER DEFAULT 0,
+      visualizacoes INTEGER DEFAULT 0,
+      contas_alcancadas INTEGER DEFAULT 0,
+      nao_seguidores_pct REAL DEFAULT 0,
+      conteudo_principal TEXT DEFAULT '',
+      impressoes INTEGER DEFAULT 0,
+      visitas_perfil INTEGER DEFAULT 0,
+      engajamento REAL DEFAULT 0,
+      interacoes INTEGER DEFAULT 0,
+      criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+      atualizado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_analise_username ON analise_perfil_semanal(username);
+  `);
 }
 
 async function abrirConexao(): Promise<Db> {
