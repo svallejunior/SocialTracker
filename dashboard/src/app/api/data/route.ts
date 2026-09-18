@@ -266,20 +266,28 @@ export async function GET() {
         const cargasOrdenadas = Object.keys(cargasObj).sort();
         const curva: number[] = [0]; // Ponto 0 às 00h
         const localBaseMap: Record<string, number> = { ...antesMap };
+        const runningPostViews: Record<string, number> = {};
 
         for (const dc of cargasOrdenadas) {
           const postsDc = cargasObj[dc];
-          let viewsGanhasDc = 0;
           for (const [pid, v] of Object.entries(postsDc)) {
             if (localBaseMap[pid] === undefined) {
               const pDate = postDateMap[pid] || '';
               const isPostHoje = pDate >= limiteHoje;
               localBaseMap[pid] = isPostHoje ? 0 : v;
             }
-            const diff = Math.max(0, v - localBaseMap[pid]);
+            runningPostViews[pid] = Math.max(runningPostViews[pid] || 0, v);
+          }
+
+          let viewsGanhasDc = 0;
+          for (const [pid, v] of Object.entries(runningPostViews)) {
+            const diff = Math.max(0, v - (localBaseMap[pid] || 0));
             viewsGanhasDc += diff;
           }
-          curva.push(viewsGanhasDc);
+
+          // A curva de acessos acumulados ao longo do dia é matematicamente cumulativa (monótona não decrescente)
+          const ponto = Math.max(curva[curva.length - 1], viewsGanhasDc);
+          curva.push(ponto);
         }
 
         // Garante que a curva reflita no último ponto o acumulado consolidado do dia
