@@ -12,6 +12,7 @@ interface AnomaliaItem {
   id: number;
   username: string;
   data_coleta: string;
+  views_dia?: number | null;
   seguidores: number;
   total_posts: number;
   foto_url: string;
@@ -101,7 +102,7 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
   const [linkManualErro, setLinkManualErro] = useState<string | null>(null);
 
   // Ordenação da tabela
-  type SortCol = 'dia_operacao' | 'data_coleta' | 'seguidores' | 'delta_s' | 'pct_delta_s' | 'tipo_janela' | 'revisado_manualmente';
+  type SortCol = 'dia_operacao' | 'data_coleta' | 'views_dia' | 'seguidores' | 'delta_s' | 'pct_delta_s' | 'tipo_janela' | 'revisado_manualmente';
   const [sortCol, setSortCol] = useState<SortCol>('data_coleta');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
@@ -422,7 +423,7 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
       setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     } else {
       setSortCol(col);
-      setSortDir(col === 'dia_operacao' || col === 'data_coleta' ? 'desc' : 'asc');
+      setSortDir(col === 'dia_operacao' || col === 'data_coleta' ? 'desc' : (col === 'views_dia' || col === 'seguidores' || col === 'delta_s' || col === 'pct_delta_s' ? 'desc' : 'asc'));
     }
   };
 
@@ -455,6 +456,9 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
       } else if (sortCol === 'tipo_janela') {
         aVal = a.tipo_janela || '';
         bVal = b.tipo_janela || '';
+      } else if (sortCol === 'views_dia') {
+        aVal = a.views_dia !== null && a.views_dia !== undefined ? Number(a.views_dia) : -1;
+        bVal = b.views_dia !== null && b.views_dia !== undefined ? Number(b.views_dia) : -1;
       } else {
         aVal = Number(a[sortCol]) || 0;
         bVal = Number(b[sortCol]) || 0;
@@ -968,6 +972,19 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                         </span>
                       </th>
 
+                      {/* VISUALIZAÇÕES NO DIA */}
+                      <th
+                        onClick={() => handleSort('views_dia')}
+                        className="anomalias-th-sortable"
+                        title="Número de visualizações no dia"
+                        style={{ color: sortCol === 'views_dia' ? '#00F0FF' : undefined, textAlign: 'right' }}
+                      >
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+                          Visualizações (Dia)
+                          <span className="anomalias-sort-arrow">{sortCol === 'views_dia' ? (sortDir === 'asc' ? '▲' : '▼') : '⬍'}</span>
+                        </span>
+                      </th>
+
                       {/* SEGUIDORES */}
                       <th
                         onClick={() => handleSort('seguidores')}
@@ -1076,6 +1093,25 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                           {/* 2. Data Coleta */}
                           <td style={{ fontSize: 12, color: '#8B949E', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
                             {formatDateTimeBR(item.data_coleta)}
+                          </td>
+
+                          {/* 2.5 Visualizações no Dia */}
+                          <td
+                            style={{
+                              textAlign: 'right',
+                              fontWeight: 700,
+                              color: item.views_dia !== null && item.views_dia !== undefined && item.views_dia > 0 ? '#00F0FF' : '#8B949E',
+                              fontFamily: 'monospace'
+                            }}
+                            title={
+                              item.views_dia !== null && item.views_dia !== undefined
+                                ? `${item.views_dia.toLocaleString('pt-BR')} visualizações no dia`
+                                : 'Sem dados de visualizações para este dia'
+                            }
+                          >
+                            {item.views_dia !== null && item.views_dia !== undefined
+                              ? item.views_dia.toLocaleString('pt-BR')
+                              : '—'}
                           </td>
 
                           {/* 3. Seguidores */}

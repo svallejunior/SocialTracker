@@ -155,6 +155,42 @@ export async function GET(request: NextRequest) {
           LAG(h.data_coleta) OVER (PARTITION BY h.username ORDER BY h.data_coleta, h.id) AS data_coleta_anterior,
           ROW_NUMBER() OVER (PARTITION BY h.username ORDER BY h.data_coleta DESC, h.id DESC) AS ordem_dia_desc
         FROM historico_diario h
+      ),
+      daily_post_views AS (
+        SELECT 
+          LOWER(s.username) as uname,
+          SUBSTR(s.data_carga, 1, 10) as dia,
+          s.post_id,
+          MAX(s.views) as max_views,
+          SUBSTR(p.data_postagem, 1, 10) as dia_postagem
+        FROM posts_metricas_snapshots s
+        LEFT JOIN posts_historico p ON p.post_id = s.post_id
+        ${filterUsername ? 'WHERE LOWER(s.username) = LOWER(?)' : 'WHERE 1 = 0'}
+        GROUP BY LOWER(s.username), SUBSTR(s.data_carga, 1, 10), s.post_id
+      ),
+      with_prev_views AS (
+        SELECT 
+          uname,
+          dia,
+          post_id,
+          max_views,
+          dia_postagem,
+          LAG(max_views) OVER (PARTITION BY uname, post_id ORDER BY dia) as prev_views
+        FROM daily_post_views
+      ),
+      views_por_dia AS (
+        SELECT 
+          uname,
+          dia,
+          SUM(
+            CASE 
+              WHEN prev_views IS NOT NULL THEN MAX(0, max_views - prev_views)
+              WHEN dia_postagem = dia THEN max_views
+              ELSE 0 
+            END
+          ) as views_dia
+        FROM with_prev_views
+        GROUP BY uname, dia
       )
       SELECT
         h.id,
@@ -169,16 +205,19 @@ export async function GET(request: NextRequest) {
         COALESCE(h.revisado_manualmente, 0) AS revisado_manualmente,
         COALESCE(NULLIF(pm.foto_perfil_meta, ''), NULLIF(cp.foto_url, ''), '') as foto_url,
         COALESCE(pm.primeira_postagem, cp.inicio) as primeira_postagem,
-        COALESCE(pm.meu_perfil, 0) as meu_perfil
+        COALESCE(pm.meu_perfil, 0) as meu_perfil,
+        v.views_dia
       FROM historico_com_anterior h
       LEFT JOIN perfis_monitorados pm ON LOWER(pm.username) = LOWER(h.username)
       LEFT JOIN controle_perfis cp ON LOWER(cp.username) = LOWER(h.username)
+      LEFT JOIN views_por_dia v ON v.uname = LOWER(h.username) AND v.dia = SUBSTR(h.data_coleta, 1, 10)
       WHERE 1 = 1
     `;
     const params: any[] = [];
 
     if (filterUsername) {
-      params.push(filterUsername); // filtro dentro da CTE base
+      params.push(filterUsername); // filtro dentro da CTE ultimas_coletas_dia
+      params.push(filterUsername); // filtro dentro da CTE daily_post_views
     }
 
     if (filterUsername) {
@@ -251,6 +290,7 @@ export async function GET(request: NextRequest) {
         id: item.id,
         username: item.username,
         data_coleta: item.data_coleta,
+        views_dia: item.views_dia !== null && item.views_dia !== undefined ? Number(item.views_dia) : null,
         seguidores: item.seguidores,
         total_posts: item.total_posts,
         foto_url: item.foto_url || '',
