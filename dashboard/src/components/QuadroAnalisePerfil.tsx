@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   TrendingUp, Users, Calendar, Eye, Target, Percent,
   Activity, MessageSquare, Check, Trash2, Edit, RefreshCw,
-  Hash, ChevronLeft, ChevronRight
+  Hash, ChevronLeft, ChevronRight, MousePointerClick
 } from 'lucide-react';
 import AvatarModelo from './AvatarModelo';
 
@@ -22,9 +22,9 @@ export interface RegistroAnalise {
   interacoes: number;
   nao_seguidores_pct: number;
   contas_alcancadas: number; // Visualizadores
+  visitas_perfil: number;
   conteudo_principal: number | string;
   impressoes?: number;
-  visitas_perfil?: number;
   engajamento?: number;
   criado_em?: string;
   atualizado_em?: string;
@@ -101,14 +101,15 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
     return modelos.find(m => m.username.toLowerCase() === selectedUsername.toLowerCase()) || null;
   }, [modelos, selectedUsername]);
 
-  // Estado do formulário na exata ordem solicitada:
+  // Estado do formulário:
   // 1. Período (Sáb a Sex)
   // 2. Visualizações
   // 3. Seguidores (manual - não preenche automaticamente)
   // 4. Interações
   // 5. Não seguidores (%)
   // 6. Visualizadores (antigo contas alcançadas)
-  // 7. Conteúdo principal (número)
+  // 7. Visitas ao Perfil
+  // 8. Conteúdo principal (número)
   const [form, setForm] = useState({
     id: null as number | null,
     data_inicio: getPeriodoSabSex(0).data_inicio,
@@ -118,6 +119,7 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
     interacoes: '',
     nao_seguidores_pct: '',
     contas_alcancadas: '', // Visualizadores
+    visitas_perfil: '',
     conteudo_principal: ''  // Número
   });
 
@@ -167,16 +169,17 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
         interacoes: 0,
         mediaNaoSeguidores: 0,
         visualizadores: 0,
+        visitas_perfil: 0,
         conteudoPrincipal: 0
       };
     }
 
     const totalViews = registros.reduce((acc, r) => acc + (Number(r.visualizacoes) || 0), 0);
-    // Último valor de seguidores registrado ou média
     const ultimosSeguidores = registros[0]?.seguidores ? Number(registros[0].seguidores) : 0;
     const totalInteracoes = registros.reduce((acc, r) => acc + (Number(r.interacoes) || 0), 0);
     const mediaNaoSeg = registros.reduce((acc, r) => acc + (Number(r.nao_seguidores_pct) || 0), 0) / totalSemanas;
     const totalVisualizadores = registros.reduce((acc, r) => acc + (Number(r.contas_alcancadas) || 0), 0);
+    const totalVisitas = registros.reduce((acc, r) => acc + (Number(r.visitas_perfil) || 0), 0);
     const totalConteudo = registros.reduce((acc, r) => acc + (Number(r.conteudo_principal) || 0), 0);
 
     return {
@@ -186,6 +189,7 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
       interacoes: totalInteracoes,
       mediaNaoSeguidores: mediaNaoSeg,
       visualizadores: totalVisualizadores,
+      visitas_perfil: totalVisitas,
       conteudoPrincipal: totalConteudo
     };
   }, [registros]);
@@ -229,9 +233,9 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
         interacoes: Number(form.interacoes) || 0,
         nao_seguidores_pct: Number(form.nao_seguidores_pct) || 0,
         contas_alcancadas: Number(form.contas_alcancadas) || 0, // Visualizadores
+        visitas_perfil: Number(form.visitas_perfil) || 0,
         conteudo_principal: Number(form.conteudo_principal) || 0,
         impressoes: 0,
-        visitas_perfil: 0,
         engajamento: 0
       };
 
@@ -259,6 +263,7 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
           interacoes: '',
           nao_seguidores_pct: '',
           contas_alcancadas: '',
+          visitas_perfil: '',
           conteudo_principal: ''
         });
         carregarRegistros(selectedUsername);
@@ -284,6 +289,7 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
       interacoes: String(r.interacoes || ''),
       nao_seguidores_pct: String(r.nao_seguidores_pct || ''),
       contas_alcancadas: String(r.contas_alcancadas || ''),
+      visitas_perfil: String(r.visitas_perfil || ''),
       conteudo_principal: String(r.conteudo_principal || '')
     });
     // Rola suavemente até o formulário
@@ -477,7 +483,6 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                     key={m.username}
                     onClick={() => {
                       setSelectedUsername(m.username);
-                      // Se estava editando, limpa formulário ao trocar
                       if (form.id) {
                         const p = getPeriodoSabSex(offsetSemana);
                         setForm({
@@ -489,6 +494,7 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                           interacoes: '',
                           nao_seguidores_pct: '',
                           contas_alcancadas: '',
+                          visitas_perfil: '',
                           conteudo_principal: ''
                         });
                       }
@@ -551,7 +557,7 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
           </div>
         </div>
 
-        {/* ─── 3. SOMATÓRIO SEMANAL (CARDS DE SCORE NA NOVA ORDEM) ─── */}
+        {/* ─── 3. SOMATÓRIO SEMANAL (CARDS DE SCORE) ─── */}
         <div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
             <span style={{ fontSize: '11px', fontWeight: 800, color: '#8B949E', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
@@ -734,7 +740,7 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
               </div>
             </div>
 
-            {/* 6. Conteúdo Principal (Número) */}
+            {/* 6. Visitas ao Perfil */}
             <div style={{
               background: '#0D1117',
               border: '1px solid rgba(245, 158, 11, 0.25)',
@@ -755,13 +761,47 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                 justifyContent: 'center',
                 flexShrink: 0
               }}>
+                <MousePointerClick size={20} />
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: '#8B949E', textTransform: 'uppercase' }}>
+                  Visitas Perfil
+                </span>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: '#F59E0B', lineHeight: 1.1, marginTop: '2px' }}>
+                  {fmtNum(somatorioSemanal.visitas_perfil)}
+                </div>
+                <span style={{ fontSize: '10px', color: '#586069' }}>Total de visitas</span>
+              </div>
+            </div>
+
+            {/* 7. Conteúdo Principal (Número) */}
+            <div style={{
+              background: '#0D1117',
+              border: '1px solid rgba(16, 185, 129, 0.25)',
+              borderRadius: '12px',
+              padding: '14px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
+            }}>
+              <div style={{
+                width: '40px',
+                height: '40px',
+                borderRadius: '10px',
+                background: 'rgba(16, 185, 129, 0.12)',
+                color: '#10B981',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
                 <Hash size={20} />
               </div>
               <div style={{ minWidth: 0 }}>
                 <span style={{ fontSize: '11px', fontWeight: 700, color: '#8B949E', textTransform: 'uppercase' }}>
                   Conteúdo Total
                 </span>
-                <div style={{ fontSize: '20px', fontWeight: 800, color: '#F59E0B', lineHeight: 1.1, marginTop: '2px' }}>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: '#10B981', lineHeight: 1.1, marginTop: '2px' }}>
                   {fmtNum(somatorioSemanal.conteudoPrincipal)}
                 </div>
                 <span style={{ fontSize: '10px', color: '#586069' }}>Qtd. conteúdos somados</span>
@@ -770,7 +810,7 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
           </div>
         </div>
 
-        {/* ─── 4. FORMULÁRIO E CAMPOS DE ENTRADA NA ORDEM EXATA SOLICITADA ─── */}
+        {/* ─── 4. FORMULÁRIO E CAMPOS DE ENTRADA NA ORDEM EXATA ─── */}
         <div id="quadro-analise-form" style={{
           background: '#0D1117',
           border: '1px solid #21262D',
@@ -862,6 +902,7 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                       interacoes: '',
                       nao_seguidores_pct: '',
                       contas_alcancadas: '',
+                      visitas_perfil: '',
                       conteudo_principal: ''
                     });
                   }}
@@ -1076,10 +1117,34 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                 />
               </div>
 
-              {/* 7. CONTEÚDO PRINCIPAL (EM NÚMERO) */}
+              {/* 7. VISITAS AO PERFIL */}
               <div>
                 <label style={{ fontSize: '11px', color: '#8B949E', fontWeight: 700, display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
-                  7. Conteúdo Principal (Número)
+                  7. Visitas ao Perfil
+                </label>
+                <input
+                  type="number"
+                  placeholder="Ex: 1420"
+                  value={form.visitas_perfil}
+                  onChange={e => setForm(f => ({ ...f, visitas_perfil: e.target.value }))}
+                  style={{
+                    width: '100%',
+                    background: '#161B22',
+                    border: '1px solid #30363D',
+                    borderRadius: '8px',
+                    padding: '10px 12px',
+                    color: 'white',
+                    fontSize: '13px',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              {/* 8. CONTEÚDO PRINCIPAL (EM NÚMERO) */}
+              <div>
+                <label style={{ fontSize: '11px', color: '#8B949E', fontWeight: 700, display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
+                  8. Conteúdo Principal (Número)
                 </label>
                 <input
                   type="number"
@@ -1167,13 +1232,14 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid #30363D', color: '#8B949E', textTransform: 'uppercase', fontSize: '10px', letterSpacing: '0.05em' }}>
-                  <th style={{ padding: '10px 12px' }}>1. Período (Sáb a Sex)</th>
-                  <th style={{ padding: '10px 12px' }}>2. Visualizações</th>
-                  <th style={{ padding: '10px 12px' }}>3. Seguidores</th>
-                  <th style={{ padding: '10px 12px' }}>4. Interações</th>
-                  <th style={{ padding: '10px 12px' }}>5. Não Seg. (%)</th>
-                  <th style={{ padding: '10px 12px' }}>6. Visualizadores</th>
-                  <th style={{ padding: '10px 12px' }}>7. Conteúdo Principal</th>
+                  <th style={{ padding: '10px 12px' }}>Período (Sáb a Sex)</th>
+                  <th style={{ padding: '10px 12px' }}>Visualizações</th>
+                  <th style={{ padding: '10px 12px' }}>Seguidores</th>
+                  <th style={{ padding: '10px 12px' }}>Interações</th>
+                  <th style={{ padding: '10px 12px' }}>Não Seg. (%)</th>
+                  <th style={{ padding: '10px 12px' }}>Visualizadores</th>
+                  <th style={{ padding: '10px 12px' }}>Visitas Perfil</th>
+                  <th style={{ padding: '10px 12px' }}>Conteúdo Principal</th>
                   <th style={{ padding: '10px 12px', textAlign: 'right' }}>Ações</th>
                 </tr>
               </thead>
@@ -1206,7 +1272,10 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                     <td style={{ padding: '10px 12px', color: '#A855F7' }}>
                       {r.contas_alcancadas > 0 ? fmtNum(r.contas_alcancadas) : '—'}
                     </td>
-                    <td style={{ padding: '10px 12px', color: '#F59E0B', fontWeight: 700 }}>
+                    <td style={{ padding: '10px 12px', color: '#F59E0B' }}>
+                      {r.visitas_perfil > 0 ? fmtNum(r.visitas_perfil) : '—'}
+                    </td>
+                    <td style={{ padding: '10px 12px', color: '#10B981', fontWeight: 700 }}>
                       {r.conteudo_principal ? String(r.conteudo_principal) : '—'}
                     </td>
                     <td style={{ padding: '10px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
