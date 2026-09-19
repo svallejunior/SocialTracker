@@ -11,6 +11,15 @@ interface MensagemRow {
   created_at: number;
 }
 
+interface OutboxRow {
+  id: number;
+  texto: string;
+  created_at: number;
+  sent_at: number | null;
+  failed_at: number | null;
+  last_error: string | null;
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -55,10 +64,33 @@ export async function GET(request: NextRequest) {
         id: `tg_${r.id}`,
         direcao: r.role === 'user' ? 'recebida' : 'enviada',
         texto: r.content,
-        timestamp: new Date(r.created_at * 1000).toISOString()
+        timestamp: new Date(r.created_at * 1000).toISOString(),
+        status: 'ok' as const
       }));
 
-      return NextResponse.json({ success: true, mensagens });
+      // Mensagens manuais ainda pendentes ou que falharam de vez (ex: lead que nunca
+      // conversou com a Luna) — sem isso, um envio que falha simplesmente some sem explicação.
+      const outboxRows = await db.all<OutboxRow[]>(
+        `SELECT id, texto, created_at, sent_at, failed_at, last_error FROM outbox
+         WHERE chat_id = ? AND sent_at IS NULL ORDER BY id ASC`,
+        [chatId]
+      );
+      const pendentes = (outboxRows || []).map((r) => ({
+        id: `ob_${r.id}`,
+        direcao: 'enviada' as const,
+        texto: r.texto,
+        timestamp: new Date(r.created_at * 1000).toISOString(),
+        status: r.failed_at ? ('falhou' as const) : ('pendente' as const),
+        erro: r.failed_at
+          ? 'Não entregue — provavelmente esse lead nunca mandou mensagem pra Luna antes (Telegram exige contato prévio).'
+          : undefined
+      }));
+
+      const todas = [...mensagens, ...pendentes].sort(
+        (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+      );
+
+      return NextResponse.json({ success: true, mensagens: todas });
     }
 
     return NextResponse.json({ success: false, error: 'Ação inválida' }, { status: 400 });

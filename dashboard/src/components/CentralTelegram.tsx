@@ -28,6 +28,8 @@ interface MensagemTelegram {
   direcao: 'recebida' | 'enviada';
   texto: string;
   timestamp: string;
+  status?: 'ok' | 'pendente' | 'falhou';
+  erro?: string;
 }
 
 const STAGE_LABELS: Record<string, string> = {
@@ -378,23 +380,36 @@ export default function CentralTelegram() {
                 ) : (
                   mensagens.map(msg => {
                     const isMinha = msg.direcao === 'enviada';
+                    const falhou = msg.status === 'falhou';
+                    const pendente = msg.status === 'pendente';
                     return (
                       <div key={msg.id} style={{
                         display: 'flex', flexDirection: 'column', maxWidth: '75%',
                         alignSelf: isMinha ? 'flex-end' : 'flex-start', alignItems: isMinha ? 'flex-end' : 'flex-start'
                       }}>
                         <div style={{
-                          background: isMinha ? 'linear-gradient(135deg, #7100E2 0%, #00F0FF 100%)' : '#161B22',
-                          color: isMinha ? '#FFFFFF' : '#E6EDF3',
-                          border: isMinha ? 'none' : '1px solid #30363D',
+                          background: falhou
+                            ? 'rgba(248, 81, 73, 0.12)'
+                            : isMinha ? 'linear-gradient(135deg, #7100E2 0%, #00F0FF 100%)' : '#161B22',
+                          color: falhou ? '#F85149' : isMinha ? '#FFFFFF' : '#E6EDF3',
+                          border: falhou ? '1px solid rgba(248, 81, 73, 0.4)' : isMinha ? 'none' : '1px solid #30363D',
                           borderRadius: isMinha ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
-                          padding: '10px 14px', fontSize: 13, lineHeight: 1.5, wordBreak: 'break-word'
+                          padding: '10px 14px', fontSize: 13, lineHeight: 1.5, wordBreak: 'break-word',
+                          opacity: pendente ? 0.6 : 1
                         }}>
                           {msg.texto}
                         </div>
-                        <div style={{ fontSize: 10, color: '#8B949E', marginTop: 4, padding: '0 4px', display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <span>{formatHora(msg.timestamp)}</span>
-                          {isMinha && <CheckCheck size={12} color="#00F0FF" />}
+                        <div style={{ fontSize: 10, color: falhou ? '#F85149' : '#8B949E', marginTop: 4, padding: '0 4px', display: 'flex', alignItems: 'center', gap: 4, maxWidth: 260 }}>
+                          {falhou ? (
+                            <span title={msg.erro}>⚠️ Não entregue — lead nunca conversou com a Luna antes</span>
+                          ) : pendente ? (
+                            <span>Enviando...</span>
+                          ) : (
+                            <>
+                              <span>{formatHora(msg.timestamp)}</span>
+                              {isMinha && <CheckCheck size={12} color="#00F0FF" />}
+                            </>
+                          )}
                         </div>
                       </div>
                     );
