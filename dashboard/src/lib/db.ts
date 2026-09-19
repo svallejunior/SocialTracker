@@ -364,3 +364,57 @@ export async function getDb(): Promise<Db> {
   }
   return dbPromise;
 }
+
+// ─────────────────────────────────────────────
+// Banco do bot de vendas no Telegram (projeto separado: telegram-sales-bot).
+// Schema (leads, messages, outbox, ...) é criado e migrado pelo próprio bot
+// Python — aqui só lemos/escrevemos nas tabelas já existentes, nunca criamos.
+// ─────────────────────────────────────────────
+
+export function resolveTelegramDbPath(): string {
+  if (process.env.TELEGRAM_DB_PATH && fs.existsSync(process.env.TELEGRAM_DB_PATH)) {
+    return process.env.TELEGRAM_DB_PATH;
+  }
+  return process.env.TELEGRAM_DB_PATH || '';
+}
+
+let telegramDbPromise: Promise<Db> | null = null;
+
+async function abrirConexaoTelegram(): Promise<Db> {
+  const dbPath = resolveTelegramDbPath();
+  if (!dbPath) {
+    throw new Error(
+      'TELEGRAM_DB_PATH não configurado ou arquivo inexistente. Defina no .env.local apontando ' +
+      'para o data/bot.db do projeto telegram-sales-bot.'
+    );
+  }
+
+  const db = await open({ filename: dbPath, driver: sqlite3.Database });
+  db.getDatabaseInstance().configure('busyTimeout', 10000);
+
+  try {
+    await db.exec(`
+      PRAGMA journal_mode = WAL;
+      PRAGMA synchronous = NORMAL;
+      PRAGMA busy_timeout = 10000;
+    `);
+  } catch (e) {
+    // Silencia se PRAGMA já estiver ativo
+  }
+
+  return db;
+}
+
+/**
+ * Conexão compartilhada com o banco do bot do Telegram (leads/messages/outbox).
+ * Não feche a conexão retornada — é reaproveitada por todas as rotas.
+ */
+export async function getTelegramDb(): Promise<Db> {
+  if (!telegramDbPromise) {
+    telegramDbPromise = abrirConexaoTelegram().catch((err) => {
+      telegramDbPromise = null;
+      throw err;
+    });
+  }
+  return telegramDbPromise;
+}

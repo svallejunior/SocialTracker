@@ -7,6 +7,9 @@ import {
 } from 'lucide-react';
 import AvatarModelo from './AvatarModelo';
 import CentralComentarios from './CentralComentarios';
+import CentralTelegram from './CentralTelegram';
+
+const TELEGRAM_BOT_USERNAME = (process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || '').toLowerCase().replace('@', '');
 
 interface Profile {
   username: string;
@@ -74,7 +77,7 @@ export default function CentralRespostas({ profiles = [], onRefresh }: CentralRe
     return comPendencia?.username || perfisComMeta[0]?.username || '';
   });
 
-  const [subTab, setSubTab] = useState<'COMENTARIOS' | 'DMS'>('COMENTARIOS');
+  const [subTab, setSubTab] = useState<'COMENTARIOS' | 'DMS' | 'TELEGRAM'>('COMENTARIOS');
 
   const [conversas, setConversas] = useState<Conversa[]>([]);
   const [selectedRemetente, setSelectedRemetente] = useState<string | null>(null);
@@ -95,6 +98,16 @@ export default function CentralRespostas({ profiles = [], onRefresh }: CentralRe
   const activeProfile = perfisComMeta.find(
     p => p.username.toLowerCase() === selectedUsername.toLowerCase()
   ) || perfisComMeta[0];
+
+  // A aba Telegram só existe pro perfil dono do bot (hoje só a Luna)
+  const temBotTelegram = Boolean(TELEGRAM_BOT_USERNAME) && activeProfile?.username?.toLowerCase() === TELEGRAM_BOT_USERNAME;
+
+  // Se trocou de modelo e a aba Telegram não se aplica mais, volta pra Comentários
+  useEffect(() => {
+    if (subTab === 'TELEGRAM' && !temBotTelegram) {
+      setSubTab('COMENTARIOS');
+    }
+  }, [subTab, temBotTelegram]);
 
   // Ajusta se o perfil selecionado atual não estiver na lista com Meta ID
   useEffect(() => {
@@ -669,16 +682,45 @@ export default function CentralRespostas({ profiles = [], onRefresh }: CentralRe
               </span>
             )}
           </button>
+
+          {temBotTelegram && (
+            <button
+              onClick={() => setSubTab('TELEGRAM')}
+              style={{
+                background: subTab === 'TELEGRAM'
+                  ? 'linear-gradient(135deg, rgba(0, 136, 255, 0.25), rgba(113, 0, 226, 0.35))'
+                  : 'rgba(255, 255, 255, 0.04)',
+                border: subTab === 'TELEGRAM' ? '1.5px solid #0088FF' : '1px solid rgba(240, 246, 252, 0.1)',
+                color: subTab === 'TELEGRAM' ? '#FFFFFF' : '#8B949E',
+                padding: '8px 18px',
+                borderRadius: 10,
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                boxShadow: subTab === 'TELEGRAM' ? '0 0 14px rgba(0, 136, 255, 0.25)' : 'none',
+                transition: 'all 0.2s'
+              }}
+              title="Leads do bot de vendas no Telegram (CRM)"
+            >
+              <MessageSquare size={15} color={subTab === 'TELEGRAM' ? '#0088FF' : '#8B949E'} />
+              <span>🤖 Telegram (Bot de Vendas)</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* ─── CORPO CONDICIONAL: COMENTÁRIOS OU DIRECTS ─── */}
+      {/* ─── CORPO CONDICIONAL: COMENTÁRIOS, DIRECTS OU TELEGRAM ─── */}
       {subTab === 'COMENTARIOS' ? (
         <CentralComentarios
           selectedUsername={selectedUsername}
           onRefreshStats={onRefresh}
           profiles={profiles}
         />
+      ) : subTab === 'TELEGRAM' ? (
+        <CentralTelegram />
       ) : (
         /* ─── 2. SPLIT SCREEN: CONVERSAS À ESQUERDA + CHAT À DIREITA ─── */
         <div style={{
