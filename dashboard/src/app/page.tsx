@@ -1969,10 +1969,20 @@ export default function Dashboard() {
   // Dados brutos da API
   const lastValidProfilesRef = useRef<any[]>([]);
   const [profiles, setProfiles] = useState<any[]>([]);
+  const profilesRef = useRef<any[]>([]);
   const [posts, setPosts] = useState<any[]>([]);
   const [followersHistory, setFollowersHistory] = useState<any>({});
   const [viewsHistory, setViewsHistory] = useState<any>({});
   const [ultimaAtualizacaoGeral, setUltimaAtualizacaoGeral] = useState<string>('');
+  const ultimaAtualizacaoGeralRef = useRef<string>('');
+
+  useEffect(() => {
+    profilesRef.current = profiles;
+  }, [profiles]);
+
+  useEffect(() => {
+    ultimaAtualizacaoGeralRef.current = ultimaAtualizacaoGeral;
+  }, [ultimaAtualizacaoGeral]);
 
   // Estados de Navegação e Filtros
   const [activeTab, setActiveTab] = useState<'perfis' | 'cards' | 'graficos' | 'posts' | 'anomalias' | 'automatizacao' | 'respostas'>('perfis');
@@ -2292,6 +2302,7 @@ export default function Dashboard() {
       if (json.success) {
         if (json.ultimaAtualizacao) {
           setUltimaAtualizacaoGeral(json.ultimaAtualizacao);
+          ultimaAtualizacaoGeralRef.current = json.ultimaAtualizacao;
         }
         const rawPosts = json.posts || [];
         const rawProfiles = json.profiles || [];
@@ -2521,6 +2532,7 @@ export default function Dashboard() {
 
         if (enrichedProfiles.length > 0) {
           lastValidProfilesRef.current = enrichedProfiles;
+          profilesRef.current = enrichedProfiles;
           setProfiles(enrichedProfiles);
         }
         if (enrichedPosts.length > 0) {
@@ -2573,6 +2585,10 @@ export default function Dashboard() {
   const [controleData, setControleData] = useState<any[]>([]);
   const [controleLoading, setControleLoading] = useState(false);
   const [ultimaMetaExec, setUltimaMetaExec] = useState<string | null>(null);
+  const ultimaMetaExecRef = useRef<string | null>(null);
+  useEffect(() => {
+    ultimaMetaExecRef.current = ultimaMetaExec;
+  }, [ultimaMetaExec]);
   const [modalLancamento, setModalLancamento] = useState<{ username: string; tipo: string; } | null>(null);
   const [modalControleEdit, setModalControleEdit] = useState<any | null>(null);
   const [modalMelhoresHorarios, setModalMelhoresHorarios] = useState<any | null>(null);
@@ -2652,41 +2668,78 @@ export default function Dashboard() {
   async function fetchControle(background = false) {
     if (!background) setControleLoading(true);
     try {
-      const res = await fetch('/api/controle');
+      const res = await fetch('/api/controle', { cache: 'no-store' });
       const json = await res.json();
       if (json.success) {
         const fresh: any[] = json.perfis || [];
-        const freshByUser = new Map(fresh.map((f: any) => [f.username, f]));
+        const freshByUser = new Map(fresh.map((f: any) => [(f.username || '').toLowerCase(), f]));
 
         setControleData(prev => {
           if (prev.length === 0) return fresh;
-          const prevByUser = new Map(prev.map((p: any) => [p.username, p]));
+          const prevByUser = new Map(prev.map((p: any) => [(p.username || '').toLowerCase(), p]));
           return fresh.map((f: any) => {
-            const old = prevByUser.get(f.username);
+            const old = prevByUser.get((f.username || '').toLowerCase());
             return old && JSON.stringify(old) === JSON.stringify(f) ? old : f;
           });
         });
 
-        // Reflete os seguidores de "minhas modelos" (única origem desta rota)
-        // também na lista principal de perfis, sem refazer o fetchData() inteiro.
-        // Esta rota traz o valor bruto da última coleta (sem o forward-fill que
-        // /api/data aplica pra ignorar quedas transitórias pra 0) — só aplica
-        // o patch quando vier um valor positivo, pelo mesmo motivo.
-        setProfiles(prev => {
-          let changed = false;
-          const next = prev.map((p: any) => {
-            const f = freshByUser.get(p.username);
+        const serverUltima = json.ultima_atualizacao || null;
+        const currentUltima = ultimaAtualizacaoGeralRef.current || null;
+        const hasNewUpdateTimestamp = Boolean(serverUltima && currentUltima && serverUltima > currentUltima);
+
+        // Verifica se houve mudança de seguidores ou novas coletas em qualquer modelo monitorada
+        const prevProfiles = profilesRef.current;
+        let hasFollowersChange = false;
+        if (prevProfiles.length > 0) {
+          for (const p of prevProfiles) {
+            const f = freshByUser.get((p.username || '').toLowerCase());
             if (f && Number(f.seguidores) > 0 && Number(f.seguidores) !== Number(p.seguidores || 0)) {
-              changed = true;
-              return { ...p, seguidores: f.seguidores };
+              hasFollowersChange = true;
+              break;
             }
-            return p;
-          });
-          return changed ? next : prev;
-        });
+          }
+        }
+
+        const serverMeta = json.ultima_execucao_meta || null;
+        const currentMeta = ultimaMetaExecRef.current || null;
+        const hasNewMeta = Boolean(serverMeta && currentMeta && serverMeta > currentMeta);
 
         if (json.ultima_execucao_meta) {
           setUltimaMetaExec(json.ultima_execucao_meta);
+          ultimaMetaExecRef.current = json.ultima_execucao_meta;
+        }
+
+        // Se houver alteração de seguidores, novo ciclo de coleta ou nova ingestão Meta:
+        // Atualiza TUDO em conjunto (seguidores, delta diário, horário e sparklines)
+        // para garantir total coerência visual sem estados parciais defasados.
+        if (hasFollowersChange || hasNewUpdateTimestamp || hasNewMeta) {
+          if (serverUltima) {
+            setUltimaAtualizacaoGeral(serverUltima);
+            ultimaAtualizacaoGeralRef.current = serverUltima;
+          }
+
+          setProfiles(prev => {
+            return prev.map((p: any) => {
+              const f = freshByUser.get((p.username || '').toLowerCase());
+              if (!f || !Number(f.seguidores)) return p;
+              return {
+                ...p,
+                seguidores: f.seguidores,
+                novosSeguidoresDia: f.novos_seguidores_dia !== undefined ? f.novos_seguidores_dia : p.novosSeguidoresDia,
+                novos_seguidores_dia: f.novos_seguidores_dia !== undefined ? f.novos_seguidores_dia : p.novos_seguidores_dia,
+                novos_seguidores_coleta: f.novos_seguidores_coleta !== undefined ? f.novos_seguidores_coleta : p.novos_seguidores_coleta,
+                views_dia: f.views_dia !== undefined ? f.views_dia : p.views_dia,
+                views_delta_ultima_carga: f.views_delta_ultima_carga !== undefined ? f.views_delta_ultima_carga : p.views_delta_ultima_carga,
+                data_coleta: f.ultima_coleta || p.data_coleta
+              };
+            });
+          });
+
+          // Dispara busca completa em background (silent=true) para recalcular sparklines, posts e histórico
+          fetchData(true);
+        } else if (serverUltima && !currentUltima) {
+          setUltimaAtualizacaoGeral(serverUltima);
+          ultimaAtualizacaoGeralRef.current = serverUltima;
         }
       }
     } catch (e) {

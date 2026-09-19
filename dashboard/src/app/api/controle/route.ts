@@ -526,11 +526,17 @@ export async function GET() {
       };
     });
 
+    const lastUpdateRow = await db.get(`
+      SELECT MAX(data_coleta) as ultima_coleta FROM perfis_historico
+    `).catch(() => null);
+    const ultimaAtualizacao = lastUpdateRow?.ultima_coleta || null;
+
     // Retorna a lista perfeitamente segura para o Frontend mapear sem erros
     return NextResponse.json({ 
       success: true, 
       perfis: perfisTratados,
-      ultima_execucao_meta: ultimaExecucaoMeta
+      ultima_execucao_meta: ultimaExecucaoMeta,
+      ultima_atualizacao: ultimaAtualizacao
     }, {
       headers: { 'Cache-Control': 'no-store' }
     });
