@@ -63,9 +63,11 @@ export default function CentralTelegram() {
       const data = await res.json();
       if (data.success) {
         setLeads(data.leads || []);
-        if (!selectedChatId && data.leads?.length > 0) {
-          setSelectedChatId(data.leads[0].chat_id);
-        }
+        // Forma funcional (lê o estado atual, não uma closure velha do momento em que o
+        // polling foi criado) — senão isso reseta a seleção do usuário a cada 20s, mesmo
+        // depois dele já ter clicado manualmente em outro lead. Era exatamente o bug que
+        // fez uma mensagem digitada pra um lead sair endereçada pra outro.
+        setSelectedChatId(prev => prev ?? (data.leads?.[0]?.chat_id ?? null));
       }
     } catch (err: unknown) {
       setStatusMsg({ text: `Erro ao carregar leads: ${errMsg(err)}`, type: 'error' });
