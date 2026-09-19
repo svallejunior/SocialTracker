@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Send, Search, CheckCheck, RefreshCw, Inbox, Link2, Power, PowerOff,
-  ShoppingBag, MessageSquare
+  ShoppingBag, MessageSquare, UserPlus, X
 } from 'lucide-react';
 
 function errMsg(err: unknown): string {
@@ -51,6 +51,10 @@ export default function CentralTelegram() {
   const [enviando, setEnviando] = useState(false);
   const [handleInput, setHandleInput] = useState('');
   const [statusMsg, setStatusMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [showAddLead, setShowAddLead] = useState(false);
+  const [addIdentifier, setAddIdentifier] = useState('');
+  const [addNome, setAddNome] = useState('');
+  const [addingLead, setAddingLead] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -173,6 +177,60 @@ export default function CentralTelegram() {
     });
   };
 
+  const pollImportStatus = (identifier: string, nome: string, tentativa = 0) => {
+    // O bot resolve o @usuário/chat_id em segundo plano (poll de 5s) — em vez de deixar o
+    // usuário no escuro, confere o status algumas vezes e avisa quando terminar (ok ou falhou),
+    // igual foi feito pro outbox pra não repetir o mesmo problema de "sumiu sem explicação".
+    if (tentativa >= 8) return;
+    setTimeout(async () => {
+      try {
+        const res = await fetch('/api/telegram?action=imports');
+        const data = await res.json();
+        const row = (data.imports || []).find((i: { identifier: string; nome: string }) => i.identifier === identifier && i.nome === nome);
+        if (row && row.status === 'ok') {
+          setStatusMsg({ text: `✅ ${nome} (${identifier}) importado com sucesso — já aparece na lista de leads.`, type: 'success' });
+          carregarLeads();
+          return;
+        }
+        if (row && row.status === 'falhou') {
+          setStatusMsg({ text: `⚠️ Não consegui importar ${nome} (${identifier}): ${row.last_error || 'usuário não encontrado'}`, type: 'error' });
+          return;
+        }
+        pollImportStatus(identifier, nome, tentativa + 1);
+      } catch {
+        pollImportStatus(identifier, nome, tentativa + 1);
+      }
+    }, 3000);
+  };
+
+  const handleAdicionarLead = async () => {
+    const identifier = addIdentifier.trim();
+    const nome = addNome.trim();
+    if (!identifier || !nome || addingLead) return;
+    setAddingLead(true);
+    try {
+      const res = await fetch('/api/telegram', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'import_lead', identifier, nome })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setStatusMsg({ text: `⏳ Importando ${nome}... aviso quando confirmar.`, type: 'success' });
+        setAddIdentifier('');
+        setAddNome('');
+        setShowAddLead(false);
+        pollImportStatus(identifier, nome);
+      } else {
+        setStatusMsg({ text: `⚠️ Erro: ${data.error}`, type: 'error' });
+      }
+    } catch (err: unknown) {
+      setStatusMsg({ text: `⚠️ Erro de conexão: ${errMsg(err)}`, type: 'error' });
+    } finally {
+      setAddingLead(false);
+    }
+  };
+
   const leadsFiltrados = leads.filter(l => {
     const q = searchQuery.toLowerCase();
     return (l.first_name || '').toLowerCase().includes(q) ||
@@ -222,10 +280,66 @@ export default function CentralTelegram() {
           <div style={{ padding: 16, borderBottom: '1px solid rgba(240, 246, 252, 0.08)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
               <span style={{ fontSize: 13, fontWeight: 800, color: 'white' }}>💬 Leads do Bot (Telegram)</span>
-              <button onClick={carregarLeads} style={{ background: 'none', border: 'none', color: '#8B949E', cursor: 'pointer' }}>
-                <RefreshCw size={14} className={loadingLeads ? 'animate-spin' : ''} />
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <button
+                  onClick={() => setShowAddLead(v => !v)}
+                  title="Adicionar lead manualmente"
+                  style={{
+                    background: showAddLead ? 'rgba(0, 240, 255, 0.15)' : 'none',
+                    border: showAddLead ? '1px solid rgba(0, 240, 255, 0.4)' : '1px solid transparent',
+                    color: '#00F0FF', cursor: 'pointer', borderRadius: 6, padding: 4,
+                    display: 'flex', alignItems: 'center'
+                  }}
+                >
+                  <UserPlus size={14} />
+                </button>
+                <button onClick={carregarLeads} style={{ background: 'none', border: 'none', color: '#8B949E', cursor: 'pointer' }}>
+                  <RefreshCw size={14} className={loadingLeads ? 'animate-spin' : ''} />
+                </button>
+              </div>
             </div>
+
+            {showAddLead && (
+              <div style={{
+                background: 'rgba(0, 240, 255, 0.05)', border: '1px solid rgba(0, 240, 255, 0.2)',
+                borderRadius: 10, padding: 10, marginBottom: 10, display: 'flex', flexDirection: 'column', gap: 6
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#00F0FF' }}>Novo lead (sem enviar mensagem)</span>
+                  <button onClick={() => setShowAddLead(false)} style={{ background: 'none', border: 'none', color: '#8B949E', cursor: 'pointer' }}>
+                    <X size={12} />
+                  </button>
+                </div>
+                <input
+                  value={addIdentifier}
+                  onChange={e => setAddIdentifier(e.target.value)}
+                  placeholder="@usuario ou chat_id"
+                  style={{ background: '#0D1117', border: '1px solid #30363D', borderRadius: 6, padding: '7px 10px', color: 'white', fontSize: 12 }}
+                />
+                <input
+                  value={addNome}
+                  onChange={e => setAddNome(e.target.value)}
+                  placeholder="Nome do lead"
+                  onKeyDown={e => { if (e.key === 'Enter') handleAdicionarLead(); }}
+                  style={{ background: '#0D1117', border: '1px solid #30363D', borderRadius: 6, padding: '7px 10px', color: 'white', fontSize: 12 }}
+                />
+                <div style={{ fontSize: 10, color: '#8B949E' }}>
+                  Só cadastra no CRM — a IA não manda nada pra ele. @usuário funciona mesmo sem contato prévio.
+                </div>
+                <button
+                  onClick={handleAdicionarLead}
+                  disabled={!addIdentifier.trim() || !addNome.trim() || addingLead}
+                  style={{
+                    background: addIdentifier.trim() && addNome.trim() ? 'linear-gradient(135deg, #7100E2, #00F0FF)' : 'rgba(255,255,255,0.05)',
+                    border: 'none', borderRadius: 6, padding: '7px 10px', color: addIdentifier.trim() && addNome.trim() ? '#fff' : '#586069',
+                    fontSize: 12, fontWeight: 700, cursor: addIdentifier.trim() && addNome.trim() ? 'pointer' : 'not-allowed'
+                  }}
+                >
+                  {addingLead ? 'Adicionando...' : 'Adicionar lead'}
+                </button>
+              </div>
+            )}
+
             <div style={{
               background: '#0D1117', border: '1px solid #30363D', borderRadius: 10,
               display: 'flex', alignItems: 'center', padding: '0 12px', gap: 8

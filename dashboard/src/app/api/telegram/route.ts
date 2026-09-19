@@ -20,6 +20,18 @@ interface OutboxRow {
   last_error: string | null;
 }
 
+interface ImportRow {
+  id: number;
+  identifier: string;
+  nome: string;
+  created_at: number;
+  done_at: number | null;
+  resolved_chat_id: number | null;
+  attempts: number;
+  failed_at: number | null;
+  last_error: string | null;
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -93,6 +105,24 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, mensagens: todas });
     }
 
+    if (action === 'imports') {
+      // Últimas importações enfileiradas pelo dashboard, pra dar feedback visual (sucesso,
+      // pendente ou falhou) em vez de a importação simplesmente sumir sem explicação.
+      const rows = await db.all<ImportRow[]>(
+        `SELECT id, identifier, nome, created_at, done_at, resolved_chat_id, attempts, failed_at, last_error
+         FROM pending_imports ORDER BY id DESC LIMIT 20`
+      );
+      const imports = (rows || []).map((r) => ({
+        id: r.id,
+        identifier: r.identifier,
+        nome: r.nome,
+        status: r.done_at ? 'ok' : r.failed_at ? 'falhou' : 'pendente',
+        resolved_chat_id: r.resolved_chat_id,
+        last_error: r.last_error
+      }));
+      return NextResponse.json({ success: true, imports });
+    }
+
     return NextResponse.json({ success: false, error: 'Ação inválida' }, { status: 400 });
   } catch (error: unknown) {
     console.error('Erro no GET /api/telegram:', error);
@@ -109,11 +139,26 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { action, chat_id } = body;
 
+    const db = await getTelegramDb();
+
+    if (action === 'import_lead') {
+      const identifier = String(body.identifier || '').trim();
+      const nome = String(body.nome || '').trim();
+      if (!identifier || !nome) {
+        return NextResponse.json({ success: false, error: 'Usuário/chat_id e nome são obrigatórios' }, { status: 400 });
+      }
+      // Só enfileira: o bot Python resolve o @usuário ou chat_id via Telethon e cadastra o
+      // lead no CRM, sem mandar nenhuma mensagem. Ver bot/handlers/imports.py.
+      await db.run(
+        `INSERT INTO pending_imports (identifier, nome, created_at) VALUES (?, ?, ?)`,
+        [identifier, nome, Date.now() / 1000]
+      );
+      return NextResponse.json({ success: true, message: 'Lead enfileirado para importação — confira o status em alguns segundos.' });
+    }
+
     if (!chat_id) {
       return NextResponse.json({ success: false, error: 'chat_id é obrigatório' }, { status: 400 });
     }
-
-    const db = await getTelegramDb();
 
     if (action === 'send_message') {
       const texto = String(body.texto || '').trim();
