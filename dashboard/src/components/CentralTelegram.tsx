@@ -43,6 +43,13 @@ const STAGE_LABELS: Record<string, string> = {
 
 // Estágio no funil da plataforma externa (Shark Bot) — independente do "stage" acima, que é
 // controlado pela própria Luna. Isso aqui é só o que o usuário informa manualmente.
+// A Luna manda cada "ideia" como uma mensagem separada de verdade no Telegram (bolhas distintas),
+// mas o bot grava tudo numa única linha no banco (histórico pro modelo). Sem isso, o CRM mostrava
+// tudo grudado num parágrafo só, sem quebra — aqui reconstrói as bolhas exatamente como saíram lá.
+function splitBubbles(texto: string): string[] {
+  return texto.split('\n').map(l => l.trim()).filter(Boolean);
+}
+
 const SHARK_STAGE_LABELS: Record<string, string> = {
   inicio: '🚪 Início',
   previas: '🎬 Prévias',
@@ -542,24 +549,27 @@ export default function CentralTelegram() {
                     const isMinha = msg.direcao === 'enviada';
                     const falhou = msg.status === 'falhou';
                     const pendente = msg.status === 'pendente';
+                    const bolhas = splitBubbles(msg.texto);
                     return (
                       <div key={msg.id} style={{
-                        display: 'flex', flexDirection: 'column', maxWidth: '75%',
+                        display: 'flex', flexDirection: 'column', maxWidth: '75%', gap: 4,
                         alignSelf: isMinha ? 'flex-end' : 'flex-start', alignItems: isMinha ? 'flex-end' : 'flex-start'
                       }}>
-                        <div style={{
-                          background: falhou
-                            ? 'rgba(248, 81, 73, 0.12)'
-                            : isMinha ? 'linear-gradient(135deg, #7100E2 0%, #00F0FF 100%)' : '#161B22',
-                          color: falhou ? '#F85149' : isMinha ? '#FFFFFF' : '#E6EDF3',
-                          border: falhou ? '1px solid rgba(248, 81, 73, 0.4)' : isMinha ? 'none' : '1px solid #30363D',
-                          borderRadius: isMinha ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
-                          padding: '10px 14px', fontSize: 13, lineHeight: 1.5, wordBreak: 'break-word',
-                          opacity: pendente ? 0.6 : 1
-                        }}>
-                          {msg.texto}
-                        </div>
-                        <div style={{ fontSize: 10, color: falhou ? '#F85149' : '#8B949E', marginTop: 4, padding: '0 4px', display: 'flex', alignItems: 'center', gap: 4, maxWidth: 260 }}>
+                        {bolhas.map((bolha, i) => (
+                          <div key={i} style={{
+                            background: falhou
+                              ? 'rgba(248, 81, 73, 0.12)'
+                              : isMinha ? 'linear-gradient(135deg, #7100E2 0%, #00F0FF 100%)' : '#161B22',
+                            color: falhou ? '#F85149' : isMinha ? '#FFFFFF' : '#E6EDF3',
+                            border: falhou ? '1px solid rgba(248, 81, 73, 0.4)' : isMinha ? 'none' : '1px solid #30363D',
+                            borderRadius: isMinha ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
+                            padding: '10px 14px', fontSize: 13, lineHeight: 1.5, wordBreak: 'break-word',
+                            opacity: pendente ? 0.6 : 1
+                          }}>
+                            {bolha}
+                          </div>
+                        ))}
+                        <div style={{ fontSize: 10, color: falhou ? '#F85149' : '#8B949E', marginTop: 0, padding: '0 4px', display: 'flex', alignItems: 'center', gap: 4, maxWidth: 260 }}>
                           {falhou ? (
                             <span title={msg.erro}>⚠️ Não entregue — lead nunca conversou com a Luna antes</span>
                           ) : pendente ? (
