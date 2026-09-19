@@ -480,6 +480,25 @@ export default function ModalEvolucaoPost({
                 >
                   {pMult >= 1.8 ? '🔥 ' : ''}{pMult.toFixed(1).replace('.', ',')}x Desempenho
                 </span>
+                {post?.parou_atualizar && (
+                  <span
+                    title="Post atingiu o limite de monitoramento da Meta (apenas os 30 posts mais recentes recebem atualizações contínuas)"
+                    style={{
+                      fontSize: '11px',
+                      fontWeight: '700',
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                      backgroundColor: 'rgba(248, 81, 73, 0.15)',
+                      border: '1px solid rgba(248, 81, 73, 0.4)',
+                      color: '#F85149',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    ✕ Limite Meta Atingido
+                  </span>
+                )}
               </div>
               <p style={{ fontSize: '12px', color: '#8B949E', margin: '3px 0 0 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <Clock size={12} /> Publicado em {formatDateTimeFull(post?.data_postagem)}

@@ -21,6 +21,14 @@ export async function GET() {
       LEFT JOIN automacao_config ac ON (LOWER(p.username) = LOWER(ac.username) AND ac.id != 'default_config')
       ORDER BY p.username ASC
     `);
+
+    // Mapeia status de cada perfil para saber se morreu/inativo
+    const statusPerfilMap: Record<string, boolean> = {};
+    for (const p of profiles) {
+      const u = (p.username || '').toLowerCase();
+      const isM = p.status === 'MORREU' || p.status === 'INATIVO' || p.status_controle === '☠️ Morreu' || (p.status_controle || '').includes('Morreu') || (p.status || '').toUpperCase() === 'MORREU';
+      statusPerfilMap[u] = isM;
+    }
     
     const history = await db.all(
       "SELECT * FROM perfis_historico ORDER BY data_coleta ASC, id ASC"
@@ -77,6 +85,8 @@ export async function GET() {
     const postViewsDiaMap: Record<string, number> = {};
     const curvaViewsDiaMap: Record<string, number[]> = {};
     const viewsSempreMap: Record<string, number> = {};
+    const snapViewsMap: Record<string, Record<string, Record<string, number>>> = {};
+    const userCargasPair: Record<string, { uCarga: string; pCarga?: string }> = {};
     let limiteHoje = '';
 
     const postDateMap: Record<string, string> = {};
@@ -116,7 +126,6 @@ export async function GET() {
         ORDER BY LOWER(username), data_carga DESC
       `).catch(() => []);
 
-      const userCargasPair: Record<string, { uCarga: string; pCarga?: string }> = {};
       for (const row of userCargasRows) {
         const u = row.uname;
         if (!userCargasPair[u]) {
@@ -143,8 +152,6 @@ export async function GET() {
           JOIN posts_historico p ON p.post_id = s.post_id
           WHERE s.data_carga IN (${placeholders})
         `, distinctCargas).catch(() => []);
-
-        const snapViewsMap: Record<string, Record<string, Record<string, number>>> = {};
 
         for (const s of recentSnaps) {
           const u = s.uname;
@@ -301,6 +308,43 @@ export async function GET() {
       console.warn("Aviso ao calcular views_dia e views_delta:", e);
     }
 
+    // Mapeia posts que pararam de receber atualizações da Meta (fora do limite dos 30 posts ativos, perfil inativo ou sem conexão Meta)
+    const postParouAtualizarMap: Record<string, boolean> = {};
+    const agoraTs = Date.now();
+
+    for (const p of rawPosts) {
+      const pid = p.post_id;
+      if (!pid) continue;
+      const u = (p.username || '').toLowerCase();
+      const pDate = postDateMap[pid] || '';
+      const pUpdate = p.data_atualizacao || '';
+      const isPerfilInativo = Boolean(statusPerfilMap[u]);
+      const pair = userCargasPair[u];
+      const uC = pair?.uCarga;
+
+      if (isPerfilInativo || !uC) {
+        postParouAtualizarMap[pid] = true;
+        continue;
+      }
+
+      // Se a última carga do perfil foi há mais de 48h, a conta inteira parou de sincronizar
+      const uCTime = new Date(uC.replace(' ', 'T')).getTime();
+      if (!isNaN(uCTime) && (agoraTs - uCTime > 48 * 3600 * 1000)) {
+        postParouAtualizarMap[pid] = true;
+        continue;
+      }
+
+      const teveSnapUltimaCarga = snapViewsMap[u]?.[pid]?.[uC] !== undefined;
+      const isNovoAguardandoCarga = Boolean(pDate && pDate > uC);
+      const teveUpdateNaUltimaCarga = Boolean(pUpdate && pUpdate >= uC);
+
+      if (teveSnapUltimaCarga || isNovoAguardandoCarga || teveUpdateNaUltimaCarga) {
+        postParouAtualizarMap[pid] = false;
+      } else {
+        postParouAtualizarMap[pid] = true;
+      }
+    }
+
     const posts = rawPosts.map((p: any) => {
       let formatoPadrao = p.formato || 'Imagem';
       const fUpper = (p.formato || '').toUpperCase();
@@ -330,7 +374,8 @@ export async function GET() {
         media_url: mediaUrl,
         thumbnail_url: thumbnailUrl || mediaUrl,
         delta_views_coleta: postViewsDeltaMap[p.post_id] || 0,
-        views_dia: postViewsDiaMap[p.post_id] || 0
+        views_dia: postViewsDiaMap[p.post_id] || 0,
+        parou_atualizar: postParouAtualizarMap[p.post_id] ?? true
       };
     });
 
@@ -342,15 +387,6 @@ export async function GET() {
         (Number(p.likes) || 0) + (Number(p.comentarios) || 0)
       );
       viewsSempreMap[u] = (viewsSempreMap[u] || 0) + viewsEfetivas;
-    }
-
-
-    // Mapeia status de cada perfil para saber se morreu/inativo
-    const statusPerfilMap: Record<string, boolean> = {};
-    for (const p of profiles) {
-      const u = (p.username || '').toLowerCase();
-      const isM = p.status === 'MORREU' || p.status === 'INATIVO' || p.status_controle === '☠️ Morreu' || (p.status_controle || '').includes('Morreu') || (p.status || '').toUpperCase() === 'MORREU';
-      statusPerfilMap[u] = isM;
     }
 
     // Agrupa histórico por username ordenado cronologicamente com forward-fill para quedas transitórias

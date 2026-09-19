@@ -3159,9 +3159,19 @@ export default function Dashboard() {
     } else if (sortField === 'views_dia') {
       aVal = Number(a.views_dia) || 0;
       bVal = Number(b.views_dia) || 0;
+      if (aVal === bVal) {
+        const aAtivo = a.parou_atualizar ? 0 : 1;
+        const bAtivo = b.parou_atualizar ? 0 : 1;
+        if (aAtivo !== bAtivo) return sortDirection === 'asc' ? aAtivo - bAtivo : bAtivo - aAtivo;
+      }
     } else if (sortField === 'delta_views_coleta') {
       aVal = Number(a.delta_views_coleta) || 0;
       bVal = Number(b.delta_views_coleta) || 0;
+      if (aVal === bVal) {
+        const aAtivo = a.parou_atualizar ? 0 : 1;
+        const bAtivo = b.parou_atualizar ? 0 : 1;
+        if (aAtivo !== bAtivo) return sortDirection === 'asc' ? aAtivo - bAtivo : bAtivo - aAtivo;
+      }
     } else if (['likes', 'comentarios'].includes(sortField)) {
       aVal = Number(aVal) || 0;
       bVal = Number(bVal) || 0;
@@ -6345,7 +6355,7 @@ export default function Dashboard() {
               <div>
                 <h2 style={{ fontSize: '18px', fontWeight: '800', margin: 0 }}>Tabela de Auditoria Social</h2>
                 <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginTop: '2px', marginBottom: 0 }}>
-                  Todos os posts coletados e calculados. Clique nos títulos para ordenar.
+                  Todos os posts coletados e calculados. Clique nos títulos para ordenar. Posts com <span style={{ color: '#F85149', fontWeight: 800 }}>✕</span> atingiram o limite e pararam de receber atualização da Meta.
                 </p>
               </div>
 
@@ -6722,14 +6732,14 @@ export default function Dashboard() {
                     <th
                       className={`sortable ${sortField === 'views_dia' ? 'active' : ''}`}
                       onClick={() => handleSort('views_dia')}
-                      title="Evolução no Dia (Visualizações ganhas hoje)"
+                      title="Evolução no Dia (Visualizações ganhas hoje) — ✕ indica que o post atingiu o limite e parou de receber atualização da Meta"
                     >
                       D 👁️ {sortField === 'views_dia' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                     </th>
                     <th
                       className={`sortable ${sortField === 'delta_views_coleta' ? 'active' : ''}`}
                       onClick={() => handleSort('delta_views_coleta')}
-                      title="Acréscimo no último carregamento"
+                      title="Acréscimo no último carregamento — ✕ indica que o post atingiu o limite e parou de receber atualização da Meta"
                     >
                       ⚡ 👁️ {sortField === 'delta_views_coleta' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                     </th>
@@ -6805,7 +6815,26 @@ export default function Dashboard() {
                           )}
                         </td>
                         <td>
-                          {(Number(post.views_dia) || 0) > 0 ? (
+                          {post.parou_atualizar ? (
+                            <span
+                              title="Post atingiu o limite e parou de receber atualizações da Meta"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                color: '#F85149',
+                                fontWeight: 900,
+                                fontSize: '13px'
+                              }}
+                            >
+                              {(Number(post.views_dia) || 0) > 0 && (
+                                <span style={{ color: '#00FF66', fontWeight: 700, fontSize: '12px' }}>
+                                  +{formatNumber(post.views_dia)}
+                                </span>
+                              )}
+                              ✕
+                            </span>
+                          ) : (Number(post.views_dia) || 0) > 0 ? (
                             <span
                               title={`Visualizações ganhas hoje: +${formatNumber(post.views_dia)}`}
                               style={{ color: '#00FF66', fontWeight: 700 }}
@@ -6824,7 +6853,26 @@ export default function Dashboard() {
                           )}
                         </td>
                         <td>
-                          {(Number(post.delta_views_coleta) || 0) > 0 ? (
+                          {post.parou_atualizar ? (
+                            <span
+                              title="Post atingiu o limite e parou de receber atualizações da Meta"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                color: '#F85149',
+                                fontWeight: 900,
+                                fontSize: '13px'
+                              }}
+                            >
+                              {(Number(post.delta_views_coleta) || 0) > 0 && (
+                                <span style={{ color: '#00FF66', fontWeight: 700, fontSize: '12px' }}>
+                                  +{formatNumber(post.delta_views_coleta)}
+                                </span>
+                              )}
+                              ✕
+                            </span>
+                          ) : (Number(post.delta_views_coleta) || 0) > 0 ? (
                             <span
                               title={`Acréscimo no último carregamento: +${formatNumber(post.delta_views_coleta)}`}
                               style={{ color: '#00FF66', fontWeight: 700 }}
