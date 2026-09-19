@@ -72,8 +72,8 @@ export default function CentralTelegram() {
     }
   };
 
-  const carregarMensagens = async (chatId: number) => {
-    setLoadingMensagens(true);
+  const carregarMensagens = async (chatId: number, silencioso = false) => {
+    if (!silencioso) setLoadingMensagens(true);
     try {
       const res = await fetch(`/api/telegram?action=mensagens&chat_id=${chatId}`);
       const data = await res.json();
@@ -81,7 +81,7 @@ export default function CentralTelegram() {
     } catch (err) {
       console.error('Erro ao carregar mensagens do Telegram:', err);
     } finally {
-      setLoadingMensagens(false);
+      if (!silencioso) setLoadingMensagens(false);
     }
   };
 
@@ -93,8 +93,13 @@ export default function CentralTelegram() {
   }, []);
 
   useEffect(() => {
+    if (!selectedChatId) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch dispara setLoading logo na 1ª linha
-    if (selectedChatId) carregarMensagens(selectedChatId);
+    carregarMensagens(selectedChatId);
+    // Atualiza a conversa aberta periodicamente, sem piscar o spinner de carregamento —
+    // senão mensagens novas do lead só apareciam ao trocar de conversa e voltar.
+    const interval = setInterval(() => carregarMensagens(selectedChatId, true), 5000);
+    return () => clearInterval(interval);
   }, [selectedChatId]);
 
   useEffect(() => {
