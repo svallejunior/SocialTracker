@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
       const leads = await db.all(`
         SELECT
           chat_id, username, first_name, stage, message_count, purchased,
-          instagram_handle, auto_enabled, notes, created_at, last_active_at
+          instagram_handle, auto_enabled, notes, shark_stage, created_at, last_active_at
         FROM leads
         ORDER BY last_active_at DESC
         LIMIT 200
@@ -189,6 +189,23 @@ export async function POST(request: NextRequest) {
     if (action === 'marcar_compra') {
       await db.run(`UPDATE leads SET purchased = 1 WHERE chat_id = ?`, [chat_id]);
       return NextResponse.json({ success: true, message: 'Compra registrada — lead passa a pós-venda' });
+    }
+
+    if (action === 'set_shark_stage') {
+      const validStages = ['inicio', 'previas', 'pix', 'comprou'];
+      const stage = String(body.stage || '');
+      if (!validStages.includes(stage)) {
+        return NextResponse.json({ success: false, error: 'Estágio inválido' }, { status: 400 });
+      }
+      // Puramente informativo (de onde o lead parou no funil da Shark) — não mexe no "stage"
+      // interno da Luna. Mas "comprou" aqui reflete o mesmo fato de "Marcar comprado", então
+      // sincroniza o campo purchased pra não ter duas fontes de verdade divergentes na lista.
+      if (stage === 'comprou') {
+        await db.run(`UPDATE leads SET shark_stage = ?, purchased = 1 WHERE chat_id = ?`, [stage, chat_id]);
+      } else {
+        await db.run(`UPDATE leads SET shark_stage = ? WHERE chat_id = ?`, [stage, chat_id]);
+      }
+      return NextResponse.json({ success: true, message: 'Estágio da Shark atualizado' });
     }
 
     return NextResponse.json({ success: false, error: 'Ação não reconhecida' }, { status: 400 });

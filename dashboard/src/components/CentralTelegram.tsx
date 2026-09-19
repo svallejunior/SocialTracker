@@ -19,6 +19,7 @@ interface Lead {
   instagram_handle: string | null;
   auto_enabled: number;
   notes: string;
+  shark_stage: string | null;
   created_at: number;
   last_active_at: number;
 }
@@ -38,6 +39,15 @@ const STAGE_LABELS: Record<string, string> = {
   oferta: '💌 Oferta',
   fechamento: '🎯 Fechamento',
   pos_venda: '✅ Pós-venda'
+};
+
+// Estágio no funil da plataforma externa (Shark Bot) — independente do "stage" acima, que é
+// controlado pela própria Luna. Isso aqui é só o que o usuário informa manualmente.
+const SHARK_STAGE_LABELS: Record<string, string> = {
+  inicio: '🚪 Início',
+  previas: '🎬 Prévias',
+  pix: '💰 PIX gerado',
+  comprou: '✅ Comprou'
 };
 
 export default function CentralTelegram() {
@@ -175,6 +185,19 @@ export default function CentralTelegram() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'marcar_compra', chat_id: selectedLead.chat_id })
     });
+  };
+
+  const handleSetSharkStage = async (stage: string) => {
+    if (!selectedLead) return;
+    setLeads(prev => prev.map(l => l.chat_id === selectedLead.chat_id
+      ? { ...l, shark_stage: stage, purchased: stage === 'comprou' ? 1 : l.purchased }
+      : l));
+    await fetch('/api/telegram', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'set_shark_stage', chat_id: selectedLead.chat_id, stage })
+    });
+    setStatusMsg({ text: `✅ Estágio da Shark atualizado: ${SHARK_STAGE_LABELS[stage] || stage}`, type: 'success' });
   };
 
   const pollImportStatus = (identifier: string, nome: string, tentativa = 0) => {
@@ -401,6 +424,11 @@ export default function CentralTelegram() {
                           IA OFF
                         </span>
                       )}
+                      {lead.shark_stage && (
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 8, background: 'rgba(255, 193, 7, 0.12)', color: '#FFC107' }}>
+                          {SHARK_STAGE_LABELS[lead.shark_stage] || lead.shark_stage}
+                        </span>
+                      )}
                     </div>
                   </div>
                 );
@@ -434,6 +462,22 @@ export default function CentralTelegram() {
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  {/* Estágio no funil da Shark */}
+                  <select
+                    value={selectedLead.shark_stage || ''}
+                    onChange={e => e.target.value && handleSetSharkStage(e.target.value)}
+                    title="Em que estágio do funil da Shark esse lead parou"
+                    style={{
+                      background: '#0D1117', border: '1px solid rgba(255, 193, 7, 0.4)', borderRadius: 8,
+                      padding: '6px 8px', color: '#FFC107', fontSize: 11, fontWeight: 700, cursor: 'pointer'
+                    }}
+                  >
+                    <option value="" disabled>Estágio na Shark...</option>
+                    {Object.entries(SHARK_STAGE_LABELS).map(([value, label]) => (
+                      <option key={value} value={value} style={{ background: '#0D1117', color: '#fff' }}>{label}</option>
+                    ))}
+                  </select>
+
                   {/* Vincular Instagram */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <input
