@@ -5,7 +5,8 @@ import {
   X, CheckSquare, Square, Flame, Zap, Wine, ShieldAlert,
   Smartphone, Calendar, CheckCircle2, Copy, Check, ArrowRight,
   RotateCcw, Sparkles, AlertTriangle, Layers,
-  UserPlus, UserMinus, Users, Target, ChevronDown, ChevronUp, RefreshCw, Edit3
+  UserPlus, UserMinus, Users, Target, ChevronDown, ChevronUp, RefreshCw, Edit3,
+  Clock, ExternalLink, ShieldCheck, Video, HelpCircle, AlertOctagon
 } from 'lucide-react';
 
 interface Props {
@@ -259,8 +260,76 @@ FASE 3: (criar torre de champagne)
 	- Utilizando outras contas de instagram caso você tenha
 	- Usar TIK-TOK`;
 
+  const textoRoteiroNormal = `================= ESTEIRA DE AQUECIMENTO NORMAL ==================
+
+1. CRIAÇÃO E AQUECIMENTO DE PERFIL (INSTAGRAM)
+* Pré-requisito inicial: Deixar a conta durante pelo menos 24 horas "de molho" logo após a criação.
+
+CRONOGRAMA DIÁRIO:
+* Dia 1 – Foto de perfil e Biografia (SEM LINK NA BIO):
+  - Indicar na biografia que é brasileira e mora no país pretendido.
+  - Indicar a idade da modelo.
+  - Inserir uma "frase de criadora de conteúdo/blogueira".
+
+* Dia 2 – 2 a 3 publicações no Feed para criar relacionamento com a plataforma:
+  - Dar prioridade ao formato de carrossel COM MÚSICA do país de destino.
+  - Vantagens: Os carrosséis têm a 2ª maior recomendação da plataforma (apenas atrás dos Reels) e contam com rotação automática de imagem caso o usuário não interaja na primeira exibição.
+
+* Dia 3 – 2 a 3 publicações no Feed + Interações:
+  - Interagir em publicações de páginas ou criadores do país pretendido.
+  - Identificar páginas com público-alvo qualificado (modelos com estética semelhante quanto a idade, tom de pele, etc.).
+  - Prestar atenção ao fuso horário do país selecionado no momento de agendar ou publicar.
+
+* Dia 4 – 2 a 3 publicações no Feed + Interações + Follow/Unfollow:
+  - Seguir exclusivamente perfis humanizados e com histórias (Stories) ativas.
+
+* Dia 5 – 2 a 3 publicações no Feed + Interações + Follow/Unfollow + Story Lifestyle + 1 Reels:
+  - Dica Opcional: Promover 3 publicações do feed com R$ 30,00 cada durante 3 dias (sem Reels), segmentando para o país pretendido para impulsionar o envolvimento inicial (com foco em tração e não em vendas diretas).
+
+* Dia 6 – 2 a 3 publicações no Feed + Interações + Follow/Unfollow + 1 Reels + Story Lifestyle:
+  - O intuito desta fase é consolidar uma grelha inicial de 9 a 12 publicações no feed.
+
+* Dia 7 – Interações + Follow/Unfollow + 1 Reels + Story Lifestyle.
+
+* Dia 8 – Interações + Follow/Unfollow + 2 a 3 Reels + Story Lifestyle:
+  - Não exagerar no número de Reels por dia; agir de forma natural como uma influenciadora real.
+  - Publicações em massa ativam alertas de segurança e filtros de SPAM, prejudicando o perfil.
+
+* Dia 9 em diante – Repetição contínua do ciclo:
+  - Possibilidade de parar com as publicações no feed e concentrar esforços exclusivamente em Reels, Stories e interações.
+
+2. PRODUÇÃO DE CONTEÚDO
+* Ferramentas de IA recomendadas:
+  - Kling AI: https://klingai.com/
+  - Pixverse: https://app.pixverse.ai/
+  - Remaker AI (Face Swap): https://remaker.ai/face-swap-free/
+  - Nota: É viável utilizar os planos gratuitos destas plataformas, desde que seja SEMPRE removida a marca de água dos conteúdos gerados.
+* Horários de publicação: Respeitar com rigor as janelas temporais de acordo com o país pretendido.
+* Contextualização visual: Incluir nos vídeos elementos visuais como a bandeira do país de destino (em roupas, acessórios ou cenário) para acelerar o mapeamento de relevância geográfica pelo algoritmo.
+* Métrica de diagnóstico: Se o alcance dos Reels ficar estagnado entre 100 e 500 visualizações, ou o conteúdo carece de qualidade ou a conta não foi devidamente preparada.
+
+3. DICAS BÔNUS
+* Constância horária: Definir um horário padrão para publicar os Reels e manter essa regularidade diária.
+* Picos de tráfego: Compreender os horários com maior volume de usuários online na plataforma no país pretendido.
+* Áudios contextuais: Usar áudios e faixas que estejam em sintonia com a temática do conteúdo.
+* Modelagem estratégica: Identificar formatos e estilos de vídeos já validados que funcionem em perfis de modelos de referência desse mercado.
+* Variação de texto: Alterar sempre a legenda de uma publicação para a seguinte, NUNCA repetindo descrições idênticas.
+* Canal complementar: Integrar a atividade da conta com a rede Threads para reforçar o alcance.
+
+4. DIRETRIZES E REGRAS DE SEGURANÇA
+* Hashtags: Não é necessário nem aconselhável utilizar.
+* Compra de audiência: NUNCA comprar seguidores.
+* Vendas por DM: Não responder a mensagens diretas tentando forçar conversões imediatas de venda.
+* Cuidado com a linguagem: Vigiar atentamente o vocabulário empregue em legendas e conversas para prevenir suspensões.`;
+
   const handleCopiarRoteiro = (customTexto?: string | any) => {
-    const texto = (typeof customTexto === 'string' && customTexto) ? customTexto : (esteiraEfetiva === 'TORRE_CHAMPAGNE' ? textoRoteiroTorreChampagne : textoRoteiroAcelerado);
+    const texto = (typeof customTexto === 'string' && customTexto) 
+      ? customTexto 
+      : (esteiraEfetiva === 'TORRE_CHAMPAGNE' 
+          ? textoRoteiroTorreChampagne 
+          : (esteiraEfetiva === 'NORMAL' 
+              ? textoRoteiroNormal 
+              : textoRoteiroAcelerado));
     navigator.clipboard.writeText(texto);
     setCopiado(true);
     setTimeout(() => setCopiado(false), 2500);
@@ -1483,39 +1552,504 @@ FASE 3: (criar torre de champagne)
 
               {/* CASO: AQUECIMENTO NORMAL */}
               {situacaoEfetiva === 'EM_AQUECIMENTO' && esteiraEfetiva === 'NORMAL' && (
-                <div style={{ maxWidth: 700, margin: '0 auto', textAlign: 'center', padding: '30px 20px' }}>
+                <div>
+                  {/* Banner de Título com Botão de Copiar */}
                   <div style={{
-                    width: 50,
-                    height: 50,
-                    borderRadius: 12,
-                    background: 'rgba(88, 166, 255, 0.15)',
-                    display: 'inline-flex',
+                    background: 'linear-gradient(135deg, rgba(88, 166, 255, 0.12), rgba(0, 240, 255, 0.15))',
+                    border: '1px solid rgba(88, 166, 255, 0.35)',
+                    borderRadius: 14,
+                    padding: '16px 20px',
+                    marginBottom: 20,
+                    display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#58A6FF',
-                    marginBottom: 16
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: 12
                   }}>
-                    <Layers size={26} />
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Layers size={18} color="#58A6FF" />
+                        <h4 style={{ fontSize: 16, fontWeight: 800, color: '#58A6FF', margin: 0 }}>
+                          ESTEIRA DE AQUECIMENTO NORMAL (CRONOGRAMA PROGRESSIVO)
+                        </h4>
+                      </div>
+                      <p style={{ fontSize: 12, color: '#C9D1D9', margin: '4px 0 0 0' }}>
+                        Cronograma diário de 9+ dias, produção com IA e diretrizes algorítmicas para @{modelo.username}.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleCopiarRoteiro(textoRoteiroNormal)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '7px 14px',
+                        background: copiado ? '#238636' : 'rgba(88, 166, 255, 0.15)',
+                        border: `1px solid ${copiado ? '#2ea043' : 'rgba(88, 166, 255, 0.4)'}`,
+                        borderRadius: 8,
+                        color: copiado ? '#fff' : '#58A6FF',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        transition: 'all 0.15s'
+                      }}
+                    >
+                      {copiado ? <Check size={14} /> : <Copy size={14} />}
+                      {copiado ? 'Copiado!' : 'Copiar Roteiro'}
+                    </button>
                   </div>
-                  <h4 style={{ fontSize: 18, fontWeight: 800, color: '#F0F6FC', marginBottom: 8 }}>
-                    Esteira de Aquecimento Normal
-                  </h4>
-                  <p style={{ fontSize: 13, color: '#8B949E', maxWidth: 520, margin: '0 auto 24px auto', lineHeight: 1.5 }}>
-                    Esta esteira segue o ritmo progressivo padrão para aquecimento orgânico de @{modelo.username}.
-                  </p>
+
+                  {/* PRÉ-REQUISITO INICIAL CRÍTICO */}
+                  <div style={{
+                    background: 'rgba(255, 170, 0, 0.08)',
+                    border: '1px solid rgba(255, 170, 0, 0.35)',
+                    borderRadius: 12,
+                    padding: '16px 20px',
+                    marginBottom: 18
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                      <Clock size={16} color="#FFAA00" />
+                      <span style={{ fontSize: 13, fontWeight: 800, color: '#FFAA00', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                        PRÉ-REQUISITO INICIAL (SETUP DE CRIAÇÃO)
+                      </span>
+                    </div>
+
+                    {(() => {
+                      const id = 'an_pre_molho';
+                      const checked = Boolean(tarefasConcluidas[id]);
+                      return (
+                        <div
+                          onClick={() => toggleCheck(id)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 12,
+                            background: checked ? 'rgba(0, 255, 102, 0.08)' : 'rgba(0, 0, 0, 0.25)',
+                            border: `1px solid ${checked ? 'rgba(0, 255, 102, 0.35)' : 'rgba(255, 170, 0, 0.25)'}`,
+                            borderRadius: 8,
+                            padding: '10px 14px',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s'
+                          }}
+                        >
+                          <span style={{ color: checked ? '#00FF66' : '#FFAA00' }}>
+                            {checked ? <CheckSquare size={18} /> : <Square size={18} />}
+                          </span>
+                          <div>
+                            <span style={{
+                              fontSize: 13,
+                              fontWeight: 700,
+                              color: checked ? '#00FF66' : '#F0F6FC',
+                              textDecoration: checked ? 'line-through' : 'none'
+                            }}>
+                              Deixar a conta durante pelo menos 24 horas "de molho" logo após a criação
+                            </span>
+                            <div style={{ fontSize: 11, color: '#8B949E', marginTop: 2 }}>
+                              Não realizar disparos, edições massivas ou ações agressivas nas primeiras 24h para evitar flag do algoritmo.
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* BLOCO 1: CRONOGRAMA DIÁRIO (DIAS 1 A 9+) */}
                   <div style={{
                     background: '#161B22',
                     border: '1px solid #30363D',
                     borderRadius: 12,
-                    padding: '20px',
-                    textAlign: 'left',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 10
+                    padding: '18px 20px',
+                    marginBottom: 18
                   }}>
-                    <div style={{ fontSize: 13, color: '#C9D1D9' }}>• <strong>Dias 1-3:</strong> Configuração de perfil, consumo diário de 20 min e 5-10 interações orgânicas leves.</div>
-                    <div style={{ fontSize: 13, color: '#C9D1D9' }}>• <strong>Dias 4-7:</strong> 1 Feed + 1 Story por dia, seguir 5-10 perfis do nicho.</div>
-                    <div style={{ fontSize: 13, color: '#C9D1D9' }}>• <strong>Dias 8+:</strong> Início de Reels (1 a cada 2 dias) e expansão gradual de stories e engajamento.</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                      <Calendar size={16} color="#58A6FF" />
+                      <span style={{ fontSize: 13, fontWeight: 800, color: '#58A6FF', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                        1. CRONOGRAMA DIÁRIO DE AQUECIMENTO (INSTAGRAM)
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {[
+                        {
+                          dia: 'Dia 1',
+                          titulo: 'Foto de perfil e Biografia (SEM LINK NA BIO)',
+                          sub: 'Configuração dos pilares de identidade da modelo',
+                          itens: [
+                            { id: 'an_d1_1', texto: 'Indicar na biografia que é brasileira e mora no país pretendido' },
+                            { id: 'an_d1_2', texto: 'Indicar a idade da modelo' },
+                            { id: 'an_d1_3', texto: 'Inserir uma "frase de criadora de conteúdo/blogueira"' },
+                            { id: 'an_d1_4', texto: 'NÃO colocar nenhum link na bio nesta fase inicial' },
+                          ]
+                        },
+                        {
+                          dia: 'Dia 2',
+                          titulo: '2 a 3 publicações no Feed (Carrossel com Música)',
+                          sub: 'Criar relacionamento com a plataforma e ativar recomendação algorítmica',
+                          destaque: 'Carrosséis têm a 2ª maior recomendação da plataforma (apenas atrás dos Reels) e contam com rotação automática de imagem caso o usuário não interaja na primeira exibição.',
+                          itens: [
+                            { id: 'an_d2_1', texto: 'Publicar 2 a 3 posts no Feed priorizando formato de carrossel COM MÚSICA do país de destino' }
+                          ]
+                        },
+                        {
+                          dia: 'Dia 3',
+                          titulo: '2 a 3 publicações no Feed + Interações Qualificadas',
+                          sub: 'Treinar o algoritmo com páginas e público do nicho',
+                          itens: [
+                            { id: 'an_d3_1', texto: 'Publicar 2 a 3 posts no Feed' },
+                            { id: 'an_d3_2', texto: 'Interagir em publicações de páginas ou criadores do país pretendido (estética/idade semelhante)' },
+                            { id: 'an_d3_3', texto: 'Prestar atenção rigorosa ao fuso horário do país selecionado ao agendar ou publicar' }
+                          ]
+                        },
+                        {
+                          dia: 'Dia 4',
+                          titulo: '2 a 3 publicações no Feed + Interações + Início de Follow/Unfollow',
+                          sub: 'Primeiras conexões ativas humanizadas',
+                          itens: [
+                            { id: 'an_d4_1', texto: 'Publicar 2 a 3 posts no Feed + continuar interações' },
+                            { id: 'an_d4_2', texto: 'Follow seletivo: Seguir exclusivamente perfis humanizados e com Stories ativos' }
+                          ]
+                        },
+                        {
+                          dia: 'Dia 5',
+                          titulo: 'Feed + Interações + Follow/Unfollow + Story Lifestyle + 1 Reels',
+                          sub: 'Primeiro Reels publicado e início dos Stories diários',
+                          destaque: 'Dica Opcional: Promover 3 publicações do feed com R$ 30,00 cada durante 3 dias (sem Reels), segmentando para o país pretendido para impulsionar o envolvimento inicial (foco em tração e não em vendas diretas).',
+                          itens: [
+                            { id: 'an_d5_1', texto: 'Publicar 2 a 3 posts no Feed + interações + follow/unfollow' },
+                            { id: 'an_d5_2', texto: 'Publicar 1 Reels + 1 Story Lifestyle' },
+                            { id: 'an_d5_3', texto: '(Opcional) Promover 3 publicações do feed (R$ 30/dia por 3 dias segmentado no país)' }
+                          ]
+                        },
+                        {
+                          dia: 'Dia 6',
+                          titulo: 'Feed + Interações + Follow/Unfollow + 1 Reels + Story Lifestyle',
+                          sub: 'Consolidação da grelha inicial de 9 a 12 publicações no Feed',
+                          itens: [
+                            { id: 'an_d6_1', texto: 'Alcançar e consolidar grelha inicial de 9 a 12 publicações no Feed' },
+                            { id: 'an_d6_2', texto: 'Publicar 1 Reels + Story Lifestyle + interações e follow' }
+                          ]
+                        },
+                        {
+                          dia: 'Dia 7',
+                          titulo: 'Interações + Follow/Unfollow + 1 Reels + Story Lifestyle',
+                          sub: 'Ritmo contínuo e consolidação de relevância orgânica',
+                          itens: [
+                            { id: 'an_d7_1', texto: 'Publicar 1 Reels diário + Story Lifestyle + interações e follow seletivo' }
+                          ]
+                        },
+                        {
+                          dia: 'Dia 8',
+                          titulo: 'Interações + Follow/Unfollow + 2 a 3 Reels + Story Lifestyle',
+                          sub: 'Intensificação cuidadosa sem acionar filtros de SPAM',
+                          destaque: 'Não exagerar no número de Reels por dia; agir de forma natural como uma influenciadora real. Publicações em massa ativam alertas de segurança e filtros de SPAM, prejudicando o perfil.',
+                          itens: [
+                            { id: 'an_d8_1', texto: 'Publicar de 2 a 3 Reels no dia + Story Lifestyle + interações + follow/unfollow' }
+                          ]
+                        },
+                        {
+                          dia: 'Dia 9+',
+                          titulo: 'Dia 9 em diante – Repetição Contínua do Ciclo',
+                          sub: 'Transição estratégica de Feed para Reels e Stories',
+                          itens: [
+                            { id: 'an_d9_1', texto: 'Possibilidade de parar com publicações no Feed e concentrar esforços exclusivamente em Reels, Stories e interações' }
+                          ]
+                        }
+                      ].map(bloco => (
+                        <div
+                          key={bloco.dia}
+                          style={{
+                            background: 'rgba(0, 0, 0, 0.2)',
+                            border: '1px solid #21262D',
+                            borderRadius: 10,
+                            padding: '12px 14px'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{
+                                fontSize: 11,
+                                fontWeight: 800,
+                                background: 'rgba(88, 166, 255, 0.15)',
+                                color: '#58A6FF',
+                                padding: '2px 7px',
+                                borderRadius: 5,
+                                border: '1px solid rgba(88, 166, 255, 0.3)'
+                              }}>
+                                {bloco.dia}
+                              </span>
+                              <span style={{ fontSize: 13, fontWeight: 700, color: '#F0F6FC' }}>
+                                {bloco.titulo}
+                              </span>
+                            </div>
+                          </div>
+
+                          {bloco.destaque && (
+                            <div style={{
+                              fontSize: 11,
+                              color: '#79C0FF',
+                              background: 'rgba(56, 139, 253, 0.1)',
+                              borderLeft: '3px solid #58A6FF',
+                              padding: '6px 10px',
+                              borderRadius: '0 6px 6px 0',
+                              margin: '6px 0 8px 0',
+                              lineHeight: 1.4
+                            }}>
+                              💡 {bloco.destaque}
+                            </div>
+                          )}
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+                            {bloco.itens.map(subItem => {
+                              const checked = Boolean(tarefasConcluidas[subItem.id]);
+                              return (
+                                <div
+                                  key={subItem.id}
+                                  onClick={() => toggleCheck(subItem.id)}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 10,
+                                    background: checked ? 'rgba(0, 255, 102, 0.05)' : 'transparent',
+                                    padding: '5px 8px',
+                                    borderRadius: 6,
+                                    cursor: 'pointer',
+                                    transition: 'all 0.15s'
+                                  }}
+                                >
+                                  <span style={{ color: checked ? '#00FF66' : '#8B949E' }}>
+                                    {checked ? <CheckSquare size={16} /> : <Square size={16} />}
+                                  </span>
+                                  <span style={{
+                                    fontSize: 12,
+                                    color: checked ? '#00FF66' : '#C9D1D9',
+                                    textDecoration: checked ? 'line-through' : 'none',
+                                    lineHeight: 1.35
+                                  }}>
+                                    {subItem.texto}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* BLOCO 2: PRODUÇÃO DE CONTEÚDO & FERRAMENTAS DE IA */}
+                  <div style={{
+                    background: '#161B22',
+                    border: '1px solid #30363D',
+                    borderRadius: 12,
+                    padding: '18px 20px',
+                    marginBottom: 18
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                      <Video size={16} color="#A371F7" />
+                      <span style={{ fontSize: 13, fontWeight: 800, color: '#A371F7', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                        2. PRODUÇÃO DE CONTEÚDO & FERRAMENTAS DE IA
+                      </span>
+                    </div>
+
+                    {/* BOTÕES DE ACESSO RÁPIDO ÀS FERRAMENTAS */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginBottom: 14 }}>
+                      {[
+                        { nome: 'Kling AI', url: 'https://klingai.com/', desc: 'Geração de vídeos ultrarrealistas' },
+                        { nome: 'Pixverse AI', url: 'https://app.pixverse.ai/', desc: 'Vídeos estilizados & lifestyle' },
+                        { nome: 'Remaker AI (Face Swap)', url: 'https://remaker.ai/face-swap-free/'.replace('.ai/face-swap-free/', '.ai/face-swap-free'), desc: 'Troca de rosto gratuita' },
+                      ].map(f => (
+                        <a
+                          key={f.nome}
+                          href={f.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            background: 'rgba(163, 113, 247, 0.08)',
+                            border: '1px solid rgba(163, 113, 247, 0.3)',
+                            borderRadius: 8,
+                            padding: '10px 12px',
+                            textDecoration: 'none',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'space-between',
+                            transition: 'all 0.15s'
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.borderColor = '#A371F7';
+                            e.currentTarget.style.background = 'rgba(163, 113, 247, 0.15)';
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.borderColor = 'rgba(163, 113, 247, 0.3)';
+                            e.currentTarget.style.background = 'rgba(163, 113, 247, 0.08)';
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ fontSize: 12, fontWeight: 800, color: '#A371F7' }}>{f.nome}</span>
+                            <ExternalLink size={12} color="#A371F7" />
+                          </div>
+                          <span style={{ fontSize: 10, color: '#8B949E', marginTop: 4 }}>{f.desc}</span>
+                        </a>
+                      ))}
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {[
+                        { id: 'an_prod_1', texto: 'Remoção de marca d’água: Planos gratuitos são viáveis, desde que SEMPRE seja removida a marca d\'água de todos os conteúdos.' },
+                        { id: 'an_prod_2', texto: 'Horários de publicação: Respeitar com rigor as janelas temporais de acordo com o país pretendido.' },
+                        { id: 'an_prod_3', texto: 'Contextualização visual: Incluir elementos visuais como a bandeira do país de destino (roupas, acessórios ou cenário) para acelerar relevância geográfica.' },
+                        { id: 'an_prod_4', texto: 'Métrica de diagnóstico: Se o alcance dos Reels estagnar entre 100 e 500 visualizações, ou o conteúdo carece de qualidade ou a conta não foi devidamente preparada.' },
+                      ].map(item => {
+                        const checked = Boolean(tarefasConcluidas[item.id]);
+                        return (
+                          <div
+                            key={item.id}
+                            onClick={() => toggleCheck(item.id)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 10,
+                              background: checked ? 'rgba(0, 255, 102, 0.05)' : 'rgba(0, 0, 0, 0.2)',
+                              border: `1px solid ${checked ? 'rgba(0, 255, 102, 0.3)' : '#21262D'}`,
+                              borderRadius: 8,
+                              padding: '8px 12px',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s'
+                            }}
+                          >
+                            <span style={{ color: checked ? '#00FF66' : '#8B949E' }}>
+                              {checked ? <CheckSquare size={16} /> : <Square size={16} />}
+                            </span>
+                            <span style={{
+                              fontSize: 12,
+                              color: checked ? '#00FF66' : '#C9D1D9',
+                              textDecoration: checked ? 'line-through' : 'none',
+                              lineHeight: 1.35
+                            }}>
+                              {item.texto}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* BLOCO 3: DICAS BÔNUS ESTRATÉGICAS */}
+                  <div style={{
+                    background: '#161B22',
+                    border: '1px solid #30363D',
+                    borderRadius: 12,
+                    padding: '18px 20px',
+                    marginBottom: 18
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                      <Sparkles size={16} color="#E3B341" />
+                      <span style={{ fontSize: 13, fontWeight: 800, color: '#E3B341', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                        3. DICAS BÔNUS DE ALTA PERFORMANCE
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 8 }}>
+                      {[
+                        { id: 'an_b1', titulo: 'Constância horária', desc: 'Definir um horário padrão para publicar os Reels e manter essa regularidade diária.' },
+                        { id: 'an_b2', titulo: 'Picos de tráfego', desc: 'Compreender os horários com maior volume de usuários online na plataforma no país pretendido.' },
+                        { id: 'an_b3', titulo: 'Áudios contextuais', desc: 'Usar áudios e faixas que estejam em sintonia com a temática do conteúdo.' },
+                        { id: 'an_b4', titulo: 'Modelagem estratégica', desc: 'Identificar formatos e estilos de vídeos já validados em perfis de modelos de referência.' },
+                        { id: 'an_b5', titulo: 'Variação de texto', desc: 'Alterar sempre a legenda de uma publicação para a seguinte, NUNCA repetindo descrições idênticas.' },
+                        { id: 'an_b6', titulo: 'Canal complementar (Threads)', desc: 'Integrar a atividade da conta com a rede Threads para reforçar o alcance.' },
+                      ].map(item => {
+                        const checked = Boolean(tarefasConcluidas[item.id]);
+                        return (
+                          <div
+                            key={item.id}
+                            onClick={() => toggleCheck(item.id)}
+                            style={{
+                              background: checked ? 'rgba(0, 255, 102, 0.05)' : 'rgba(0, 0, 0, 0.2)',
+                              border: `1px solid ${checked ? 'rgba(0, 255, 102, 0.3)' : '#21262D'}`,
+                              borderRadius: 8,
+                              padding: '10px 12px',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                              <span style={{ color: checked ? '#00FF66' : '#8B949E' }}>
+                                {checked ? <CheckSquare size={16} /> : <Square size={16} />}
+                              </span>
+                              <span style={{
+                                fontSize: 12,
+                                fontWeight: 700,
+                                color: checked ? '#00FF66' : '#F0F6FC',
+                                textDecoration: checked ? 'line-through' : 'none'
+                              }}>
+                                {item.titulo}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: 11, color: '#8B949E', paddingLeft: 24, lineHeight: 1.35 }}>
+                              {item.desc}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* BLOCO 4: DIRETRIZES E REGRAS DE SEGURANÇA (BLINDAGEM CONTRA BAN) */}
+                  <div style={{
+                    background: 'linear-gradient(180deg, rgba(248, 81, 73, 0.08) 0%, rgba(22, 27, 34, 0.9) 100%)',
+                    border: '1.5px solid rgba(248, 81, 73, 0.4)',
+                    borderRadius: 12,
+                    padding: '18px 20px'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                      <AlertOctagon size={18} color="#F85149" />
+                      <span style={{ fontSize: 13, fontWeight: 800, color: '#F85149', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                        4. DIRETRIZES E REGRAS DE SEGURANÇA (BLINDAGEM CONTRA BAN)
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 8 }}>
+                      {[
+                        { id: 'an_s1', titulo: '🚫 Hashtags', desc: 'Não é necessário nem aconselhável utilizar. Evite poluir legendas com tags genéricas.' },
+                        { id: 'an_s2', titulo: '🚫 Compra de audiência', desc: 'NUNCA comprar seguidores. Destrói o engajamento e ativa penalidades algorítmicas permanentes.' },
+                        { id: 'an_s3', titulo: '🚫 Vendas por DM direta', desc: 'Não responder a mensagens diretas tentando forçar conversões imediatas de venda.' },
+                        { id: 'an_s4', titulo: '⚠️ Cuidado com vocabulário', desc: 'Vigiar atentamente o vocabulário empregue em legendas e conversas para prevenir suspensões.' },
+                      ].map(item => {
+                        const checked = Boolean(tarefasConcluidas[item.id]);
+                        return (
+                          <div
+                            key={item.id}
+                            onClick={() => toggleCheck(item.id)}
+                            style={{
+                              background: checked ? 'rgba(0, 255, 102, 0.06)' : 'rgba(0, 0, 0, 0.3)',
+                              border: `1px solid ${checked ? 'rgba(0, 255, 102, 0.3)' : 'rgba(248, 81, 73, 0.25)'}`,
+                              borderRadius: 8,
+                              padding: '10px 12px',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                              <span style={{ color: checked ? '#00FF66' : '#F85149' }}>
+                                {checked ? <CheckSquare size={16} /> : <Square size={16} />}
+                              </span>
+                              <span style={{
+                                fontSize: 12,
+                                fontWeight: 700,
+                                color: checked ? '#00FF66' : '#F0F6FC',
+                                textDecoration: checked ? 'line-through' : 'none'
+                              }}>
+                                {item.titulo}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: 11, color: '#8B949E', paddingLeft: 24, lineHeight: 1.35 }}>
+                              {item.desc}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               )}
