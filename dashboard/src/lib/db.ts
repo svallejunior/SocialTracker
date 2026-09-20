@@ -247,6 +247,12 @@ async function ensureSchema(db: Db): Promise<void> {
     if (!colNames.has("foto_url")) {
       await db.exec(`ALTER TABLE controle_perfis ADD COLUMN foto_url TEXT`);
     }
+    if (!colNames.has("situacao_aquecimento")) {
+      await db.exec(`ALTER TABLE controle_perfis ADD COLUMN situacao_aquecimento TEXT`);
+    }
+    if (!colNames.has("esteira_aquecimento")) {
+      await db.exec(`ALTER TABLE controle_perfis ADD COLUMN esteira_aquecimento TEXT`);
+    }
     if (!colNames.has("meta_account_id")) {
       await db.exec(`ALTER TABLE controle_perfis ADD COLUMN meta_account_id TEXT`);
 

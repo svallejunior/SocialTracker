@@ -31,7 +31,9 @@ export async function GET() {
         cp.status as status_controle,
         cp.obs,
         cp.foto_url,
-        cp.meta_account_id
+        cp.meta_account_id,
+        cp.situacao_aquecimento,
+        cp.esteira_aquecimento
       FROM perfis_monitorados pm
       LEFT JOIN controle_perfis cp ON pm.username = cp.username
       LEFT JOIN (
@@ -506,6 +508,8 @@ export async function GET() {
         obs_historico: obsDoPerfil, // Histórico de observações
         foto_url: fotoEfetiva,
         meta_account_id: p.meta_account_id || '',
+        situacao_aquecimento: p.situacao_aquecimento || null,
+        esteira_aquecimento: p.esteira_aquecimento || null,
         foto_perfil_meta: p.foto_perfil_meta || null,
         foto_local: p.foto_url || null,
         comentarios_pendentes: nCom,
@@ -610,6 +614,8 @@ export async function PUT(request: NextRequest) {
       status,
       foto_url,
       meta_account_id,
+      situacao_aquecimento,
+      esteira_aquecimento,
       nova_obs
     } = body;
 
@@ -627,22 +633,24 @@ export async function PUT(request: NextRequest) {
 
     await db.run(`
       INSERT INTO controle_perfis
-        (username, nome, nascimento, email, reserva, linktree, inicio, telegram, fotos_estoque, status, foto_url, meta_account_id, atualizado_em)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        (username, nome, nascimento, email, reserva, linktree, inicio, telegram, fotos_estoque, status, foto_url, meta_account_id, situacao_aquecimento, esteira_aquecimento, atualizado_em)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       ON CONFLICT(username) DO UPDATE SET
-        nome           = excluded.nome,
-        nascimento     = excluded.nascimento,
-        email          = excluded.email,
-        reserva        = excluded.reserva,
-        linktree       = excluded.linktree,
-        inicio         = excluded.inicio,
-        telegram       = excluded.telegram,
-        fotos_estoque  = excluded.fotos_estoque,
-        status         = excluded.status,
-        foto_url       = excluded.foto_url,
-        meta_account_id = excluded.meta_account_id,
+        nome           = CASE WHEN excluded.nome IS NOT NULL THEN excluded.nome ELSE controle_perfis.nome END,
+        nascimento     = CASE WHEN excluded.nascimento IS NOT NULL THEN excluded.nascimento ELSE controle_perfis.nascimento END,
+        email          = CASE WHEN excluded.email IS NOT NULL THEN excluded.email ELSE controle_perfis.email END,
+        reserva        = CASE WHEN excluded.reserva IS NOT NULL THEN excluded.reserva ELSE controle_perfis.reserva END,
+        linktree       = CASE WHEN excluded.linktree IS NOT NULL THEN excluded.linktree ELSE controle_perfis.linktree END,
+        inicio         = CASE WHEN excluded.inicio IS NOT NULL THEN excluded.inicio ELSE controle_perfis.inicio END,
+        telegram       = CASE WHEN excluded.telegram IS NOT NULL THEN excluded.telegram ELSE controle_perfis.telegram END,
+        fotos_estoque  = CASE WHEN excluded.fotos_estoque IS NOT NULL THEN excluded.fotos_estoque ELSE controle_perfis.fotos_estoque END,
+        status         = CASE WHEN excluded.status IS NOT NULL THEN excluded.status ELSE controle_perfis.status END,
+        foto_url       = CASE WHEN excluded.foto_url IS NOT NULL THEN excluded.foto_url ELSE controle_perfis.foto_url END,
+        meta_account_id = CASE WHEN excluded.meta_account_id IS NOT NULL THEN excluded.meta_account_id ELSE controle_perfis.meta_account_id END,
+        situacao_aquecimento = CASE WHEN excluded.situacao_aquecimento IS NOT NULL THEN excluded.situacao_aquecimento ELSE controle_perfis.situacao_aquecimento END,
+        esteira_aquecimento  = CASE WHEN excluded.esteira_aquecimento IS NOT NULL THEN excluded.esteira_aquecimento ELSE controle_perfis.esteira_aquecimento END,
         atualizado_em  = datetime('now')
-    `, [username, nome, nascimento, email, reserva, linktree, inicio, telegram ?? '', fotos_estoque, status, foto_url, meta_account_id ?? '']);
+    `, [username, nome ?? null, nascimento ?? null, email ?? null, reserva ?? null, linktree ?? null, inicio ?? null, telegram ?? null, fotos_estoque ?? null, status ?? null, foto_url ?? null, meta_account_id ?? null, situacao_aquecimento ?? null, esteira_aquecimento ?? null]);
 
     if (status && (status.includes('Morreu') || status === 'MORREU')) {
       await db.run(`UPDATE perfis_monitorados SET status = 'MORREU' WHERE username = ?`, [username]);

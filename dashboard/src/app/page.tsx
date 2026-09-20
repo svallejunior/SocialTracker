@@ -26,6 +26,7 @@ import ModalEvolucaoPost from "../components/ModalEvolucaoPost";
 import FloatingLogButton from "../components/FloatingLogButton";
 import LogoSplash from "../components/LogoSplash";
 import QuadroAnalisePerfil from "../components/QuadroAnalisePerfil";
+import ModalTarefasModelo from "../components/ModalTarefasModelo";
 
 function generateSparklinePath(points: number[], width: number = 160, height: number = 38): { strokePath: string; fillPath: string } {
   if (!points || points.length === 0) {
@@ -2591,6 +2592,7 @@ export default function Dashboard() {
   const [modalLancamento, setModalLancamento] = useState<{ username: string; tipo: string; } | null>(null);
   const [modalControleEdit, setModalControleEdit] = useState<any | null>(null);
   const [modalMelhoresHorarios, setModalMelhoresHorarios] = useState<any | null>(null);
+  const [modalTarefasModelo, setModalTarefasModelo] = useState<any | null>(null);
 
   const [ingestingProfile, setIngestingProfile] = useState<string | null>(null);
   const [ingestingAll, setIngestingAll] = useState(false);
@@ -3137,6 +3139,50 @@ export default function Dashboard() {
     setModalControleEdit(null);
   }
 
+  const handleOpenTarefaDiaria = (username: string) => {
+    const u = (username || '').toLowerCase();
+    const c = (controleData || []).find((cp: any) => (cp.username || '').toLowerCase() === u);
+    const p = profiles.find((prof: any) => (prof.username || '').toLowerCase() === u);
+    const modeloAlvo = c ? { ...p, ...c } : (p || { username });
+    setModalTarefasModelo(modeloAlvo);
+  };
+
+  const handleSaveConfigTarefas = async (username: string, situacao: string, esteira?: string | null) => {
+    const u = (username || '').toLowerCase();
+    try {
+      await fetch('/api/controle', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username,
+          situacao_aquecimento: situacao,
+          esteira_aquecimento: esteira || null
+        })
+      });
+
+      setModalTarefasModelo((prev: any) => prev ? {
+        ...prev,
+        situacao_aquecimento: situacao,
+        esteira_aquecimento: esteira || null
+      } : prev);
+
+      setControleData((prev: any[]) => prev.map((cp: any) => {
+        if ((cp.username || '').toLowerCase() === u) {
+          return {
+            ...cp,
+            situacao_aquecimento: situacao,
+            esteira_aquecimento: esteira || null
+          };
+        }
+        return cp;
+      }));
+
+      fetchControle();
+    } catch (err) {
+      console.error('Erro ao salvar situação/esteira da modelo:', err);
+    }
+  };
+
 
   // --- FILTRAGENS ---
   // Precisam vir antes dos `return` condicionais de loading/error abaixo —
@@ -3381,12 +3427,19 @@ export default function Dashboard() {
     <div className="dashboard-container">
       {/* --- CABEÇALHO DO DASHBOARD --- */}
       <header className="app-header">
-        <div className="brand-section">
+        <a
+          href="https://whimsical.com/svj8/gerou-lead-AKg9ULSb61KNUNUNWANtot"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="brand-section"
+          title="Abrir Mapa Mental SocialTracker"
+          style={{ textDecoration: 'none', cursor: 'pointer' }}
+        >
           <div className="logo-icon">
             <img src="/img/logo.jpeg" alt="SocialTracker Logo" />
           </div>
           <div className="brand-name">SocialTracker</div>
-        </div>
+        </a>
 
         <div className="header-actions">
           {/* Navegação principal por Abas */}
@@ -3455,35 +3508,6 @@ export default function Dashboard() {
               })()}
             </button>
           </div>
-
-          {/* Seletor de Datas Falso (Visual) */}
-          <a
-            href="https://whimsical.com/svj8/gerou-lead-AKg9ULSb61KNUNUNWANtot"
-            target="_blank"
-            style={{ display: 'flex', alignSelf: 'stretch', textDecoration: 'none' }}
-          >
-            <button style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 6,
-              backgroundColor: '#39ff14',
-              color: '#000',
-              border: 'none',
-              borderRadius: '8px',
-              padding: '0 14px',
-              height: '100%',
-              fontWeight: 700,
-              fontSize: '12px',
-              cursor: 'pointer',
-              boxShadow: '0 0 8px #39ff14, 0 0 16px #39ff1466',
-              letterSpacing: '0.5px',
-              whiteSpace: 'nowrap'
-            }}>
-              <Brain size={14} />
-              MAPA MENTAL
-            </button>
-          </a>
 
         </div>
       </header>
@@ -7206,9 +7230,19 @@ export default function Dashboard() {
             setLancamentoSelecionado(null);
             setModalLancamento({ username: u, tipo: 'recebido' });
           }}
-          onOpenTarefaDiaria={() => {
-            alert('Tarefa diária: recurso em construção — em breve! 📋');
+          onOpenTarefaDiaria={(u) => {
+            handleOpenTarefaDiaria(u || modalControleEdit?.username);
           }}
+        />
+      )}
+
+      {/* Modal de Tarefas & Esteira de Aquecimento da Modelo */}
+      {modalTarefasModelo && (
+        <ModalTarefasModelo
+          isOpen={Boolean(modalTarefasModelo)}
+          modelo={modalTarefasModelo}
+          onClose={() => setModalTarefasModelo(null)}
+          onSaveConfig={handleSaveConfigTarefas}
         />
       )}
 
