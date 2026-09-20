@@ -1063,13 +1063,15 @@ function ModalControleEditInline({
   controleData,
   onClose,
   onSave,
-  onOpenFinanceiro
+  onOpenFinanceiro,
+  onOpenTarefaDiaria
 }: {
   perfil: any;
   controleData?: any[];
   onClose: () => void;
   onSave: (d: any) => void;
   onOpenFinanceiro?: (username: string) => void;
+  onOpenTarefaDiaria?: (username: string) => void;
 }) {
   const perfilAtualizado = (controleData || []).find(
     (c: any) => (c.username || '').toLowerCase() === (perfil.username || '').toLowerCase()
@@ -1092,7 +1094,6 @@ function ModalControleEditInline({
     reserva: perfil.reserva || '',
     linktree: perfil.linktree || '',
     inicio: perfil.inicio || '',
-    telegram: perfil.telegram || '',
     status: perfil.status || '⏳ Aguardando',
     foto_url: perfil.foto_url || '',
     meta_account_id: perfil.meta_account_id || '',
@@ -1334,34 +1335,32 @@ function ModalControleEditInline({
             {field('Início', 'inicio', 'date')}
             <div>
               <label style={{ fontSize: 11, color: '#8B949E', display: 'block', marginBottom: 6, fontWeight: 600, letterSpacing: '0.05em' }}>
-                GRUPO TELEGRAM
+                TAREFA DIÁRIA
               </label>
-              <div style={{ display: 'flex', background: '#0D1117', border: '1px solid #30363D', borderRadius: 8, overflow: 'hidden', height: 41 }}>
-                {(['SIM', 'NÃO'] as const).map(opt => (
-                  <button
-                    key={opt}
-                    type="button"
-                    onClick={() => setForm(f => ({ ...f, telegram: opt }))}
-                    style={{
-                      flex: 1,
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontSize: 13,
-                      fontWeight: 700,
-                      transition: 'all 0.2s',
-                      background: form.telegram === opt
-                        ? (opt === 'SIM' ? '#0e4429' : '#3b1219')
-                        : 'transparent',
-                      color: form.telegram === opt
-                        ? (opt === 'SIM' ? '#2ea043' : '#f85149')
-                        : '#8B949E',
-                      borderRight: opt === 'SIM' ? '1px solid #30363D' : 'none'
-                    }}
-                  >
-                    {opt === 'SIM' ? '✅ SIM' : '❌ NÃO'}
-                  </button>
-                ))}
-              </div>
+              <button
+                type="button"
+                onClick={() => onOpenTarefaDiaria?.(form.username || perfil.username)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  width: '100%',
+                  height: 41,
+                  background: 'rgba(113, 0, 226, 0.12)',
+                  border: '1px solid rgba(113, 0, 226, 0.4)',
+                  borderRadius: 8,
+                  color: '#B794F6',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(113, 0, 226, 0.22)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(113, 0, 226, 0.12)'; }}
+              >
+                📋 Ver tarefas
+              </button>
             </div>
             <div>
               <label style={{ fontSize: 11, color: '#8B949E', display: 'block', marginBottom: 6, fontWeight: 600, letterSpacing: '0.05em' }}>
@@ -7206,6 +7205,9 @@ export default function Dashboard() {
           onOpenFinanceiro={(u) => {
             setLancamentoSelecionado(null);
             setModalLancamento({ username: u, tipo: 'recebido' });
+          }}
+          onOpenTarefaDiaria={() => {
+            alert('Tarefa diária: recurso em construção — em breve! 📋');
           }}
         />
       )}

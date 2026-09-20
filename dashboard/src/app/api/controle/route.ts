@@ -642,7 +642,7 @@ export async function PUT(request: NextRequest) {
         foto_url       = excluded.foto_url,
         meta_account_id = excluded.meta_account_id,
         atualizado_em  = datetime('now')
-    `, [username, nome, nascimento, email, reserva, linktree, inicio, telegram, fotos_estoque, status, foto_url, meta_account_id ?? '']);
+    `, [username, nome, nascimento, email, reserva, linktree, inicio, telegram ?? '', fotos_estoque, status, foto_url, meta_account_id ?? '']);
 
     if (status && (status.includes('Morreu') || status === 'MORREU')) {
       await db.run(`UPDATE perfis_monitorados SET status = 'MORREU' WHERE username = ?`, [username]);
