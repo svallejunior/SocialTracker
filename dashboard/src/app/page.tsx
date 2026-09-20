@@ -4219,6 +4219,7 @@ export default function Dashboard() {
               profilesFiltrados.map((perfil, idx) => {
                 const isMorreu = perfil.status === 'MORREU' || perfil.status_controle === '☠️ Morreu' || (perfil.status_controle || '').includes('Morreu');
                 const isMeuPerfil = perfil.meu_perfil === 1 || Boolean(perfil.meu_perfil);
+                const isMinhaModelo = isMeuPerfil || (controleData || []).some((c: any) => (c.username || '').toLowerCase() === (perfil.username || '').toLowerCase());
                 const isIndisponivel = (perfil.status || '').toUpperCase() === 'INDISPONIVEL' || (perfil.status || '').toUpperCase() === 'INDISPONÍVEL';
                 const isYellowRow = isMeuPerfil && isIndisponivel && !isMorreu;
                 const isGreenRow = isMeuPerfil && !isMorreu && !isIndisponivel;
@@ -4822,8 +4823,17 @@ export default function Dashboard() {
                     {isMaster2802 && (
                       <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
                         <button
-                          onClick={() => setEditTarget(perfil)}
-                          title="Editar"
+                          onClick={() => {
+                            if (isMinhaModelo) {
+                              const u = (perfil.username || '').toLowerCase();
+                              const itemControle = (controleData || []).find((c: any) => (c.username || '').toLowerCase() === u);
+                              const pCtrl = itemControle ? { ...perfil, ...itemControle } : perfil;
+                              setModalControleEdit(pCtrl);
+                            } else {
+                              setEditTarget(perfil);
+                            }
+                          }}
+                          title={isMinhaModelo ? "Gerenciar perfil da modelo" : "Editar"}
                           style={{
                             background: "#21262D", border: "1px solid #30363D",
                             borderRadius: 6, padding: "5px 9px", cursor: "pointer",
