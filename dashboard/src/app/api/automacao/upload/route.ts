@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import path from 'path';
 import fs from 'fs';
+import { spawnSync } from 'child_process';
 import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
@@ -85,8 +86,19 @@ export async function POST(req: NextRequest) {
       // Se for imagem (PNG, JPG, JPEG, WEBP, etc.), limpa metadados e injeta EXIF de celular real
       if (!isVideo && (ext.toLowerCase() in { '.jpg': 1, '.jpeg': 1, '.png': 1, '.webp': 1 } || (file.type && file.type.startsWith('image/')))) {
         try {
-          const { spawnSync } = await import('child_process');
-          const pyExe = process.env.PYTHON_BIN || (process.platform === 'win32' ? 'python' : 'python3');
+          const venvPyLinux = path.resolve(process.cwd(), '..', '.venv', 'bin', 'python3');
+          const venvPyWin = path.resolve(process.cwd(), '..', '.venv', 'Scripts', 'python.exe');
+          let pyExe = process.env.PYTHON_BIN || '';
+          if (!pyExe) {
+            if (fs.existsSync(venvPyLinux)) {
+              pyExe = venvPyLinux;
+            } else if (fs.existsSync(venvPyWin)) {
+              pyExe = venvPyWin;
+            } else {
+              pyExe = process.platform === 'win32' ? 'python' : 'python3';
+            }
+          }
+
           const scriptProcessar = path.resolve(process.cwd(), '..', 'processar_imagem.py');
 
           if (fs.existsSync(scriptProcessar)) {
@@ -99,6 +111,8 @@ export async function POST(req: NextRequest) {
               finalBuffer = Buffer.from(pyRes.stdout);
               finalMimeType = 'image/jpeg';
               console.log(`[Upload] 📸 Imagem sanitizada com EXIF e nome aleatório de câmera: ${finalSafeFileName}`);
+            } else if (pyRes.status !== 0) {
+              console.warn(`[Upload] Python processar_imagem retornou status ${pyRes.status}:`, pyRes.stderr?.toString());
             }
           }
         } catch (procErr) {
