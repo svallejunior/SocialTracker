@@ -137,8 +137,41 @@ DIA 4:
 
 REPITA até o dia 20`;
 
-  const handleCopiarRoteiro = () => {
-    navigator.clipboard.writeText(textoRoteiroAcelerado);
+  const textoRoteiroTorreChampagne = `================= ESTEIRA COM TORRE DE CHAMPAGNE ==================
+FASE 1(DIA 1): 
+* Cria a conta com e-mail
+* Insere foto do perfil (de preferência foto de cor ou anime/caricatura com IA)
+* Poste uma foto sua no feed: 10 a 30 min depois de postar, arquive.
+* Insere a BIO - bio deve ser totalmente minamalista e NÃO apelativa.
+* Siga 5 contas de modelo HOT
+* Use a conta por pelo menos 5 minutos na aba reels de forma HUMANIZADA(Você precisa treinar seu algoritmo, mostre que tem interesse em modelos)
+* faça o mesmo treinamento na aba explorar
+
+FASE 2: 
+* Você deve ter pelo menos 9 feeds e de preferência 80% deles carrosséis
+* poste de 1 ao no máximo 2 por dia.
+* evite imagens com muita pele ou sedutoras ou roupas cor de pele
+* evite imagens escuras
+* jamais mostre muito de sua modelo
+* modelo linda, beleza que gere desejo sem mostrar nada.
+* fixe os 3 melhores feeds que tenham uma identidade visual congruente.
+* POST FEEDS ate alcançar 9 e então pode parar.
+* USE a conta HUMANIZADA de 5 a 15 minutos por dia a partir do dia 2, TODOS OS DIAS.
+* Siga 5 contas de modelo e 2 contas de leads qualificados (possíveis comrpadores, pessoas com dinheiro e que seguem poucas modelos, procure lead que tenham story)
+* Aplique isso até que você siga pelo menos 100 modelos
+* a cada dia que passar você poderá aumentar o numero de contas que segue em 2(se seguiu 7.. hoje pode seguir 9). NUNCA passe de 12 contas por dia.
+* Interessante fazer pausas... deixar 1 dia nesse intervalo sem seguir ninguém
+
+FASE 3: (criar torre de champagne)
+* seu perfil precisa estar privado!!!
+* Alcançar entre 1k e 1.5k é o ponto de tração.
+* Seus seguidores tem de ser qualificados (homens que se encaixam no nisso que vc quer)
+	- Utilizando outras contas de instagram caso você tenha
+	- Usar TIK-TOK`;
+
+  const handleCopiarRoteiro = (customTexto?: string | any) => {
+    const texto = (typeof customTexto === 'string' && customTexto) ? customTexto : (esteiraEfetiva === 'TORRE_CHAMPAGNE' ? textoRoteiroTorreChampagne : textoRoteiroAcelerado);
+    navigator.clipboard.writeText(texto);
     setCopiado(true);
     setTimeout(() => setCopiado(false), 2500);
   };
@@ -767,7 +800,7 @@ REPITA até o dia 20`;
 
                     <button
                       type="button"
-                      onClick={handleCopiarRoteiro}
+                      onClick={() => handleCopiarRoteiro(textoRoteiroAcelerado)}
                       style={{
                         display: 'inline-flex',
                         alignItems: 'center',
@@ -1071,39 +1104,232 @@ REPITA até o dia 20`;
 
               {/* CASO: AQUECIMENTO TORRE DE CHAMPAGNE */}
               {situacaoEfetiva === 'EM_AQUECIMENTO' && esteiraEfetiva === 'TORRE_CHAMPAGNE' && (
-                <div style={{ maxWidth: 700, margin: '0 auto', textAlign: 'center', padding: '30px 20px' }}>
+                <div>
+                  {/* Banner de Título com Botão de Copiar */}
                   <div style={{
-                    width: 50,
-                    height: 50,
-                    borderRadius: 12,
-                    background: 'rgba(227, 179, 65, 0.15)',
-                    display: 'inline-flex',
+                    background: 'linear-gradient(135deg, rgba(227, 179, 65, 0.12), rgba(245, 158, 11, 0.15))',
+                    border: '1px solid rgba(227, 179, 65, 0.35)',
+                    borderRadius: 14,
+                    padding: '16px 20px',
+                    marginBottom: 20,
+                    display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#E3B341',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: 12
+                  }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Wine size={18} color="#E3B341" />
+                        <h4 style={{ fontSize: 16, fontWeight: 800, color: '#E3B341', margin: 0 }}>
+                          ESTEIRA COM TORRE DE CHAMPAGNE
+                        </h4>
+                      </div>
+                      <p style={{ fontSize: 12, color: '#C9D1D9', margin: '4px 0 0 0' }}>
+                        Estratégia de 3 Fases: criação, maturação de 9 feeds e transbordo de tráfego qualificado para @{modelo.username}.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleCopiarRoteiro(textoRoteiroTorreChampagne)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '7px 14px',
+                        background: copiado ? '#238636' : 'rgba(227, 179, 65, 0.15)',
+                        border: `1px solid ${copiado ? '#2ea043' : 'rgba(227, 179, 65, 0.4)'}`,
+                        borderRadius: 8,
+                        color: copiado ? '#fff' : '#E3B341',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        transition: 'all 0.15s'
+                      }}
+                    >
+                      {copiado ? <Check size={14} /> : <Copy size={14} />}
+                      {copiado ? 'Copiado!' : 'Copiar Roteiro'}
+                    </button>
+                  </div>
+
+                  {/* FASE 1 (DIA 1) */}
+                  <div style={{
+                    background: '#161B22',
+                    border: '1px solid rgba(227, 179, 65, 0.3)',
+                    borderRadius: 12,
+                    padding: '18px 20px',
                     marginBottom: 16
                   }}>
-                    <Wine size={26} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                      <Calendar size={16} color="#E3B341" />
+                      <span style={{ fontSize: 13, fontWeight: 800, color: '#E3B341', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                        FASE 1 (DIA 1): CRIAÇÃO & CALIBRAÇÃO INICIAL
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {[
+                        { id: 'tc_f1_1', texto: 'Cria a conta com e-mail' },
+                        { id: 'tc_f1_2', texto: 'Insere foto do perfil (de preferência foto de cor ou anime/caricatura com IA)' },
+                        { id: 'tc_f1_3', texto: 'Poste uma foto sua no feed: 10 a 30 min depois de postar, arquive.' },
+                        { id: 'tc_f1_4', texto: 'Insere a BIO - bio deve ser totalmente minimalista e NÃO apelativa.' },
+                        { id: 'tc_f1_5', texto: 'Siga 5 contas de modelo HOT' },
+                        { id: 'tc_f1_6', texto: 'Use a conta por pelo menos 5 minutos na aba reels de forma HUMANIZADA (treine seu algoritmo, mostre interesse em modelos)' },
+                        { id: 'tc_f1_7', texto: 'Faça o mesmo treinamento na aba explorar' },
+                      ].map(item => {
+                        const checked = Boolean(tarefasConcluidas[item.id]);
+                        return (
+                          <div
+                            key={item.id}
+                            onClick={() => toggleCheck(item.id)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 10,
+                              background: checked ? 'rgba(0, 255, 102, 0.06)' : 'rgba(0, 0, 0, 0.2)',
+                              border: `1px solid ${checked ? 'rgba(0, 255, 102, 0.3)' : '#21262D'}`,
+                              borderRadius: 8,
+                              padding: '8px 12px',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s'
+                            }}
+                          >
+                            <span style={{ color: checked ? '#00FF66' : '#8B949E' }}>
+                              {checked ? <CheckSquare size={16} /> : <Square size={16} />}
+                            </span>
+                            <span style={{
+                              fontSize: 12,
+                              fontWeight: 600,
+                              color: checked ? '#00FF66' : '#C9D1D9',
+                              textDecoration: checked ? 'line-through' : 'none'
+                            }}>
+                              {item.texto}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <h4 style={{ fontSize: 18, fontWeight: 800, color: '#F0F6FC', marginBottom: 8 }}>
-                    Esteira Torre de Champagne
-                  </h4>
-                  <p style={{ fontSize: 13, color: '#8B949E', maxWidth: 520, margin: '0 auto 24px auto', lineHeight: 1.5 }}>
-                    Estratégia multiconas interligadas em cascata para transbordar tráfego para a conta principal de @{modelo.username}.
-                  </p>
+
+                  {/* FASE 2 */}
                   <div style={{
                     background: '#161B22',
                     border: '1px solid #30363D',
                     borderRadius: 12,
-                    padding: '20px',
-                    textAlign: 'left',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 10
+                    padding: '18px 20px',
+                    marginBottom: 16
                   }}>
-                    <div style={{ fontSize: 13, color: '#C9D1D9' }}>• <strong>Nível 1 (Topo da Torre):</strong> Perfil principal com identidade consolidada e conversão direta.</div>
-                    <div style={{ fontSize: 13, color: '#C9D1D9' }}>• <strong>Nível 2 (Perfis Satélites):</strong> Contas em aquecimento direcionando tráfego via menções e colaborações estratégicas.</div>
-                    <div style={{ fontSize: 13, color: '#C9D1D9' }}>• <strong>Distribuição:</strong> Transbordo de engajamento conforme as contas satélites atingem o limiar de 14 dias de maturação.</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                      <Layers size={16} color="#00F0FF" />
+                      <span style={{ fontSize: 13, fontWeight: 800, color: '#00F0FF', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                        FASE 2: CONSTRUÇÃO DOS 9 FEEDS & ROTINA QUALIFICADA
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {[
+                        { id: 'tc_f2_1', texto: 'Você deve ter pelo menos 9 feeds e de preferência 80% deles carrosséis' },
+                        { id: 'tc_f2_2', texto: 'Poste de 1 ao no máximo 2 por dia' },
+                        { id: 'tc_f2_3', texto: 'Evite imagens com muita pele ou sedutoras ou roupas cor de pele' },
+                        { id: 'tc_f2_4', texto: 'Evite imagens escuras' },
+                        { id: 'tc_f2_5', texto: 'Jamais mostre muito de sua modelo (modelo linda, beleza que gere desejo sem mostrar nada)' },
+                        { id: 'tc_f2_6', texto: 'Fixe os 3 melhores feeds que tenham uma identidade visual congruente' },
+                        { id: 'tc_f2_7', texto: 'POST FEEDS até alcançar 9 e então pode parar' },
+                        { id: 'tc_f2_8', texto: 'USE a conta HUMANIZADA de 5 a 15 minutos por dia a partir do dia 2, TODOS OS DIAS' },
+                        { id: 'tc_f2_9', texto: 'Siga 5 contas de modelo e 2 contas de leads qualificados (possíveis compradores, com dinheiro, seguem poucas modelos e com story)' },
+                        { id: 'tc_f2_10', texto: 'Aplique isso até que você siga pelo menos 100 modelos' },
+                        { id: 'tc_f2_11', texto: 'A cada dia que passar aumente as contas que segue em 2 (ex: se seguiu 7, hoje pode 9). NUNCA passe de 12 contas por dia' },
+                        { id: 'tc_f2_12', texto: 'Interessante fazer pausas... deixar 1 dia nesse intervalo sem seguir ninguém' },
+                      ].map(item => {
+                        const checked = Boolean(tarefasConcluidas[item.id]);
+                        return (
+                          <div
+                            key={item.id}
+                            onClick={() => toggleCheck(item.id)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 10,
+                              background: checked ? 'rgba(0, 255, 102, 0.06)' : 'rgba(0, 0, 0, 0.2)',
+                              border: `1px solid ${checked ? 'rgba(0, 255, 102, 0.3)' : '#21262D'}`,
+                              borderRadius: 8,
+                              padding: '8px 12px',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s'
+                            }}
+                          >
+                            <span style={{ color: checked ? '#00FF66' : '#8B949E' }}>
+                              {checked ? <CheckSquare size={16} /> : <Square size={16} />}
+                            </span>
+                            <span style={{
+                              fontSize: 12,
+                              fontWeight: 600,
+                              color: checked ? '#00FF66' : '#C9D1D9',
+                              textDecoration: checked ? 'line-through' : 'none'
+                            }}>
+                              {item.texto}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* FASE 3 */}
+                  <div style={{
+                    background: 'linear-gradient(180deg, #161B22 0%, rgba(22, 27, 34, 0.7) 100%)',
+                    border: '1.5px solid rgba(227, 179, 65, 0.4)',
+                    borderRadius: 12,
+                    padding: '18px 20px'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                      <Wine size={16} color="#E3B341" />
+                      <span style={{ fontSize: 13, fontWeight: 800, color: '#E3B341', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                        FASE 3: CRIAR TORRE DE CHAMPAGNE (PONTO DE TRAÇÃO & TRANSBORDO)
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {[
+                        { id: 'tc_f3_1', texto: '🔒 Seu perfil precisa estar PRIVADO!!!' },
+                        { id: 'tc_f3_2', texto: '📈 Alcançar entre 1k e 1.5k é o ponto de tração.' },
+                        { id: 'tc_f3_3', texto: '🎯 Seus seguidores têm de ser qualificados (homens que se encaixam no nicho desejado):' },
+                        { id: 'tc_f3_4', texto: '   ↳ Utilizando outras contas de Instagram caso você tenha' },
+                        { id: 'tc_f3_5', texto: '   ↳ Usar TIK-TOK para transbordo e atração de leads qualificados' },
+                      ].map(item => {
+                        const checked = Boolean(tarefasConcluidas[item.id]);
+                        return (
+                          <div
+                            key={item.id}
+                            onClick={() => toggleCheck(item.id)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 10,
+                              background: checked ? 'rgba(0, 255, 102, 0.06)' : 'rgba(0, 0, 0, 0.2)',
+                              border: `1px solid ${checked ? 'rgba(0, 255, 102, 0.3)' : '#21262D'}`,
+                              borderRadius: 8,
+                              padding: '8px 12px',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s'
+                            }}
+                          >
+                            <span style={{ color: checked ? '#00FF66' : '#8B949E' }}>
+                              {checked ? <CheckSquare size={16} /> : <Square size={16} />}
+                            </span>
+                            <span style={{
+                              fontSize: 12,
+                              fontWeight: 600,
+                              color: checked ? '#00FF66' : (item.id === 'tc_f3_1' ? '#FFAA00' : '#C9D1D9'),
+                              textDecoration: checked ? 'line-through' : 'none'
+                            }}>
+                              {item.texto}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               )}
