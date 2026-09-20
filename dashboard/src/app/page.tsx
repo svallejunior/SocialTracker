@@ -2611,6 +2611,17 @@ export default function Dashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username })
       });
+
+      if (!res.ok) {
+        const text = await res.text();
+        if (res.status === 504 || text.includes('504')) {
+          fetchData(true);
+          alert("⏳ A coleta completa está em execução em segundo plano no servidor (o processo leva alguns minutos). Os dados estão sendo atualizados no painel gradativamente!");
+          return;
+        }
+        throw new Error(`Servidor respondeu com status ${res.status}`);
+      }
+
       const json = await res.json();
       if (json.success) {
         if (json.warning && username) {

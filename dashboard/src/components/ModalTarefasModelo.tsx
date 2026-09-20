@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react';
 import {
   X, CheckSquare, Square, Flame, Zap, Wine, ShieldAlert,
   Smartphone, Calendar, CheckCircle2, Copy, Check, ArrowRight,
-  RotateCcw, Sparkles, AlertTriangle, Layers
+  RotateCcw, Sparkles, AlertTriangle, Layers,
+  UserPlus, UserMinus, Users, Target, ChevronDown, ChevronUp, RefreshCw, Edit3
 } from 'lucide-react';
 
 interface Props {
@@ -16,6 +17,11 @@ interface Props {
     foto_url?: string;
     situacao_aquecimento?: string | null;
     esteira_aquecimento?: string | null;
+    meta_follows_dia?: number;
+    follows_dia?: number;
+    unfollows_dia?: number;
+    seguindo_atual?: number;
+    leituras_seguindo?: any[];
   } | null;
   onSaveConfig: (username: string, situacao: string, esteira?: string | null) => Promise<void>;
 }
@@ -25,6 +31,90 @@ export default function ModalTarefasModelo({ isOpen, onClose, modelo, onSaveConf
   const [copiado, setCopiado] = useState(false);
   const [etapaManual, setEtapaManual] = useState<'AUTO' | 'PERGUNTAR_SITUACAO' | 'ESCOLHER_ESTEIRA' | 'VER_TAREFAS'>('AUTO');
   const [tarefasConcluidas, setTarefasConcluidas] = useState<Record<string, boolean>>({});
+
+  // Estado para Contabilidade de Follows & Unfollows do Dia
+  const [followStats, setFollowStats] = useState<{
+    follows_dia: number;
+    unfollows_dia: number;
+    meta_dia: number;
+    seguindo_atual: number;
+    seguindo_baseline: number;
+    historico_hoje: any[];
+    loading: boolean;
+  }>({
+    follows_dia: Number(modelo?.follows_dia) || 0,
+    unfollows_dia: Number(modelo?.unfollows_dia) || 0,
+    meta_dia: Number(modelo?.meta_follows_dia) || 30,
+    seguindo_atual: Number(modelo?.seguindo_atual) || 0,
+    seguindo_baseline: 0,
+    historico_hoje: modelo?.leituras_seguindo || [],
+    loading: false
+  });
+
+  const [editandoMeta, setEditandoMeta] = useState(false);
+  const [novaMetaInput, setNovaMetaInput] = useState('30');
+  const [mostrarHistoricoLeituras, setMostrarHistoricoLeituras] = useState(false);
+
+  const carregarFollowStats = async () => {
+    if (!modelo?.username) return;
+    try {
+      setFollowStats(prev => ({ ...prev, loading: true }));
+      const res = await fetch(`/api/controle/follow-stats?username=${encodeURIComponent(modelo.username)}`, { cache: 'no-store' });
+      const data = await res.json();
+      if (data.success) {
+        setFollowStats({
+          follows_dia: Number(data.follows_dia) || 0,
+          unfollows_dia: Number(data.unfollows_dia) || 0,
+          meta_dia: Number(data.meta_dia) || 30,
+          seguindo_atual: Number(data.seguindo_atual) || 0,
+          seguindo_baseline: Number(data.seguindo_baseline) || 0,
+          historico_hoje: data.historico_hoje || [],
+          loading: false
+        });
+        setNovaMetaInput(String(data.meta_dia || 30));
+      } else {
+        setFollowStats(prev => ({ ...prev, loading: false }));
+      }
+    } catch (e) {
+      console.warn("Erro ao buscar follow stats:", e);
+      setFollowStats(prev => ({ ...prev, loading: false }));
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen && modelo?.username) {
+      // Inicia com os dados passados pelo pai
+      setFollowStats({
+        follows_dia: Number(modelo?.follows_dia) || 0,
+        unfollows_dia: Number(modelo?.unfollows_dia) || 0,
+        meta_dia: Number(modelo?.meta_follows_dia) || 30,
+        seguindo_atual: Number(modelo?.seguindo_atual) || 0,
+        seguindo_baseline: 0,
+        historico_hoje: modelo?.leituras_seguindo || [],
+        loading: false
+      });
+      setNovaMetaInput(String(modelo?.meta_follows_dia || 30));
+      carregarFollowStats();
+    }
+  }, [isOpen, modelo?.username]);
+
+  const handleSalvarMeta = async (novoValor: number) => {
+    if (!modelo?.username || isNaN(novoValor) || novoValor < 1) {
+      setEditandoMeta(false);
+      return;
+    }
+    try {
+      setFollowStats(prev => ({ ...prev, meta_dia: novoValor }));
+      setEditandoMeta(false);
+      await fetch('/api/controle/follow-stats', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: modelo.username, meta_dia: novoValor })
+      });
+    } catch (e) {
+      console.error("Erro ao salvar meta:", e);
+    }
+  };
 
   // Carrega estado de checkboxes salvo em localStorage por modelo
   useEffect(() => {
@@ -689,6 +779,7 @@ FASE 3: (criar torre de champagne)
               {/* CASO: MODELO AQUECIDA */}
               {situacaoEfetiva === 'AQUECIDA' && (
                 <div style={{ maxWidth: 700, margin: '0 auto' }}>
+                  {/* Banner de Status */}
                   <div style={{
                     background: 'rgba(0, 255, 102, 0.08)',
                     border: '1px solid rgba(0, 255, 102, 0.3)',
@@ -717,13 +808,312 @@ FASE 3: (criar torre de champagne)
                         Modelo Aquecida e Pronta para Escala
                       </h4>
                       <p style={{ fontSize: 13, color: '#C9D1D9', margin: 0, lineHeight: 1.4 }}>
-                        A conta de <strong>@{modelo.username}</strong> já passou pelo período crítico de maturação. Siga a rotina operacional regular de publicações e engajamento:
+                        A conta de <strong>@{modelo.username}</strong> já passou pelo período crítico de maturação. Siga a rotina operacional regular de publicações, follow/unfollow e engajamento:
                       </p>
                     </div>
                   </div>
 
+                  {/* PAINEL DE CONTABILIDADE: FOLLOW & UNFOLLOW DO DIA */}
+                  <div style={{
+                    background: 'linear-gradient(180deg, #161B22 0%, #0F1318 100%)',
+                    border: '1px solid #30363D',
+                    borderRadius: 14,
+                    padding: '18px 20px',
+                    marginBottom: 20,
+                    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)'
+                  }}>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      marginBottom: 16,
+                      flexWrap: 'wrap',
+                      gap: 10
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{
+                          width: 34,
+                          height: 34,
+                          borderRadius: 8,
+                          background: 'rgba(0, 240, 255, 0.12)',
+                          border: '1px solid rgba(0, 240, 255, 0.35)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#00F0FF'
+                        }}>
+                          <UserPlus size={18} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 800, color: '#F0F6FC' }}>
+                            Controle de Follow & Unfollow de Hoje
+                          </div>
+                          <div style={{ fontSize: 11, color: '#8B949E' }}>
+                            Calculado automaticamente a cada ciclo de 15 min da Meta API
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={carregarFollowStats}
+                        disabled={followStats.loading}
+                        title="Atualizar leituras de hoje"
+                        style={{
+                          background: 'rgba(255, 255, 255, 0.05)',
+                          border: '1px solid #30363D',
+                          borderRadius: 6,
+                          padding: '4px 10px',
+                          color: '#8B949E',
+                          fontSize: 11,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6
+                        }}
+                      >
+                        <RefreshCw size={12} className={followStats.loading ? 'animate-spin' : ''} />
+                        {followStats.loading ? 'Atualizando...' : 'Atualizar'}
+                      </button>
+                    </div>
+
+                    {/* GRID DE CARDS COM AS MÉTRICAS */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
+                      {/* Bloco Follows Hoje */}
+                      <div style={{
+                        background: 'rgba(0, 255, 102, 0.05)',
+                        border: '1px solid rgba(0, 255, 102, 0.25)',
+                        borderRadius: 10,
+                        padding: '14px 16px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: '#00FF66', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                            Follows Realizados
+                          </span>
+                          <UserPlus size={14} color="#00FF66" />
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                          <span style={{ fontSize: 26, fontWeight: 900, color: '#F0F6FC' }}>
+                            {followStats.follows_dia}
+                          </span>
+                          <span style={{ fontSize: 15, fontWeight: 700, color: '#8B949E', display: 'flex', alignItems: 'center', gap: 4 }}>
+                            /
+                            {editandoMeta ? (
+                              <input
+                                type="number"
+                                value={novaMetaInput}
+                                onChange={e => setNovaMetaInput(e.target.value)}
+                                onBlur={() => handleSalvarMeta(Number(novaMetaInput))}
+                                onKeyDown={e => { if (e.key === 'Enter') handleSalvarMeta(Number(novaMetaInput)); }}
+                                style={{
+                                  width: 44,
+                                  background: '#0D1117',
+                                  border: '1px solid #00F0FF',
+                                  borderRadius: 4,
+                                  color: '#fff',
+                                  fontSize: 13,
+                                  textAlign: 'center',
+                                  padding: '2px 4px'
+                                }}
+                                autoFocus
+                              />
+                            ) : (
+                              <span
+                                onClick={() => setEditandoMeta(true)}
+                                title="Clique para alterar a meta"
+                                style={{ cursor: 'pointer', borderBottom: '1px dashed #8B949E' }}
+                              >
+                                {followStats.meta_dia}
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        <div style={{ marginTop: 8 }}>
+                          <div style={{
+                            width: '100%',
+                            height: 6,
+                            background: 'rgba(255, 255, 255, 0.08)',
+                            borderRadius: 3,
+                            overflow: 'hidden'
+                          }}>
+                            <div style={{
+                              width: `${Math.min(100, (followStats.follows_dia / (followStats.meta_dia || 1)) * 100)}%`,
+                              height: '100%',
+                              background: followStats.follows_dia >= followStats.meta_dia ? '#00FF66' : 'linear-gradient(90deg, #00F0FF, #00FF66)',
+                              borderRadius: 3,
+                              transition: 'width 0.3s ease'
+                            }} />
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 10, color: '#8B949E' }}>
+                            <span>
+                              {followStats.follows_dia >= followStats.meta_dia
+                                ? '🎯 Meta atingida!'
+                                : `Faltam ${Math.max(0, followStats.meta_dia - followStats.follows_dia)}`}
+                            </span>
+                            <span style={{ fontWeight: 700, color: followStats.follows_dia >= followStats.meta_dia ? '#00FF66' : '#00F0FF' }}>
+                              {Math.round((followStats.follows_dia / (followStats.meta_dia || 1)) * 100)}%
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Bloco Unfollows Hoje */}
+                      <div style={{
+                        background: 'rgba(255, 170, 0, 0.05)',
+                        border: '1px solid rgba(255, 170, 0, 0.25)',
+                        borderRadius: 10,
+                        padding: '14px 16px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: '#FFAA00', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                            Unfollows Detectados
+                          </span>
+                          <UserMinus size={14} color="#FFAA00" />
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                          <span style={{ fontSize: 26, fontWeight: 900, color: '#F0F6FC' }}>
+                            {followStats.unfollows_dia}
+                          </span>
+                          <span style={{ fontSize: 12, color: '#8B949E' }}>
+                            contas
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 11, color: '#8B949E', marginTop: 8 }}>
+                          {followStats.unfollows_dia > 0
+                            ? `📉 ${followStats.unfollows_dia} unfollow(s) contabilizado(s) hoje`
+                            : 'Nenhum unfollow registrado hoje'}
+                        </div>
+                      </div>
+
+                      {/* Bloco Seguindo Atual */}
+                      <div style={{
+                        background: 'rgba(255, 255, 255, 0.03)',
+                        border: '1px solid #30363D',
+                        borderRadius: 10,
+                        padding: '14px 16px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                            Seguindo Atual
+                          </span>
+                          <Users size={14} color="#8B949E" />
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                          <span style={{ fontSize: 26, fontWeight: 900, color: '#F0F6FC' }}>
+                            {followStats.seguindo_atual}
+                          </span>
+                          <span style={{ fontSize: 12, color: '#8B949E' }}>
+                            seguindo
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 11, color: '#8B949E', marginTop: 8 }}>
+                          Base às 00h: {followStats.seguindo_baseline} contas
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* BOTÃO E LISTA DE HISTÓRICO DE LEITURAS DE HOJE */}
+                    {followStats.historico_hoje && followStats.historico_hoje.length > 0 && (
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => setMostrarHistoricoLeituras(!mostrarHistoricoLeituras)}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#00F0FF',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: 0
+                          }}
+                        >
+                          {mostrarHistoricoLeituras ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                          {mostrarHistoricoLeituras ? 'Ocultar leituras de hoje' : `Ver histórico de leituras de hoje (${followStats.historico_hoje.length} registros)`}
+                        </button>
+
+                        {mostrarHistoricoLeituras && (
+                          <div style={{
+                            marginTop: 10,
+                            maxHeight: 180,
+                            overflowY: 'auto',
+                            background: '#0D1117',
+                            border: '1px solid #21262D',
+                            borderRadius: 8,
+                            padding: '8px 12px'
+                          }}>
+                            {followStats.historico_hoje.map((h: any, idx: number) => {
+                              const isPos = h.delta > 0;
+                              const isNeg = h.delta < 0;
+                              return (
+                                <div
+                                  key={idx}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    padding: '5px 0',
+                                    borderBottom: idx < followStats.historico_hoje.length - 1 ? '1px solid rgba(255, 255, 255, 0.05)' : 'none',
+                                    fontSize: 11
+                                  }}
+                                >
+                                  <span style={{ color: '#8B949E', fontFamily: 'monospace' }}>
+                                    {h.hora} {h.tipo === 'baseline' ? '(Base Inicial)' : ''}
+                                  </span>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                    <span style={{ color: '#F0F6FC' }}>
+                                      {h.seguindo} seguindo
+                                    </span>
+                                    {h.tipo !== 'baseline' && (
+                                      <span style={{
+                                        fontWeight: 700,
+                                        color: isPos ? '#00FF66' : isNeg ? '#FFAA00' : '#8B949E',
+                                        minWidth: 70,
+                                        textAlign: 'right'
+                                      }}>
+                                        {isPos ? `+${h.delta} follow` : isNeg ? `${h.delta} unfollow` : 'sem variação'}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* LISTA DE TAREFAS DIÁRIAS (COM FOLLOW & UNFOLLOW INCLUSOS) */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                     {[
+                      {
+                        id: 'aq_follow',
+                        titulo: `Follow Diário de Leads (${followStats.follows_dia}/${followStats.meta_dia})`,
+                        desc: `Seguir perfis de leads qualificados do nicho. Marcador atual: ${followStats.follows_dia} seguidos de ${followStats.meta_dia} planejados hoje.`,
+                        badge: `${followStats.follows_dia}/${followStats.meta_dia}`,
+                        destaqueFollow: true
+                      },
+                      {
+                        id: 'aq_unfollow',
+                        titulo: `Unfollow / Limpeza de Contas (${followStats.unfollows_dia} hoje)`,
+                        desc: `Deixar de seguir contas inativas ou que não interagiram para manter a proporção da conta limpa.`,
+                        badge: followStats.unfollows_dia > 0 ? `${followStats.unfollows_dia} unfollows` : undefined,
+                        destaqueUnfollow: true
+                      },
                       { id: 'aq_1', titulo: 'Verificar Comentários e Directs', desc: 'Responder leads pendentes na Central de Respostas para manter o índice de resposta alto.' },
                       { id: 'aq_2', titulo: 'Conferir Agendamentos de Posts & Reels', desc: 'Garantir pelo menos 1 a 2 Reels e 1 Feed programados para os horários de pico.' },
                       { id: 'aq_3', titulo: 'Publicação de Stories Diários', desc: 'Postar sequência de Stories (enquetes, bastidores e chamadas para ação).' },
@@ -736,33 +1126,61 @@ FASE 3: (criar torre de champagne)
                           key={t.id}
                           onClick={() => toggleCheck(t.id)}
                           style={{
-                            background: checked ? 'rgba(0, 255, 102, 0.05)' : '#161B22',
-                            border: `1px solid ${checked ? 'rgba(0, 255, 102, 0.35)' : '#30363D'}`,
+                            background: checked
+                              ? 'rgba(0, 255, 102, 0.05)'
+                              : t.destaqueFollow
+                              ? 'rgba(0, 240, 255, 0.03)'
+                              : '#161B22',
+                            border: `1px solid ${
+                              checked
+                                ? 'rgba(0, 255, 102, 0.35)'
+                                : t.destaqueFollow
+                                ? 'rgba(0, 240, 255, 0.25)'
+                                : '#30363D'
+                            }`,
                             borderRadius: 10,
                             padding: '14px 18px',
                             display: 'flex',
                             alignItems: 'flex-start',
+                            justifyContent: 'space-between',
                             gap: 14,
                             cursor: 'pointer',
                             transition: 'all 0.15s'
                           }}
                         >
-                          <div style={{ color: checked ? '#00FF66' : '#8B949E', marginTop: 2 }}>
-                            {checked ? <CheckSquare size={18} /> : <Square size={18} />}
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                            <div style={{ color: checked ? '#00FF66' : '#8B949E', marginTop: 2 }}>
+                              {checked ? <CheckSquare size={18} /> : <Square size={18} />}
+                            </div>
+                            <div>
+                              <div style={{
+                                fontSize: 14,
+                                fontWeight: 700,
+                                color: checked ? '#00FF66' : '#F0F6FC',
+                                textDecoration: checked ? 'line-through' : 'none'
+                              }}>
+                                {t.titulo}
+                              </div>
+                              <div style={{ fontSize: 12, color: '#8B949E', marginTop: 3, lineHeight: 1.4 }}>
+                                {t.desc}
+                              </div>
+                            </div>
                           </div>
-                          <div>
-                            <div style={{
-                              fontSize: 14,
-                              fontWeight: 700,
-                              color: checked ? '#00FF66' : '#F0F6FC',
-                              textDecoration: checked ? 'line-through' : 'none'
+
+                          {t.badge && (
+                            <span style={{
+                              fontSize: 11,
+                              fontWeight: 800,
+                              padding: '3px 8px',
+                              borderRadius: 6,
+                              background: t.destaqueFollow ? 'rgba(0, 240, 255, 0.15)' : 'rgba(255, 170, 0, 0.15)',
+                              border: `1px solid ${t.destaqueFollow ? 'rgba(0, 240, 255, 0.4)' : 'rgba(255, 170, 0, 0.4)'}`,
+                              color: t.destaqueFollow ? '#00F0FF' : '#FFAA00',
+                              whiteSpace: 'nowrap'
                             }}>
-                              {t.titulo}
-                            </div>
-                            <div style={{ fontSize: 12, color: '#8B949E', marginTop: 3, lineHeight: 1.4 }}>
-                              {t.desc}
-                            </div>
-                          </div>
+                              {t.badge}
+                            </span>
+                          )}
                         </div>
                       );
                     })}

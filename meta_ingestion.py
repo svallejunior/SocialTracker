@@ -651,7 +651,7 @@ def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str, ac
                 ja_validado_hoje = True
 
         c.execute("""
-            INSERT INTO perfis_historico (
+            INSERT OR REPLACE INTO perfis_historico (
                 username, data_coleta, seguidores, seguindo, total_posts, inativo, tipo_janela, revisado_manualmente, data_carga
             ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)
         """, (username, data_carga_str, seguidores, seguindo, total_posts, tipo_janela_inicial, revisado_inicial, data_carga_str))

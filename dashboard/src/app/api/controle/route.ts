@@ -33,7 +33,8 @@ export async function GET() {
         cp.foto_url,
         cp.meta_account_id,
         cp.situacao_aquecimento,
-        cp.esteira_aquecimento
+        cp.esteira_aquecimento,
+        cp.meta_follows_dia
       FROM perfis_monitorados pm
       LEFT JOIN controle_perfis cp ON pm.username = cp.username
       LEFT JOIN (
@@ -123,6 +124,10 @@ export async function GET() {
     const viewsDeltaMap: Record<string, number> = {};
     const segDeltaColetaMap: Record<string, number> = {};
     const segDeltaDiaMap: Record<string, number> = {};
+    const followsDiaMap: Record<string, number> = {};
+    const unfollowsDiaMap: Record<string, number> = {};
+    const seguindoAtualMap: Record<string, number> = {};
+    const leiturasSeguindoMap: Record<string, any[]> = {};
 
     try {
       // Data de hoje no fuso oficial de Brasília (America/Sao_Paulo)
@@ -295,6 +300,84 @@ export async function GET() {
             segDeltaDiaMap[u] = atual.seg - base.seg;
           }
         }
+      }
+
+      // 3.1) Cálculo de Follows e Unfollows do dia por modelo
+
+
+      const seguindoRows = await db.all(`
+        SELECT LOWER(username) as uname, data_coleta, seguindo
+        FROM perfis_historico
+        WHERE seguindo IS NOT NULL AND seguindo > 0
+          AND (data_coleta >= date('now', '-2 days') OR data_coleta >= ?)
+        ORDER BY data_coleta ASC, id ASC
+      `, [`${limiteHoje}`]).catch(() => []);
+
+      const seguindoByUser: Record<string, Array<{ dt: string; seg: number }>> = {};
+      for (const r of seguindoRows) {
+        (seguindoByUser[r.uname] ??= []).push({ dt: r.data_coleta, seg: Number(r.seguindo) });
+      }
+
+      for (const [u, arrRaw] of Object.entries(seguindoByUser)) {
+        const arr = arrRaw.sort((a, b) => a.dt.localeCompare(b.dt));
+        if (arr.length === 0) continue;
+
+        const antes00 = arr.filter(x => x.dt < limiteHoje);
+        const deHoje = arr.filter(x => x.dt >= limiteHoje);
+        const baseline = antes00.length > 0 ? antes00[antes00.length - 1] : (deHoje.length > 0 ? deHoje[0] : null);
+
+        const seq = baseline ? [baseline, ...deHoje.filter(x => x.dt !== baseline.dt)] : deHoje;
+        let fCount = 0;
+        let uCount = 0;
+        const leiturasComDelta: any[] = [];
+
+        for (let i = 0; i < seq.length; i++) {
+          const item = seq[i];
+          const horaStr = item.dt.includes(' ') ? item.dt.split(' ')[1].substring(0, 5) : item.dt;
+          if (i === 0) {
+            leiturasComDelta.push({
+              data: item.dt,
+              hora: horaStr,
+              seguindo: item.seg,
+              delta: 0,
+              tipo: 'baseline'
+            });
+          } else {
+            const delta = item.seg - seq[i - 1].seg;
+            if (delta > 0) {
+              fCount += delta;
+              leiturasComDelta.push({
+                data: item.dt,
+                hora: horaStr,
+                seguindo: item.seg,
+                delta,
+                tipo: 'follow'
+              });
+            } else if (delta < 0) {
+              uCount += Math.abs(delta);
+              leiturasComDelta.push({
+                data: item.dt,
+                hora: horaStr,
+                seguindo: item.seg,
+                delta,
+                tipo: 'unfollow'
+              });
+            } else {
+              leiturasComDelta.push({
+                data: item.dt,
+                hora: horaStr,
+                seguindo: item.seg,
+                delta: 0,
+                tipo: 'igual'
+              });
+            }
+          }
+        }
+
+        followsDiaMap[u] = fCount;
+        unfollowsDiaMap[u] = uCount;
+        seguindoAtualMap[u] = seq[seq.length - 1].seg;
+        leiturasSeguindoMap[u] = leiturasComDelta;
       }
     } catch (err) {
       console.warn("Aviso ao calcular métricas de controle:", err);
@@ -510,6 +593,11 @@ export async function GET() {
         meta_account_id: p.meta_account_id || '',
         situacao_aquecimento: p.situacao_aquecimento || null,
         esteira_aquecimento: p.esteira_aquecimento || null,
+        meta_follows_dia: Number(p.meta_follows_dia) || 30,
+        follows_dia: followsDiaMap[u] || 0,
+        unfollows_dia: unfollowsDiaMap[u] || 0,
+        seguindo_atual: seguindoAtualMap[u] || 0,
+        leituras_seguindo: leiturasSeguindoMap[u] || [],
         foto_perfil_meta: p.foto_perfil_meta || null,
         foto_local: p.foto_url || null,
         comentarios_pendentes: nCom,
@@ -616,6 +704,7 @@ export async function PUT(request: NextRequest) {
       meta_account_id,
       situacao_aquecimento,
       esteira_aquecimento,
+      meta_follows_dia,
       nova_obs
     } = body;
 
@@ -633,8 +722,8 @@ export async function PUT(request: NextRequest) {
 
     await db.run(`
       INSERT INTO controle_perfis
-        (username, nome, nascimento, email, reserva, linktree, inicio, telegram, fotos_estoque, status, foto_url, meta_account_id, situacao_aquecimento, esteira_aquecimento, atualizado_em)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        (username, nome, nascimento, email, reserva, linktree, inicio, telegram, fotos_estoque, status, foto_url, meta_account_id, situacao_aquecimento, esteira_aquecimento, meta_follows_dia, atualizado_em)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       ON CONFLICT(username) DO UPDATE SET
         nome           = CASE WHEN excluded.nome IS NOT NULL THEN excluded.nome ELSE controle_perfis.nome END,
         nascimento     = CASE WHEN excluded.nascimento IS NOT NULL THEN excluded.nascimento ELSE controle_perfis.nascimento END,
@@ -649,8 +738,9 @@ export async function PUT(request: NextRequest) {
         meta_account_id = CASE WHEN excluded.meta_account_id IS NOT NULL THEN excluded.meta_account_id ELSE controle_perfis.meta_account_id END,
         situacao_aquecimento = CASE WHEN excluded.situacao_aquecimento IS NOT NULL THEN excluded.situacao_aquecimento ELSE controle_perfis.situacao_aquecimento END,
         esteira_aquecimento  = CASE WHEN excluded.esteira_aquecimento IS NOT NULL THEN excluded.esteira_aquecimento ELSE controle_perfis.esteira_aquecimento END,
+        meta_follows_dia     = CASE WHEN excluded.meta_follows_dia IS NOT NULL THEN excluded.meta_follows_dia ELSE controle_perfis.meta_follows_dia END,
         atualizado_em  = datetime('now')
-    `, [username, nome ?? null, nascimento ?? null, email ?? null, reserva ?? null, linktree ?? null, inicio ?? null, telegram ?? null, fotos_estoque ?? null, status ?? null, foto_url ?? null, meta_account_id ?? null, situacao_aquecimento ?? null, esteira_aquecimento ?? null]);
+    `, [username, nome ?? null, nascimento ?? null, email ?? null, reserva ?? null, linktree ?? null, inicio ?? null, telegram ?? null, fotos_estoque ?? null, status ?? null, foto_url ?? null, meta_account_id ?? null, situacao_aquecimento ?? null, esteira_aquecimento ?? null, meta_follows_dia ? Number(meta_follows_dia) : null]);
 
     if (status && (status.includes('Morreu') || status === 'MORREU')) {
       await db.run(`UPDATE perfis_monitorados SET status = 'MORREU' WHERE username = ?`, [username]);

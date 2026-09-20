@@ -139,112 +139,169 @@ def avaliar_anomalia(cursor, registro_id, username, seguidores_atual, posts_atua
         print(f"  🌱 Registro #{registro_id} (@{username}) dentro do parâmetro (ΔS={delta_s:+d}, %ΔS={pct_delta_s:.1f}%) → validado automaticamente como ORGANICO.")
 
 
-def salvar_no_banco(username, dados, inativo=0):
+import time
+
+
+def inicializar_banco():
+    """Garante colunas necessárias em perfis_historico uma única vez na inicialização."""
     conn = conectar_db()
     cursor = conn.cursor()
-
     try:
-        cursor.execute("ALTER TABLE perfis_historico ADD COLUMN inativo INTEGER DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass
+        try:
+            cursor.execute("ALTER TABLE perfis_historico ADD COLUMN inativo INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute("ALTER TABLE perfis_historico ADD COLUMN tipo_janela TEXT DEFAULT 'ORGANICO'")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute("ALTER TABLE perfis_historico ADD COLUMN revisado_manualmente INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
+        conn.commit()
+    finally:
+        conn.close()
 
-    # Migração: garante colunas de classificação dinâmica
-    try:
-        cursor.execute("ALTER TABLE perfis_historico ADD COLUMN tipo_janela TEXT DEFAULT 'ORGANICO'")
-    except sqlite3.OperationalError:
-        pass
-    try:
-        cursor.execute("ALTER TABLE perfis_historico ADD COLUMN revisado_manualmente INTEGER DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass
 
+def salvar_no_banco(username, dados, inativo=0):
     followers = dados.get('followers', 0) if dados else 0
     following = dados.get('following', 0) if dados else 0
     posts = dados.get('posts', 0) if dados else 0
 
     hoje_prefix = agora_brasil().strftime('%Y-%m-%d')
-    # Checa se já havia registro no mesmo dia para substituir e preservar validação
-    cursor.execute("""
-        SELECT id, tipo_janela, revisado_manualmente
-        FROM perfis_historico
-        WHERE LOWER(username) = LOWER(?) AND (data_coleta LIKE ? OR data_coleta = ?)
-        ORDER BY data_coleta DESC, id DESC LIMIT 1
-    """, (username, f"{hoje_prefix}%", hoje_prefix))
-    reg_hoje = cursor.fetchone()
+    MAX_TENTATIVAS_DB = 5
 
-    cursor.execute("SELECT meu_perfil FROM perfis_monitorados WHERE LOWER(username) = LOWER(?)", (username,))
-    row_perfil = cursor.fetchone()
-    is_meu_perfil = bool(row_perfil and row_perfil[0] == 1)
+    for tentativa in range(1, MAX_TENTATIVAS_DB + 1):
+        conn = None
+        try:
+            conn = conectar_db()
+            cursor = conn.cursor()
 
-    tipo_janela_inicial = 'ORGANICO'
-    revisado_inicial = 1
-    ja_validado_hoje = False
+            # Checa se já havia registro no mesmo dia para substituir e preservar validação
+            cursor.execute("""
+                SELECT id, tipo_janela, revisado_manualmente
+                FROM perfis_historico
+                WHERE LOWER(username) = LOWER(?) AND (data_coleta LIKE ? OR data_coleta = ?)
+                ORDER BY data_coleta DESC, id DESC LIMIT 1
+            """, (username, f"{hoje_prefix}%", hoje_prefix))
+            reg_hoje = cursor.fetchone()
 
-    if reg_hoje:
-        tipo_janela_ant = reg_hoje[1]
-        revisado_ant = reg_hoje[2]
-        # Preserva como validado apenas se o usuário já classificou explicitamente como VIRAL_ORGANICO, ADS ou IGNORAR
-        if tipo_janela_ant in ('VIRAL_ORGANICO', 'ADS', 'IGNORAR') and revisado_ant == 1:
-            tipo_janela_inicial = tipo_janela_ant
+            cursor.execute("SELECT meu_perfil FROM perfis_monitorados WHERE LOWER(username) = LOWER(?)", (username,))
+            row_perfil = cursor.fetchone()
+            is_meu_perfil = bool(row_perfil and row_perfil[0] == 1)
+
+            tipo_janela_inicial = 'ORGANICO'
             revisado_inicial = 1
-            ja_validado_hoje = True
+            ja_validado_hoje = False
 
-    cursor.execute("""
-        INSERT INTO perfis_historico (
-            username,
-            data_coleta,
-            seguidores,
-            seguindo,
-            total_posts,
-            inativo,
-            tipo_janela,
-            revisado_manualmente
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        username,
-        agora_brasil().strftime('%Y-%m-%d %H:%M:%S'),
-        followers,
-        following,
-        posts,
-        inativo,
-        tipo_janela_inicial,
-        revisado_inicial
-    ))
+            if reg_hoje:
+                tipo_janela_ant = reg_hoje[1]
+                revisado_ant = reg_hoje[2]
+                # Preserva como validado apenas se o usuário já classificou explicitamente como VIRAL_ORGANICO, ADS ou IGNORAR
+                if tipo_janela_ant in ('VIRAL_ORGANICO', 'ADS', 'IGNORAR') and revisado_ant == 1:
+                    tipo_janela_inicial = tipo_janela_ant
+                    revisado_inicial = 1
+                    ja_validado_hoje = True
 
-    registro_id = cursor.lastrowid
+            cursor.execute("""
+                INSERT INTO perfis_historico (
+                    username,
+                    data_coleta,
+                    seguidores,
+                    seguindo,
+                    total_posts,
+                    inativo,
+                    tipo_janela,
+                    revisado_manualmente
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                username,
+                agora_brasil().strftime('%Y-%m-%d %H:%M:%S'),
+                followers,
+                following,
+                posts,
+                inativo,
+                tipo_janela_inicial,
+                revisado_inicial
+            ))
 
-    # Avalia anomalia apenas para leituras ativas com dados válidos
-    if inativo == 0 and dados and followers > 0:
-        avaliar_anomalia(cursor, registro_id, username, followers, posts, hoje_prefix, ja_validado_hoje=ja_validado_hoje)
-        cursor.execute("UPDATE perfis_monitorados SET status = 'ATIVO' WHERE username = ?", (username,))
+            registro_id = cursor.lastrowid
 
-    conn.commit()
-    conn.close()
-    status_label = "INATIVO (falha/indisponivel)" if inativo == 1 else "ATIVO"
-    print(f"Dados de @{username} salvos com sucesso! Status da leitura: {status_label}")
+            # Avalia anomalia apenas para leituras ativas com dados válidos
+            if inativo == 0 and dados and followers > 0:
+                avaliar_anomalia(cursor, registro_id, username, followers, posts, hoje_prefix, ja_validado_hoje=ja_validado_hoje)
+                cursor.execute("UPDATE perfis_monitorados SET status = 'ATIVO' WHERE username = ?", (username,))
+
+            conn.commit()
+            status_label = "INATIVO (falha/indisponivel)" if inativo == 1 else "ATIVO"
+            print(f"Dados de @{username} salvos com sucesso! Status da leitura: {status_label}")
+            return
+        except sqlite3.OperationalError as e:
+            if "locked" in str(e).lower() and tentativa < MAX_TENTATIVAS_DB:
+                print(f"  ⏳ Banco ocupado ao salvar @{username} (tentativa {tentativa}/{MAX_TENTATIVAS_DB}). Aguardando...")
+                time.sleep(2 * tentativa)
+            else:
+                raise
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
 def atualizar_status_perfil(username, novo_status):
-    """Atualiza o status do perfil na tabela perfis_monitorados."""
-    conn = conectar_db()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("UPDATE perfis_monitorados SET status = ? WHERE username = ?", (novo_status, username))
-        conn.commit()
-    except Exception as e:
-        print(f"Erro ao atualizar status do perfil @{username}: {e}")
-    finally:
-        conn.close()
+    """Atualiza o status do perfil na tabela perfis_monitorados com retry."""
+    MAX_TENTATIVAS_DB = 5
+    for tentativa in range(1, MAX_TENTATIVAS_DB + 1):
+        conn = None
+        try:
+            conn = conectar_db()
+            cursor = conn.cursor()
+            cursor.execute("UPDATE perfis_monitorados SET status = ? WHERE username = ?", (novo_status, username))
+            conn.commit()
+            return
+        except sqlite3.OperationalError as e:
+            if "locked" in str(e).lower() and tentativa < MAX_TENTATIVAS_DB:
+                time.sleep(2 * tentativa)
+            else:
+                print(f"Erro ao atualizar status do perfil @{username}: {e}")
+                return
+        except Exception as e:
+            print(f"Erro ao atualizar status do perfil @{username}: {e}")
+            return
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
 def rodar_ingestao_diaria(meta_only=False):
+    # 0. Garante estrutura do banco
+    try:
+        inicializar_banco()
+    except Exception as e:
+        print(f"⚠️ Aviso na inicialização do banco: {e}")
+
     # 1. Executa extração oficial via Meta Graph API para contas configuradas
     contas_meta_processadas = set()
+    try:
+        from meta_ingestion import obter_contas_meta_configuradas
+        for c in obter_contas_meta_configuradas():
+            u = c.get("username", "").lower().strip().lstrip("@")
+            if u:
+                contas_meta_processadas.add(u)
+    except Exception as e:
+        print(f"⚠️ Aviso ao identificar contas Meta configuradas: {e}")
+
     try:
         from meta_ingestion import rodar_ingestao_meta
         resultado_meta = rodar_ingestao_meta()
         if resultado_meta.get("sucesso"):
             for d in resultado_meta.get("detalhes", []):
-                contas_meta_processadas.add(d["username"].lower())
+                contas_meta_processadas.add(d["username"].lower().strip().lstrip("@"))
             print(f"✅ Ingestão Meta API concluída com sucesso para {len(contas_meta_processadas)} perfis.")
     except Exception as e:
         print(f"⚠️ Erro ao executar extração Meta API: {e}")
@@ -270,18 +327,21 @@ def rodar_ingestao_diaria(meta_only=False):
     print(f"Iniciando coleta Apify para {len(perfis_restantes)} perfis restantes sem Meta API.")
 
     for user in perfis_restantes:
-        status_res, dados = consultar_apify(user)
-        if status_res == "OK" and dados:
-            salvar_no_banco(user, dados, inativo=0)
-            atualizar_status_perfil(user, 'ATIVO')
-        elif status_res == "NOT_FOUND":
-            print(f"Perfil @{user} não encontrado no Instagram. Marcando como INDISPONIVEL (sem gravar data de coleta).")
-            # Não inserimos registro em perfis_historico quando não há dados —
-            # a data_coleta só deve ser registrada quando houver dados reais.
-            atualizar_status_perfil(user, 'INDISPONIVEL')
-        else:
-            # Erro de API/token/rede/etc — NÃO marcar o perfil como INDISPONIVEL
-            print(f"⚠️ Erro na consulta de @{user} (falha de API/conexão). Status 'ATIVO' mantido, pulando...")
+        try:
+            status_res, dados = consultar_apify(user)
+            if status_res == "OK" and dados:
+                salvar_no_banco(user, dados, inativo=0)
+                atualizar_status_perfil(user, 'ATIVO')
+            elif status_res == "NOT_FOUND":
+                print(f"Perfil @{user} não encontrado no Instagram. Marcando como INDISPONIVEL (sem gravar data de coleta).")
+                # Não inserimos registro em perfis_historico quando não há dados —
+                # a data_coleta só deve ser registrada quando houver dados reais.
+                atualizar_status_perfil(user, 'INDISPONIVEL')
+            else:
+                # Erro de API/token/rede/etc — NÃO marcar o perfil como INDISPONIVEL
+                print(f"⚠️ Erro na consulta de @{user} (falha de API/conexão). Status 'ATIVO' mantido, pulando...")
+        except Exception as e:
+            print(f"❌ Erro ao processar perfil @{user}: {e}. Continuando com os próximos...")
 
 def consultar_apify(username):
     """
