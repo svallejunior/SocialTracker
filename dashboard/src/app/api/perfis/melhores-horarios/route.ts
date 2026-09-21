@@ -303,11 +303,16 @@ export async function GET(req: NextRequest) {
 
     let totalPostsAnalisados = Object.keys(snapshotsPorPost).length;
 
-    // 4. Consulta posts_historico para Desempenho por Dia da Postagem e contingência
+    // 4. Consulta posts_historico para Desempenho por Dia da Postagem, contingência e
+    // para o bloco de "Horário Real de Postagem" (baseado no resultado final de cada post,
+    // não em snapshots de audiência). Exclui deletados e os stubs de importação corrompidos
+    // (mesmo timestamp repetido, formato='Formato', sem legenda/permalink/dado real).
     const postsHistoricoRows = await db.all(
-      `SELECT post_id, data_postagem, views, reach, likes, comentarios
+      `SELECT post_id, data_postagem, formato, views, reach, likes, comentarios, data_atualizacao
        FROM posts_historico
        WHERE LOWER(username) = LOWER(?) AND data_postagem LIKE '%:%'
+         AND (is_deleted IS NULL OR is_deleted = 0)
+         AND formato != 'Formato'
        ORDER BY data_postagem DESC`,
       [username]
     );
@@ -334,6 +339,182 @@ export async function GET(req: NextRequest) {
       diasPostagemMap[diaSemana].viewsTotal += v;
       diasPostagemMap[diaSemana].postsCount += 1;
     }
+
+    // ─────────────────────────────────────────────────────────
+    // 4B. HORÁRIO REAL DE POSTAGEM: desempenho de cada post pelo resultado final
+    // (não por crescimento de audiência via snapshot — essa tabela tem buracos
+    // grandes de histórico em vários perfis), agrupado por faixa de 2h e dia da
+    // semana de QUANDO foi publicado. Usa MEDIANA (não média) para 1-2 posts
+    // virais não distorcerem o horário "recomendado", e escolhe a métrica
+    // automaticamente: se o perfil tem Reels suficientes usa views de Reels
+    // (comparável entre si); senão usa curtidas de todos os formatos (funciona
+    // mesmo em contas majoritariamente de foto/carrossel, onde "views" não é real).
+    // ─────────────────────────────────────────────────────────
+    const MIN_AMOSTRAS_FAIXA = 3;
+    const MIN_AMOSTRAS_DIA = 3;
+    const MIN_REELS_PARA_VIEWS = 5;
+
+    function mediana(vals: number[]): number {
+      if (vals.length === 0) return 0;
+      const s = [...vals].sort((a, b) => a - b);
+      const mid = Math.floor(s.length / 2);
+      return s.length % 2 !== 0 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+    }
+
+    const postsParsed = postsHistoricoRows
+      .map((p: any) => {
+        const dt = parseSqliteDate(p.data_postagem);
+        if (!dt) return null;
+        const views = Math.max(
+          Number(p.views) || 0,
+          Number(p.reach) || 0,
+          (Number(p.likes) || 0) + (Number(p.comentarios) || 0)
+        );
+        return {
+          dt,
+          hora: dt.getHours(),
+          diaSemana: dt.getDay(),
+          formato: p.formato,
+          views,
+          likes: Number(p.likes) || 0,
+          dataAtualizacao: parseSqliteDate(p.data_atualizacao)
+        };
+      })
+      .filter((p: any): p is NonNullable<typeof p> => p !== null);
+
+    const reelsCount = postsParsed.filter((p: any) => p.formato === 'Reels').length;
+    const usarViewsReels = reelsCount >= MIN_REELS_PARA_VIEWS;
+    const postsBase = usarViewsReels ? postsParsed.filter((p: any) => p.formato === 'Reels') : postsParsed;
+    const campoMetrica: 'views' | 'likes' = usarViewsReels ? 'views' : 'likes';
+    const metricaLabel = usarViewsReels
+      ? `views de Reels (${reelsCount} posts)`
+      : `curtidas — todos os formatos (poucos Reels: ${reelsCount})`;
+
+    // --- Faixas de 2h por horário de postagem ---
+    const faixasPostagemMap: { [f: number]: number[] } = {};
+    for (let f = 0; f < 24; f += 2) faixasPostagemMap[f] = [];
+    for (const p of postsBase) {
+      const f = Math.floor(p.hora / 2) * 2;
+      faixasPostagemMap[f].push((p as any)[campoMetrica]);
+    }
+
+    let melhorFaixaPostagemInicio = 15;
+    let melhorFaixaPostagemMediana = -1;
+    let faixaPostagemMaxMediana = 0;
+    for (let f = 0; f < 24; f += 2) {
+      const vals = faixasPostagemMap[f];
+      const med = mediana(vals);
+      if (vals.length >= MIN_AMOSTRAS_FAIXA && med > melhorFaixaPostagemMediana) {
+        melhorFaixaPostagemMediana = med;
+        melhorFaixaPostagemInicio = f;
+      }
+      if (med > faixaPostagemMaxMediana) faixaPostagemMaxMediana = med;
+    }
+    const faixasPostagemList = [];
+    for (let f = 0; f < 24; f += 2) {
+      const vals = faixasPostagemMap[f];
+      const med = mediana(vals);
+      const media = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+      const fFim = (f + 2) % 24;
+      faixasPostagemList.push({
+        faixa: `${String(f).padStart(2, '0')}:00 - ${String(fFim).padStart(2, '0')}:00`,
+        horaInicio: f,
+        mediana: Math.round(med),
+        media: Math.round(media),
+        amostras: vals.length,
+        percentual: faixaPostagemMaxMediana > 0 ? Math.round((med / faixaPostagemMaxMediana) * 100) : 0,
+        isMelhor: f === melhorFaixaPostagemInicio && melhorFaixaPostagemMediana > 0
+      });
+    }
+
+    // --- Dias da semana por horário de postagem (mediana) ---
+    const diasPostagemMedianaMap: { [d: number]: number[] } = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
+    for (const p of postsBase) {
+      diasPostagemMedianaMap[p.diaSemana].push((p as any)[campoMetrica]);
+    }
+    let melhorDiaPostagemIndex = -1;
+    let melhorDiaPostagemMediana = -1;
+    let diaPostagemMaxMediana = 0;
+    for (let d = 0; d < 7; d++) {
+      const vals = diasPostagemMedianaMap[d];
+      const med = mediana(vals);
+      if (vals.length >= MIN_AMOSTRAS_DIA && med > melhorDiaPostagemMediana) {
+        melhorDiaPostagemMediana = med;
+        melhorDiaPostagemIndex = d;
+      }
+      if (med > diaPostagemMaxMediana) diaPostagemMaxMediana = med;
+    }
+    const diasPostagemMedianaList = [];
+    for (const dIdx of ORDEM_DIAS) {
+      const vals = diasPostagemMedianaMap[dIdx];
+      const med = mediana(vals);
+      const media = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+      const { nome, curto } = DIAS_NOMES[dIdx];
+      diasPostagemMedianaList.push({
+        dia: nome,
+        diaCurto: curto,
+        diaIndex: dIdx,
+        mediana: Math.round(med),
+        media: Math.round(media),
+        amostras: vals.length,
+        percentual: diaPostagemMaxMediana > 0 ? Math.round((med / diaPostagemMaxMediana) * 100) : 0,
+        destaque: dIdx === melhorDiaPostagemIndex && melhorDiaPostagemMediana > 0
+      });
+    }
+
+    // --- Qualidade de dados: posts cujo tracking "morreu" (Meta parou de mandar update) ---
+    const datasAtualizacao = postsParsed
+      .map((p: any) => p.dataAtualizacao)
+      .filter((d: any): d is Date => d !== null);
+    const ultimaAtualizacaoGeral = datasAtualizacao.length > 0
+      ? new Date(Math.max(...datasAtualizacao.map((d: Date) => d.getTime())))
+      : null;
+    // O pipeline de ingestão atualiza posts em ciclos (não todos a cada run), então gaps de
+    // até ~3 semanas entre atualizações são normais. Testado contra dados reais: perfis com
+    // posts "vivos" mostram gap máximo de ~22 dias; posts com tracking realmente morto (a Meta
+    // parou de mandar dado) pulam pra 70+ dias sem nenhuma atualização. 35 dias separa os dois casos.
+    const LIMITE_DIAS_DESATUALIZADO = 35;
+    let postsDesatualizados = 0;
+    if (ultimaAtualizacaoGeral) {
+      for (const p of postsParsed) {
+        if (!p.dataAtualizacao) continue;
+        const diasSemUpdate = (ultimaAtualizacaoGeral.getTime() - p.dataAtualizacao.getTime()) / (1000 * 60 * 60 * 24);
+        const diasDesdePostagem = (ultimaAtualizacaoGeral.getTime() - p.dt.getTime()) / (1000 * 60 * 60 * 24);
+        if (diasSemUpdate > LIMITE_DIAS_DESATUALIZADO && diasDesdePostagem > LIMITE_DIAS_DESATUALIZADO) {
+          postsDesatualizados++;
+        }
+      }
+    }
+
+    const fFimPost = (melhorFaixaPostagemInicio + 2) % 24;
+    const postagem = {
+      metrica: campoMetrica,
+      metricaLabel,
+      postsConsiderados: postsBase.length,
+      temDados: melhorFaixaPostagemMediana > 0,
+      amostraBaixa: postsBase.length < MIN_AMOSTRAS_FAIXA * 4,
+      melhorFaixa: melhorFaixaPostagemMediana > 0
+        ? `${String(melhorFaixaPostagemInicio).padStart(2, '0')}:00 às ${String(fFimPost).padStart(2, '0')}:00`
+        : undefined,
+      melhorFaixaInicio: melhorFaixaPostagemInicio,
+      melhorFaixaFim: fFimPost,
+      melhorFaixaValor: melhorFaixaPostagemMediana > 0 ? Math.round(melhorFaixaPostagemMediana) : 0,
+      faixas: faixasPostagemList,
+      melhorDia: melhorDiaPostagemIndex >= 0 ? DIAS_NOMES[melhorDiaPostagemIndex].nome : undefined,
+      dias: diasPostagemMedianaList,
+      qualidadeDados: {
+        postsDesatualizados,
+        percentualDesatualizado: postsParsed.length > 0 ? Math.round((postsDesatualizados / postsParsed.length) * 100) : 0,
+        observacao: postsDesatualizados > 0
+          ? `${postsDesatualizados} post(s) pararam de receber atualização da Meta (métrica congelada) e foram mantidos no cálculo mesmo assim — resultado pode estar levemente subestimado para eles.`
+          : undefined
+      },
+      observacao: melhorFaixaPostagemMediana > 0
+        ? (postsBase.length < MIN_AMOSTRAS_FAIXA * 4
+          ? 'Poucos posts registrados ainda — a recomendação vai ficar mais confiável com mais publicações.'
+          : undefined)
+        : 'Sem posts suficientes em nenhuma faixa (mínimo 3) para recomendar um horário com confiança ainda.'
+    };
 
     // Fallback: se o perfil não possuir snapshots periódicos registrados ainda,
     // utiliza os dados históricos de postagens como contingência para a audiência
@@ -561,7 +742,8 @@ export async function GET(req: NextRequest) {
         observacao: temDadosViews
           ? undefined
           : 'Nenhum registro de visualizações medido para este perfil ainda.'
-      }
+      },
+      postagem
     });
   } catch (err: any) {
     console.error('[api/perfis/melhores-horarios] Erro:', err);

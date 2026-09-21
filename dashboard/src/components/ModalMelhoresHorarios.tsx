@@ -52,11 +52,54 @@ interface GrupoDiaSemana {
   totalPosts?: number;
 }
 
+interface FaixaPostagem {
+  faixa: string;
+  horaInicio: number;
+  mediana: number;
+  media: number;
+  amostras: number;
+  percentual: number;
+  isMelhor: boolean;
+}
+
+interface DiaPostagem {
+  dia: string;
+  diaCurto: string;
+  diaIndex: number;
+  mediana: number;
+  media: number;
+  amostras: number;
+  percentual: number;
+  destaque: boolean;
+}
+
+interface PostagemData {
+  metrica: 'views' | 'likes';
+  metricaLabel: string;
+  postsConsiderados: number;
+  temDados: boolean;
+  amostraBaixa: boolean;
+  melhorFaixa?: string;
+  melhorFaixaInicio: number;
+  melhorFaixaFim: number;
+  melhorFaixaValor: number;
+  faixas: FaixaPostagem[];
+  melhorDia?: string;
+  dias: DiaPostagem[];
+  qualidadeDados: {
+    postsDesatualizados: number;
+    percentualDesatualizado: number;
+    observacao?: string;
+  };
+  observacao?: string;
+}
+
 interface HorariosData {
   success: boolean;
   username: string;
   nome: string;
   foto_url: string | null;
+  postagem?: PostagemData;
   seguidores: {
     melhorFaixa: string;
     melhorFaixaInicio: number;
@@ -114,7 +157,7 @@ export default function ModalMelhoresHorarios({ modelo, onClose }: ModalMelhores
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<HorariosData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tabVisual, setTabVisual] = useState<'geral' | 'faixas_seguidores' | 'faixas_views' | 'dias'>('geral');
+  const [tabVisual, setTabVisual] = useState<'geral' | 'faixas_seguidores' | 'faixas_views' | 'faixas_postagem' | 'dias'>('geral');
   const [modoDiaSemana, setModoDiaSemana] = useState<'audiencia' | 'seguidores' | 'postagem'>('audiencia');
 
   useEffect(() => {
@@ -296,6 +339,153 @@ export default function ModalMelhoresHorarios({ modelo, onClose }: ModalMelhores
             </div>
           ) : data ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+
+              {/* ─────────────────────────────────────────────────────────────
+                  CARD 0: HORÁRIO REAL DE POSTAGEM (resultado final de cada post)
+              ───────────────────────────────────────────────────────────── */}
+              {data.postagem && (
+                <div
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(249, 115, 22, 0.10) 0%, #161B22 100%)',
+                    border: '1px solid rgba(249, 115, 22, 0.4)',
+                    borderRadius: 14,
+                    padding: '18px',
+                    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 8,
+                          background: 'rgba(249, 115, 22, 0.15)',
+                          border: '1px solid rgba(249, 115, 22, 0.35)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#FB923C'
+                        }}
+                      >
+                        <Sparkles size={16} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 800, color: '#FB923C', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          Horário Real de Postagem
+                        </div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#8B949E' }}>
+                          Recomendação baseada no resultado final de cada post publicado
+                        </div>
+                      </div>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: 10,
+                        background: 'rgba(249, 115, 22, 0.15)',
+                        color: '#FB923C',
+                        border: '1px solid rgba(249, 115, 22, 0.3)'
+                      }}
+                    >
+                      Recomendado
+                    </span>
+                  </div>
+
+                  {data.postagem.temDados ? (
+                    <div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, marginBottom: 12 }}>
+                        <div
+                          style={{
+                            background: '#0D1117',
+                            border: '1px solid #F97316',
+                            borderRadius: 12,
+                            padding: '12px 16px'
+                          }}
+                        >
+                          <div style={{ fontSize: 11, color: '#8B949E', fontWeight: 600 }}>Melhor faixa pra postar</div>
+                          <div style={{ fontSize: 22, fontWeight: 900, color: '#FB923C', letterSpacing: '-0.5px' }}>
+                            {data.postagem.melhorFaixa}
+                          </div>
+                        </div>
+                        {data.postagem.melhorDia && (
+                          <div
+                            style={{
+                              background: '#0D1117',
+                              border: '1px solid #21262D',
+                              borderRadius: 12,
+                              padding: '12px 16px'
+                            }}
+                          >
+                            <div style={{ fontSize: 11, color: '#8B949E', fontWeight: 600 }}>Melhor dia da semana</div>
+                            <div style={{ fontSize: 22, fontWeight: 900, color: '#FFFFFF', letterSpacing: '-0.5px' }}>
+                              {data.postagem.melhorDia}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 11 }}>
+                        <div style={{ background: '#0D1117', padding: '8px 10px', borderRadius: 8, border: '1px solid #21262D' }}>
+                          <span style={{ color: '#8B949E' }}>Métrica usada: </span>
+                          <strong style={{ color: '#FB923C' }}>{data.postagem.metricaLabel}</strong>
+                        </div>
+                        <div style={{ background: '#0D1117', padding: '8px 10px', borderRadius: 8, border: '1px solid #21262D' }}>
+                          <span style={{ color: '#8B949E' }}>Mediana na faixa: </span>
+                          <strong style={{ color: '#FFFFFF' }}>{formatNumber(data.postagem.melhorFaixaValor)}</strong>
+                        </div>
+                      </div>
+
+                      {data.postagem.amostraBaixa && (
+                        <div
+                          style={{
+                            marginTop: 10,
+                            background: 'rgba(245, 158, 11, 0.1)',
+                            padding: '6px 10px',
+                            borderRadius: 8,
+                            border: '1px solid rgba(245, 158, 11, 0.25)',
+                            fontSize: 11,
+                            color: '#FBBF24',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6
+                          }}
+                        >
+                          <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                          <span>Amostra ainda pequena ({data.postagem.postsConsiderados} posts) — confiança vai aumentar conforme mais posts forem publicados.</span>
+                        </div>
+                      )}
+
+                      {data.postagem.qualidadeDados.postsDesatualizados > 0 && (
+                        <div
+                          style={{
+                            marginTop: 8,
+                            background: 'rgba(239, 68, 68, 0.08)',
+                            padding: '6px 10px',
+                            borderRadius: 8,
+                            border: '1px solid rgba(239, 68, 68, 0.2)',
+                            fontSize: 11,
+                            color: '#F87171',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6
+                          }}
+                        >
+                          <Info size={13} style={{ flexShrink: 0 }} />
+                          <span>{data.postagem.qualidadeDados.observacao}</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ padding: '16px 12px', textAlign: 'center', color: '#8B949E', fontSize: 12 }}>
+                      <Clock size={20} style={{ margin: '0 auto 6px auto', opacity: 0.5 }} />
+                      <div>{data.postagem.observacao || 'Sem posts suficientes ainda.'}</div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* GRID PRINCIPAL: 2 CARDS GRANDES DE DESTAQUE */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
@@ -549,6 +739,32 @@ export default function ModalMelhoresHorarios({ modelo, onClose }: ModalMelhores
                     };
                   }
                   if (modoDiaSemana === 'postagem') {
+                    // Preferimos o bloco novo (data.postagem.dias), baseado em MEDIANA por post
+                    // e já livre de posts deletados/stubs corrompidos. Cai pro grupo antigo
+                    // (média, via crescimento de snapshots) só se o novo ainda não tiver dado.
+                    if (data.postagem && data.postagem.dias.length > 0) {
+                      const diasMapeados: DiaSemanaView[] = data.postagem.dias.map(d => ({
+                        dia: d.dia,
+                        diaCurto: d.diaCurto,
+                        diaIndex: d.diaIndex,
+                        viewsMedia: d.mediana,
+                        postsCount: d.amostras,
+                        percentual: d.percentual,
+                        destaque: d.destaque
+                      }));
+                      const diasIndicados = data.postagem.melhorDia ? [data.postagem.melhorDia] : [];
+                      return {
+                        dias: diasMapeados,
+                        houveDiscrepancia: diasIndicados.length > 0,
+                        diasIndicados,
+                        tituloDiscrepancia: `Melhor dia pra postar (mediana de ${data.postagem.metrica === 'views' ? 'views' : 'curtidas'} por post):`,
+                        corTema: '#A855F7',
+                        corTemaBg: 'rgba(168, 85, 247, 0.15)',
+                        corDestaque: '#C084FC',
+                        unidade: data.postagem.metrica === 'views' ? 'views/post (mediana)' : 'curtidas/post (mediana)',
+                        tipoValor: 'postagem' as const
+                      };
+                    }
                     const grupo = data.visualizacoes.diasPostagem;
                     return {
                       dias: grupo?.dias || [],
@@ -877,20 +1093,43 @@ export default function ModalMelhoresHorarios({ modelo, onClose }: ModalMelhores
                     >
                       Visualizações
                     </button>
+                    {data.postagem && (
+                      <button
+                        type="button"
+                        onClick={() => setTabVisual('faixas_postagem')}
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: 6,
+                          border: tabVisual === 'faixas_postagem' ? '1px solid #F97316' : '1px solid transparent',
+                          background: tabVisual === 'faixas_postagem' ? 'rgba(249, 115, 22, 0.2)' : 'transparent',
+                          color: tabVisual === 'faixas_postagem' ? '#FB923C' : '#8B949E',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Postagem
+                      </button>
+                    )}
                   </div>
                 </div>
 
                 {/* Tabela / Grid de Barras Horárias */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(105px, 1fr))', gap: 8 }}>
-                  {(tabVisual === 'faixas_views' ? data.visualizacoes.faixas : data.seguidores.faixas).map((item: any) => {
+                  {(tabVisual === 'faixas_postagem'
+                    ? (data.postagem?.faixas || [])
+                    : tabVisual === 'faixas_views' ? data.visualizacoes.faixas : data.seguidores.faixas
+                  ).map((item: any) => {
                     const isMelhor = item.isMelhor;
-                    const valPrincipal = tabVisual === 'faixas_views' ? (item.viewsTotal ?? item.viewsMedia) : item.ganhoTotal;
-                    const valFormatado = tabVisual === 'faixas_views'
+                    const valPrincipal = tabVisual === 'faixas_postagem'
+                      ? item.mediana
+                      : tabVisual === 'faixas_views' ? (item.viewsTotal ?? item.viewsMedia) : item.ganhoTotal;
+                    const valFormatado = (tabVisual === 'faixas_views' || tabVisual === 'faixas_postagem')
                       ? (valPrincipal > 0 ? `${formatNumber(valPrincipal)}` : '-')
                       : (valPrincipal > 0 ? `+${formatNumber(valPrincipal)}` : '-');
 
-                    const corTema = tabVisual === 'faixas_views' ? '#58A6FF' : '#10B981';
-                    const corTemaBg = tabVisual === 'faixas_views' ? 'rgba(56, 139, 253, 0.15)' : 'rgba(16, 185, 129, 0.15)';
+                    const corTema = tabVisual === 'faixas_postagem' ? '#F97316' : tabVisual === 'faixas_views' ? '#58A6FF' : '#10B981';
+                    const corTemaBg = tabVisual === 'faixas_postagem' ? 'rgba(249, 115, 22, 0.15)' : tabVisual === 'faixas_views' ? 'rgba(56, 139, 253, 0.15)' : 'rgba(16, 185, 129, 0.15)';
 
                     return (
                       <div
