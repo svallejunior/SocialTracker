@@ -7164,7 +7164,7 @@ export default function Dashboard() {
         ABA: CRM (GESTÃO DE CLIENTES & LTV)
       ==================================================== */}
       {activeTab === 'crm' && (
-        <CentralCRM profiles={profiles} />
+        <CentralCRM profiles={profiles.filter(p => Number(p.meu_perfil) === 1 || p.meu_perfil === true)} />
       )}
 
       {/* Modal Global de Resolução de Perfil Sem Dados / Indisponível */}

@@ -59,7 +59,7 @@ interface Metricas {
 }
 
 interface CentralCRMProps {
-  profiles?: Array<{ username: string; nome?: string }>;
+  profiles?: Array<{ username: string; nome?: string; meu_perfil?: number | boolean }>;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; cor: string; bg: string; border: string }> = {
@@ -119,6 +119,16 @@ function getWhatsappUrl(tel: string): string {
 }
 
 export default function CentralCRM({ profiles = [] }: CentralCRMProps) {
+  // Filtra estritamente apenas as "Minhas Modelos" (meu_perfil === 1)
+  const minhasModelos = useMemo(() => {
+    return (profiles || []).filter(p => {
+      if (p.meu_perfil !== undefined) {
+        return Number(p.meu_perfil) === 1 || p.meu_perfil === true;
+      }
+      return true;
+    });
+  }, [profiles]);
+
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [metricas, setMetricas] = useState<Metricas>({
     total_clientes: 0,
@@ -616,7 +626,7 @@ export default function CentralCRM({ profiles = [] }: CentralCRMProps) {
                 valor_gasto: 0,
                 status: 'lead',
                 origem: 'Instagram',
-                perfil_modelo: profiles[0]?.username || '',
+                perfil_modelo: minhasModelos[0]?.username || '',
                 tags: [],
                 observacoes: ''
               });
@@ -865,7 +875,7 @@ export default function CentralCRM({ profiles = [] }: CentralCRMProps) {
         </div>
 
         {/* Filtro por Modelo */}
-        {profiles.length > 0 && (
+        {minhasModelos.length > 0 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>Modelo:</span>
             <select
@@ -882,7 +892,7 @@ export default function CentralCRM({ profiles = [] }: CentralCRMProps) {
               }}
             >
               <option value="todos">Todas as modelos</option>
-              {profiles.map(p => (
+              {minhasModelos.map(p => (
                 <option key={p.username} value={p.username}>
                   @{p.username} {p.nome ? `(${p.nome})` : ''}
                 </option>
@@ -910,10 +920,12 @@ export default function CentralCRM({ profiles = [] }: CentralCRMProps) {
             <option value="todos">Todas as origens</option>
             <option value="Instagram">Instagram</option>
             <option value="Telegram">Telegram</option>
+            <option value="Fanvue">Fanvue</option>
             <option value="WhatsApp">WhatsApp</option>
             <option value="Tráfego Pago">Tráfego Pago</option>
             <option value="Indicação">Indicação</option>
             <option value="Orgânico">Orgânico</option>
+            <option value="Outro">Outro</option>
           </select>
         </div>
 
@@ -998,7 +1010,7 @@ export default function CentralCRM({ profiles = [] }: CentralCRMProps) {
                 valor_gasto: 0,
                 status: 'lead',
                 origem: 'Instagram',
-                perfil_modelo: profiles[0]?.username || '',
+                perfil_modelo: minhasModelos[0]?.username || '',
                 tags: [],
                 observacoes: ''
               });
@@ -1069,10 +1081,12 @@ export default function CentralCRM({ profiles = [] }: CentralCRMProps) {
                               fontSize: 10,
                               padding: '1px 6px',
                               borderRadius: 4,
-                              background: 'rgba(255, 255, 255, 0.08)',
-                              color: 'var(--text-secondary)'
+                              background: c.origem === 'Fanvue' ? 'rgba(0, 163, 255, 0.2)' : 'rgba(255, 255, 255, 0.08)',
+                              color: c.origem === 'Fanvue' ? '#38BDF8' : 'var(--text-secondary)',
+                              border: c.origem === 'Fanvue' ? '1px solid rgba(56, 189, 248, 0.4)' : 'none',
+                              fontWeight: c.origem === 'Fanvue' ? 700 : 500
                             }}>
-                              {c.origem}
+                              {c.origem === 'Fanvue' ? '💎 Fanvue' : c.origem}
                             </span>
                           )}
                           {(c.tags || []).map((t, idx) => (
@@ -1458,8 +1472,16 @@ export default function CentralCRM({ profiles = [] }: CentralCRMProps) {
                               </span>
                             )}
                             {c.origem && (
-                              <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(0, 240, 255, 0.1)', color: '#00F0FF' }}>
-                                {c.origem}
+                              <span style={{
+                                fontSize: 10,
+                                padding: '1px 6px',
+                                borderRadius: 4,
+                                background: c.origem === 'Fanvue' ? 'rgba(0, 163, 255, 0.2)' : 'rgba(0, 240, 255, 0.1)',
+                                color: c.origem === 'Fanvue' ? '#38BDF8' : '#00F0FF',
+                                border: c.origem === 'Fanvue' ? '1px solid rgba(56, 189, 248, 0.4)' : 'none',
+                                fontWeight: c.origem === 'Fanvue' ? 700 : 500
+                              }}>
+                                {c.origem === 'Fanvue' ? '💎 Fanvue' : c.origem}
                               </span>
                             )}
                           </div>
@@ -1855,7 +1877,7 @@ export default function CentralCRM({ profiles = [] }: CentralCRMProps) {
                     }}
                   >
                     <option value="">Nenhuma / Geral</option>
-                    {profiles.map(p => (
+                    {minhasModelos.map(p => (
                       <option key={p.username} value={p.username}>
                         @{p.username} {p.nome ? `(${p.nome})` : ''}
                       </option>
@@ -1884,10 +1906,12 @@ export default function CentralCRM({ profiles = [] }: CentralCRMProps) {
                   >
                     <option value="Instagram">Instagram</option>
                     <option value="Telegram">Telegram</option>
+                    <option value="Fanvue">Fanvue</option>
                     <option value="WhatsApp">WhatsApp</option>
                     <option value="Tráfego Pago">Tráfego Pago</option>
                     <option value="Indicação">Indicação</option>
                     <option value="Orgânico">Orgânico</option>
+                    <option value="Outro">Outro</option>
                   </select>
                 </div>
 
