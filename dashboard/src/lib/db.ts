@@ -330,6 +330,44 @@ async function ensureSchema(db: Db): Promise<void> {
     );
     CREATE INDEX IF NOT EXISTS idx_analise_username ON analise_perfil_semanal(username);
   `);
+
+  // --- CRM: Gestão de Clientes e Transações ---
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS crm_clientes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nome TEXT NOT NULL,
+      celular TEXT,
+      email TEXT,
+      telegram_id TEXT,
+      telegram_username TEXT,
+      instagram_username TEXT,
+      valor_gasto REAL DEFAULT 0.0,
+      status TEXT DEFAULT 'lead',
+      origem TEXT DEFAULT 'Instagram',
+      perfil_modelo TEXT,
+      tags TEXT DEFAULT '[]',
+      observacoes TEXT DEFAULT '',
+      ultimo_contato DATETIME DEFAULT CURRENT_TIMESTAMP,
+      criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+      atualizado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_crm_clientes_nome ON crm_clientes(nome);
+    CREATE INDEX IF NOT EXISTS idx_crm_clientes_status ON crm_clientes(status);
+    CREATE INDEX IF NOT EXISTS idx_crm_clientes_valor ON crm_clientes(valor_gasto);
+    CREATE INDEX IF NOT EXISTS idx_crm_clientes_modelo ON crm_clientes(perfil_modelo);
+
+    CREATE TABLE IF NOT EXISTS crm_transacoes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      cliente_id INTEGER NOT NULL REFERENCES crm_clientes(id) ON DELETE CASCADE,
+      valor REAL NOT NULL,
+      descricao TEXT,
+      data_transacao DATE DEFAULT (date('now')),
+      metodo_pagamento TEXT DEFAULT 'PIX',
+      perfil_modelo TEXT,
+      criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_crm_transacoes_cliente ON crm_transacoes(cliente_id);
+  `);
 }
 
 async function abrirConexao(): Promise<Db> {

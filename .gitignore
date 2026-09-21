@@ -26,3 +26,7 @@ __pycache__/
 
 # Logs
 *.log
+
+# IDE & AI caches
+.claude/
+

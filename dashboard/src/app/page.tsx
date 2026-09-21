@@ -129,6 +129,10 @@ const CentralRespostas = nextDynamic(() => import("../components/CentralResposta
   loading: TabLoading,
   ssr: false,
 });
+const CentralCRM = nextDynamic(() => import("../components/CentralCRM"), {
+  loading: TabLoading,
+  ssr: false,
+});
 const ModalMelhoresHorarios = nextDynamic(() => import("../components/ModalMelhoresHorarios"), {
   ssr: false,
 });
@@ -1985,7 +1989,7 @@ export default function Dashboard() {
   }, [ultimaAtualizacaoGeral]);
 
   // Estados de Navegação e Filtros
-  const [activeTab, setActiveTab] = useState<'perfis' | 'cards' | 'graficos' | 'posts' | 'anomalias' | 'automatizacao' | 'respostas'>('perfis');
+  const [activeTab, setActiveTab] = useState<'perfis' | 'cards' | 'graficos' | 'posts' | 'anomalias' | 'automatizacao' | 'respostas' | 'crm'>('perfis');
   const [anomaliasCount, setAnomaliasCount] = useState<number>(0);
   const [selectedProfile, setSelectedProfile] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -3517,6 +3521,13 @@ export default function Dashboard() {
                   </span>
                 ) : null;
               })()}
+            </button>
+            <button
+              className={`tab-btn ${activeTab === 'crm' ? 'active' : ''}`}
+              onClick={() => setActiveTab('crm')}
+            >
+              <Users size={16} />
+              CRM
             </button>
           </div>
 
@@ -7147,6 +7158,13 @@ export default function Dashboard() {
       ==================================================== */}
       {activeTab === 'respostas' && (
         <CentralRespostas profiles={profiles} onRefresh={fetchData} />
+      )}
+
+      {/* ====================================================
+        ABA: CRM (GESTÃO DE CLIENTES & LTV)
+      ==================================================== */}
+      {activeTab === 'crm' && (
+        <CentralCRM profiles={profiles} />
       )}
 
       {/* Modal Global de Resolução de Perfil Sem Dados / Indisponível */}
