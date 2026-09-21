@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Send, Search, CheckCheck, RefreshCw, Inbox, Link2, Power, PowerOff,
-  ShoppingBag, MessageSquare, UserPlus, X
+  ShoppingBag, MessageSquare, UserPlus, X, Users
 } from 'lucide-react';
 
 function errMsg(err: unknown): string {
@@ -72,6 +72,7 @@ export default function CentralTelegram() {
   const [addIdentifier, setAddIdentifier] = useState('');
   const [addNome, setAddNome] = useState('');
   const [addingLead, setAddingLead] = useState(false);
+  const [migrandoCrm, setMigrandoCrm] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -192,6 +193,30 @@ export default function CentralTelegram() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'marcar_compra', chat_id: selectedLead.chat_id })
     });
+  };
+
+  const handleMigrarCrm = async () => {
+    if (!selectedLead) return;
+    setMigrandoCrm(true);
+    try {
+      const res = await fetch('/api/crm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'importar_lead_telegram', chat_id: selectedLead.chat_id })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setStatusMsg({ text: '✅ Lead migrado pro CRM — ajuste status/tags por lá pra refletir a jornada dele.', type: 'success' });
+      } else if (data.ja_existe) {
+        setStatusMsg({ text: 'ℹ️ Esse lead já está cadastrado no CRM.', type: 'error' });
+      } else {
+        setStatusMsg({ text: `⚠️ Erro: ${data.error}`, type: 'error' });
+      }
+    } catch (err: unknown) {
+      setStatusMsg({ text: `⚠️ Erro de conexão: ${errMsg(err)}`, type: 'error' });
+    } finally {
+      setMigrandoCrm(false);
+    }
   };
 
   const handleSetSharkStage = async (stage: string) => {
@@ -530,6 +555,20 @@ export default function CentralTelegram() {
                       <ShoppingBag size={13} /> Marcar comprado
                     </button>
                   )}
+
+                  {/* Migrar pro CRM */}
+                  <button
+                    onClick={handleMigrarCrm}
+                    disabled={migrandoCrm}
+                    title="Cadastrar esse lead na aba CRM (banco de clientes)"
+                    style={{
+                      background: 'rgba(217, 70, 239, 0.1)', border: '1px solid rgba(217, 70, 239, 0.35)',
+                      color: '#D946EF', borderRadius: 8, padding: '6px 10px', fontSize: 11, fontWeight: 700,
+                      cursor: migrandoCrm ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: 6
+                    }}
+                  >
+                    <Users size={13} /> {migrandoCrm ? 'Migrando...' : '→ CRM'}
+                  </button>
                 </div>
               </div>
 

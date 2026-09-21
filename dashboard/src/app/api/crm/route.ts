@@ -8,6 +8,42 @@ function errMsg(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+interface TelegramLeadRow {
+  chat_id: number;
+  username: string | null;
+  first_name: string | null;
+  stage: string;
+  purchased: number;
+  instagram_handle: string | null;
+  notes: string | null;
+}
+
+// Cadastra um lead do Telegram no CRM se ele ainda não existir (por telegram_id ou username),
+// usado tanto pela importação em massa quanto pelo botão "→ CRM" de um lead específico.
+async function importarLeadTelegram(
+  db: Awaited<ReturnType<typeof getDb>>,
+  lead: TelegramLeadRow
+): Promise<number | null> {
+  const idTg = String(lead.chat_id);
+  const userTg = lead.username ? lead.username.replace(/^@+/, '') : '';
+  const userIg = lead.instagram_handle ? lead.instagram_handle.replace(/^@+/, '') : '';
+  const nome = lead.first_name || (userTg ? `@${userTg}` : `Lead #${idTg}`);
+
+  const existe = await db.get(
+    `SELECT id FROM crm_clientes WHERE telegram_id = ? OR (telegram_username != '' AND telegram_username = ?)`,
+    [idTg, userTg]
+  );
+  if (existe) return null;
+
+  const status = lead.purchased === 1 ? 'cliente' : (lead.stage === 'fechamento' ? 'negociacao' : 'lead');
+  const res = await db.run(
+    `INSERT INTO crm_clientes (nome, telegram_id, telegram_username, instagram_username, status, origem, observacoes)
+     VALUES (?, ?, ?, ?, ?, 'Telegram', ?)`,
+    [nome, idTg, userTg, userIg, status, lead.notes || '']
+  );
+  return res.lastID ?? null;
+}
+
 // ─────────────────────────────────────────────
 // GET: Lista de clientes com filtros e KPIs ou detalhes de um cliente
 // ─────────────────────────────────────────────
@@ -194,7 +230,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 2. Importação opcional do banco Telegram
+    // 2. Importação opcional do banco Telegram (todos os leads de uma vez)
     if (action === 'importar_telegram' || body.action === 'importar_telegram') {
       if (!resolveTelegramDbPath()) {
         return NextResponse.json({ success: false, error: 'Banco do Telegram não configurado' }, { status: 400 });
@@ -207,29 +243,43 @@ export async function POST(request: NextRequest) {
 
       let importados = 0;
       for (const lead of tgLeads || []) {
-        const idTg = String(lead.chat_id);
-        const userTg = lead.username ? lead.username.replace(/^@+/, '') : '';
-        const userIg = lead.instagram_handle ? lead.instagram_handle.replace(/^@+/, '') : '';
-        const nome = lead.first_name || (userTg ? `@${userTg}` : `Lead #${idTg}`);
-
-        // Verifica se já existe por telegram_id
-        const existe = await db.get(
-          `SELECT id FROM crm_clientes WHERE telegram_id = ? OR (telegram_username != '' AND telegram_username = ?)`,
-          [idTg, userTg]
-        );
-
-        if (!existe) {
-          const status = lead.purchased === 1 ? 'cliente' : (lead.stage === 'fechamento' ? 'negociacao' : 'lead');
-          await db.run(
-            `INSERT INTO crm_clientes (nome, telegram_id, telegram_username, instagram_username, status, origem, observacoes)
-             VALUES (?, ?, ?, ?, ?, 'Telegram', ?)`,
-            [nome, idTg, userTg, userIg, status, lead.notes || '']
-          );
-          importados++;
-        }
+        const foiImportado = await importarLeadTelegram(db, lead);
+        if (foiImportado) importados++;
       }
 
       return NextResponse.json({ success: true, importados });
+    }
+
+    // 2b. Importação de UM lead específico do Telegram (botão "→ CRM" na Central de Telegram)
+    if (action === 'importar_lead_telegram' || body.action === 'importar_lead_telegram') {
+      const chatId = body.chat_id;
+      if (!chatId) {
+        return NextResponse.json({ success: false, error: 'chat_id é obrigatório' }, { status: 400 });
+      }
+      if (!resolveTelegramDbPath()) {
+        return NextResponse.json({ success: false, error: 'Banco do Telegram não configurado' }, { status: 400 });
+      }
+      const tgDb = await getTelegramDb();
+      const lead = await tgDb.get(
+        `SELECT chat_id, username, first_name, stage, purchased, instagram_handle, notes FROM leads WHERE chat_id = ?`,
+        [chatId]
+      );
+      if (!lead) {
+        return NextResponse.json({ success: false, error: 'Lead não encontrado no Telegram' }, { status: 404 });
+      }
+
+      const idTg = String(lead.chat_id);
+      const userTg = lead.username ? lead.username.replace(/^@+/, '') : '';
+      const existe = await db.get(
+        `SELECT id FROM crm_clientes WHERE telegram_id = ? OR (telegram_username != '' AND telegram_username = ?)`,
+        [idTg, userTg]
+      );
+      if (existe) {
+        return NextResponse.json({ success: false, error: 'Esse lead já está cadastrado no CRM', ja_existe: true, id: existe.id }, { status: 409 });
+      }
+
+      const novoId = await importarLeadTelegram(db, lead);
+      return NextResponse.json({ success: true, id: novoId });
     }
 
     // 3. Cadastro padrão de cliente
