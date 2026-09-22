@@ -459,6 +459,35 @@ def extrair_posts_perfil(account_id, token, limite=50):
     return posts[:limite]
 
 
+def extrair_stories_perfil(account_id, token):
+    """Obtém os stories ativos recentes da conta na Meta Graph API."""
+    url = f"{graph_api_base(token)}/{account_id}/stories"
+    params = {
+        "fields": "id,caption,media_type,media_product_type,permalink,timestamp,like_count,comments_count,shortcode,media_url,thumbnail_url",
+        "access_token": token
+    }
+
+    stories = []
+    try:
+        res = requests.get(url, params=params, timeout=15)
+        if res.status_code == 200:
+            data = res.json()
+            itens = data.get("data", [])
+            for it in itens:
+                it["media_product_type"] = "STORY"
+            stories.extend(itens)
+        else:
+            try:
+                err_msg = res.json().get("error", {}).get("message", res.text)
+            except Exception:
+                err_msg = res.text
+            print(f"  ℹ️ Stories para conta {account_id}: HTTP {res.status_code} ({err_msg})")
+    except Exception as e:
+        print(f"  ⚠️ Exceção ao extrair stories da conta {account_id}: {e}")
+
+    return stories
+
+
 def verificar_e_remover_posts_apagados(c, username, account_id, token, active_media_ids):
     """
     Compara os posts recentes armazenados no banco para o perfil com os IDs ativos
@@ -470,23 +499,26 @@ def verificar_e_remover_posts_apagados(c, username, account_id, token, active_me
     try:
         active_set = {str(mid).strip() for mid in active_media_ids if mid}
 
-        # Busca posts salvos nos últimos 45 dias no banco para este perfil
+        # Busca posts salvos nos últimos 45 dias no banco para este perfil (exclui stories, que expiram naturalmente após 24h)
         c.execute("""
             SELECT post_id, shortcode, data_postagem
             FROM posts_historico
             WHERE LOWER(username) = LOWER(?)
               AND (is_deleted IS NULL OR is_deleted = 0)
+              AND formato != 'Stories'
+              AND (media_product_type != 'STORY' OR media_product_type IS NULL)
               AND data_postagem >= date('now', 'localtime', '-45 days')
         """, (username,))
         banco_posts = c.fetchall()
 
-        # Também busca identificadores em automacao_publicacoes
+        # Também busca identificadores em automacao_publicacoes (exclui stories)
         c.execute("""
             SELECT id, meta_media_id, data_local
             FROM automacao_publicacoes
             WHERE LOWER(username) = LOWER(?)
               AND status = 'PUBLICADO'
               AND (is_deleted IS NULL OR is_deleted = 0)
+              AND tipo_postagem != 'STORIES'
               AND data_local >= date('now', 'localtime', '-45 days')
         """, (username,))
         banco_pubs = c.fetchall()
@@ -695,7 +727,9 @@ def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str, ac
         product_type = (p.get("media_product_type") or "FEED").upper()
 
         # Mapeia formato para os padrões do SocialTracker
-        if raw_formato == "VIDEO" or product_type == "REELS":
+        if product_type in ("STORY", "STORIES"):
+            formato = "Stories"
+        elif raw_formato == "VIDEO" or product_type == "REELS":
             formato = "Reels"
         elif raw_formato == "CAROUSEL_ALBUM":
             formato = "Carrossel"
@@ -802,7 +836,12 @@ def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str, ac
         partes_dt = data_postagem.split(" ")
         data_local = partes_dt[0]
         hora_local = partes_dt[1] if len(partes_dt) > 1 else "12:00:00"
-        tipo_pub = "REELS" if product_type == "REELS" or formato == "VIDEO" else "FEED"
+        if product_type in ("STORY", "STORIES") or formato == "Stories":
+            tipo_pub = "STORIES"
+        elif product_type == "REELS" or formato == "Reels":
+            tipo_pub = "REELS"
+        else:
+            tipo_pub = "FEED"
         pub_id = f"meta_{post_id}"
         
         # Se for carrossel com children, extrai todas as fotos/vídeos filhos
@@ -818,6 +857,14 @@ def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str, ac
                     "tipo": c_tipo
                 })
             arquivos_json = json.dumps(carrossel_items)
+        elif tipo_pub == "STORIES":
+            story_url = permalink or (f"https://www.instagram.com/stories/{username}/" if username else "")
+            story_media = thumbnail_url or media_url or ""
+            arquivos_json = json.dumps([{
+                "url": story_url,
+                "previewUrl": story_media,
+                "tipo": "STORIES"
+            }])
         else:
             arquivos_json = json.dumps([{"url": permalink, "tipo": formato, "previewUrl": thumbnail_url or media_url}])
 
@@ -930,16 +977,28 @@ def rodar_ingestao_meta(username_filtro=None, buscar_insights_posts=True, limite
         total_midias = dados_perfil.get("media_count", 0)
         print(f"  👤 Perfil: {dados_perfil.get('name')} | {seguidores} seguidores | {total_midias} publicações")
 
-        # 2. Extrai posts
+        # 2. Extrai posts e stories
         posts = extrair_posts_perfil(account_id, token, limite=limite_posts)
-        print(f"  📸 {len(posts)} publicações baixadas.")
+        stories = extrair_stories_perfil(account_id, token)
+        print(f"  📸 {len(posts)} publicações baixadas | 📱 {len(stories)} stories ativos.")
 
-        # 3. Extrai insights por post se habilitado (em paralelo — ver buscar_insights_em_lote)
+        # 3. Extrai insights por post se habilitado (apenas posts regulares)
         if buscar_insights_posts and posts:
             buscar_insights_em_lote(posts, token)
 
+        for s in stories:
+            s["insights"] = {
+                "reach": 0,
+                "saved": 0,
+                "shares": 0,
+                "views": 0,
+                "total_interactions": 0
+            }
+
+        todas_midias = posts + stories
+
         # 4. Salva no banco e grava snapshots
-        posts_salvos, snapshots_salvos, posts_removidos = salvar_dados_no_banco(username, dados_perfil, posts, data_carga_str, account_id=account_id, token=token)
+        posts_salvos, snapshots_salvos, posts_removidos = salvar_dados_no_banco(username, dados_perfil, todas_midias, data_carga_str, account_id=account_id, token=token)
         msg_removidos = f" | 🗑️ {posts_removidos} post(s) apagado(s) desconsiderado(s)" if posts_removidos > 0 else ""
         print(f"  💾 Banco atualizado: {posts_salvos} posts salvos | {snapshots_salvos} snapshots registrados{msg_removidos}.")
 
