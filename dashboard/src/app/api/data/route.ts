@@ -779,8 +779,12 @@ export async function GET() {
 
         for (const lh of leiturasDeHoje) {
           const seg = Number(lh.seguidores) || 0;
-          const diff = Math.max(0, seg - baseSeg);
+          const diff = seg - baseSeg;
           curvaSeguidoresDia.push(diff);
+        }
+
+        if (curvaSeguidoresDia.length === 1 && variacaoDia !== 0) {
+          curvaSeguidoresDia.push(variacaoDia);
         }
       }
 
