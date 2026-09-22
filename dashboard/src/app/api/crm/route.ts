@@ -383,12 +383,18 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: true, message: 'Status atualizado com sucesso' });
     }
 
-    const nome = body.nome !== undefined ? body.nome.trim() : clienteExistente.nome;
-    const celular = body.celular !== undefined ? body.celular.trim() : clienteExistente.celular;
-    const email = body.email !== undefined ? body.email.trim() : clienteExistente.email;
-    const telegram_id = body.telegram_id !== undefined ? String(body.telegram_id).trim() : clienteExistente.telegram_id;
-    const telegram_username = body.telegram_username !== undefined ? body.telegram_username.trim().replace(/^@+/, '') : clienteExistente.telegram_username;
-    const instagram_username = body.instagram_username !== undefined ? body.instagram_username.trim().replace(/^@+/, '') : clienteExistente.instagram_username;
+    // Campos podem vir como null (ex.: leads importados do Telegram sem celular/email)
+    const texto = (v: unknown) => (v == null ? '' : String(v).trim());
+
+    const nome = body.nome !== undefined ? texto(body.nome) : clienteExistente.nome;
+    if (!nome) {
+      return NextResponse.json({ success: false, error: 'Nome do cliente é obrigatório' }, { status: 400 });
+    }
+    const celular = body.celular !== undefined ? texto(body.celular) : clienteExistente.celular;
+    const email = body.email !== undefined ? texto(body.email) : clienteExistente.email;
+    const telegram_id = body.telegram_id !== undefined ? texto(body.telegram_id) : clienteExistente.telegram_id;
+    const telegram_username = body.telegram_username !== undefined ? texto(body.telegram_username).replace(/^@+/, '') : clienteExistente.telegram_username;
+    const instagram_username = body.instagram_username !== undefined ? texto(body.instagram_username).replace(/^@+/, '') : clienteExistente.instagram_username;
     const valor_gasto = body.valor_gasto !== undefined ? Number(body.valor_gasto) : clienteExistente.valor_gasto;
     const status = body.status !== undefined ? body.status : clienteExistente.status;
     const origem = body.origem !== undefined ? body.origem : clienteExistente.origem;
