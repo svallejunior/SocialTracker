@@ -294,10 +294,7 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
         interacoes: 0,
         mediaNaoSeguidores: 0,
         visualizadores: 0,
-        visitas_perfil: 0,
-        reels: 0,
-        posts: 0,
-        stories: 0
+        visitas_perfil: 0
       };
     }
 
@@ -307,9 +304,6 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
     const mediaNaoSeg = registros.reduce((acc, r) => acc + (Number(r.nao_seguidores_pct) || 0), 0) / totalSemanas;
     const totalVisualizadores = registros.reduce((acc, r) => acc + (Number(r.contas_alcancadas) || 0), 0);
     const totalVisitas = registros.reduce((acc, r) => acc + (Number(r.visitas_perfil) || 0), 0);
-    const totalReels = registros.reduce((acc, r) => acc + (Number(r.reels) || 0), 0);
-    const totalPosts = registros.reduce((acc, r) => acc + (Number(r.posts) || 0), 0);
-    const totalStories = registros.reduce((acc, r) => acc + (Number(r.stories) || 0), 0);
 
     return {
       totalSemanas,
@@ -318,10 +312,7 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
       interacoes: totalInteracoes,
       mediaNaoSeguidores: mediaNaoSeg,
       visualizadores: totalVisualizadores,
-      visitas_perfil: totalVisitas,
-      reels: totalReels,
-      posts: totalPosts,
-      stories: totalStories
+      visitas_perfil: totalVisitas
     };
   }, [registros]);
 
@@ -893,108 +884,6 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                   {fmtNum(somatorioSemanal.visitas_perfil)}
                 </div>
                 <span style={{ fontSize: '10px', color: '#586069' }}>Total de visitas</span>
-              </div>
-            </div>
-
-            {/* 7. Reels */}
-            <div style={{
-              background: '#0D1117',
-              border: '1px solid rgba(16, 185, 129, 0.25)',
-              borderRadius: '12px',
-              padding: '14px 16px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px'
-            }}>
-              <div style={{
-                width: '40px',
-                height: '40px',
-                borderRadius: '10px',
-                background: 'rgba(16, 185, 129, 0.12)',
-                color: '#10B981',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0
-              }}>
-                <Film size={20} />
-              </div>
-              <div style={{ minWidth: 0 }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: '#8B949E', textTransform: 'uppercase' }}>
-                  Reels
-                </span>
-                <div style={{ fontSize: '20px', fontWeight: 800, color: '#10B981', lineHeight: 1.1, marginTop: '2px' }}>
-                  {fmtNum(somatorioSemanal.reels)}
-                </div>
-                <span style={{ fontSize: '10px', color: '#586069' }}>Reels publicados</span>
-              </div>
-            </div>
-
-            {/* 8. Posts */}
-            <div style={{
-              background: '#0D1117',
-              border: '1px solid rgba(56, 189, 248, 0.25)',
-              borderRadius: '12px',
-              padding: '14px 16px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px'
-            }}>
-              <div style={{
-                width: '40px',
-                height: '40px',
-                borderRadius: '10px',
-                background: 'rgba(56, 189, 248, 0.12)',
-                color: '#38BDF8',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0
-              }}>
-                <ImageIcon size={20} />
-              </div>
-              <div style={{ minWidth: 0 }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: '#8B949E', textTransform: 'uppercase' }}>
-                  Posts
-                </span>
-                <div style={{ fontSize: '20px', fontWeight: 800, color: '#38BDF8', lineHeight: 1.1, marginTop: '2px' }}>
-                  {fmtNum(somatorioSemanal.posts)}
-                </div>
-                <span style={{ fontSize: '10px', color: '#586069' }}>Fotos e carrosséis</span>
-              </div>
-            </div>
-
-            {/* 9. Stories */}
-            <div style={{
-              background: '#0D1117',
-              border: '1px solid rgba(244, 114, 182, 0.25)',
-              borderRadius: '12px',
-              padding: '14px 16px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px'
-            }}>
-              <div style={{
-                width: '40px',
-                height: '40px',
-                borderRadius: '10px',
-                background: 'rgba(244, 114, 182, 0.12)',
-                color: '#F472B6',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0
-              }}>
-                <Aperture size={20} />
-              </div>
-              <div style={{ minWidth: 0 }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: '#8B949E', textTransform: 'uppercase' }}>
-                  Stories
-                </span>
-                <div style={{ fontSize: '20px', fontWeight: 800, color: '#F472B6', lineHeight: 1.1, marginTop: '2px' }}>
-                  {fmtNum(somatorioSemanal.stories)}
-                </div>
-                <span style={{ fontSize: '10px', color: '#586069' }}>Stories publicados</span>
               </div>
             </div>
           </div>
