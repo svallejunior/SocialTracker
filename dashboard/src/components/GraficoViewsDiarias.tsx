@@ -6,6 +6,7 @@ import { Eye } from 'lucide-react';
 interface PontoViews {
   dia: string;
   views: number | null;
+  seguidores: number | null;
 }
 
 const fmtDia = (iso: string) => {
@@ -48,7 +49,15 @@ export default function GraficoViewsDiarias({ username }: { username: string }) 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Eye size={16} color="#00F0FF" />
           <span style={{ fontSize: 13, fontWeight: 800, color: '#E6EDF3', textTransform: 'uppercase', letterSpacing: 0.4 }}>
-            Visualizações por dia
+            Visualizações e seguidores por dia
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 11, color: '#8B949E' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 10, height: 10, borderRadius: 2, background: '#00F0FF', opacity: 0.6 }} /> Visualizações
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 10, height: 10, borderRadius: 2, background: '#F85149', opacity: 0.6 }} /> Seguidores
+            </span>
           </span>
           {serie.length > 0 && (
             <span style={{ fontSize: 11, color: '#8B949E' }}>
@@ -81,18 +90,21 @@ export default function GraficoViewsDiarias({ username }: { username: string }) 
       ) : (
         <div style={{ height: 260 }}>
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={serie} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            {/* barGap -100%: as duas barras ocupam a mesma coluna, sobrepostas e semitransparentes */}
+            <BarChart data={serie} margin={{ top: 8, right: 0, left: 0, bottom: 0 }} barGap="-100%">
               <CartesianGrid stroke="#21262D" vertical={false} />
               <XAxis dataKey="dia" tickFormatter={fmtDia} tick={{ fill: '#8B949E', fontSize: 10 }} axisLine={{ stroke: '#30363D' }} tickLine={false} minTickGap={12} />
-              <YAxis tick={{ fill: '#8B949E', fontSize: 10 }} axisLine={false} tickLine={false} width={48} tickFormatter={(v: number) => fmtNum(v)} />
+              <YAxis yAxisId="views" tick={{ fill: '#00F0FF', fontSize: 10 }} axisLine={false} tickLine={false} width={48} tickFormatter={(v: number) => fmtNum(v)} />
+              <YAxis yAxisId="seg" orientation="right" tick={{ fill: '#F85149', fontSize: 10 }} axisLine={false} tickLine={false} width={48} tickFormatter={(v: number) => fmtNum(v)} />
               <Tooltip
                 cursor={{ fill: 'rgba(0, 240, 255, 0.06)' }}
                 contentStyle={{ background: '#161B22', border: '1px solid #30363D', borderRadius: 8, fontSize: 12 }}
                 labelStyle={{ color: '#E6EDF3', fontWeight: 700 }}
                 labelFormatter={(l: any) => fmtDia(String(l))}
-                formatter={(v: any) => [v === null || v === undefined ? 'sem coleta' : fmtNum(Number(v)), 'Visualizações']}
+                formatter={(v: any, name: any) => [v === null || v === undefined ? 'sem coleta' : fmtNum(Number(v)), name]}
               />
-              <Bar dataKey="views" fill="#00F0FF" radius={[3, 3, 0, 0]} maxBarSize={28} />
+              <Bar yAxisId="views" dataKey="views" name="Visualizações" fill="#00F0FF" fillOpacity={0.55} radius={[3, 3, 0, 0]} maxBarSize={28} />
+              <Bar yAxisId="seg" dataKey="seguidores" name="Seguidores" fill="#F85149" fillOpacity={0.55} radius={[3, 3, 0, 0]} maxBarSize={28} />
             </BarChart>
           </ResponsiveContainer>
         </div>

@@ -4,7 +4,7 @@ import { getDb } from '@/lib/db';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-// GET: visualizações ganhas por dia de um perfil, do primeiro snapshot até hoje.
+// GET: visualizações ganhas e seguidores por dia de um perfil, do primeiro snapshot até hoje.
 // Mesmo cálculo da coluna "Views" da tabela do Histórico da Conta (/api/anomalias):
 // por post, maior views do dia menos a do dia anterior coletado; post publicado
 // no próprio dia conta inteiro.
@@ -54,16 +54,31 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, serie: [] });
     }
 
+    // Seguidores: última coleta ativa de cada dia (mesma regra da tabela)
+    const segRows = await db.all(`
+      SELECT dia, seguidores FROM (
+        SELECT SUBSTR(data_coleta, 1, 10) as dia, seguidores,
+          ROW_NUMBER() OVER (PARTITION BY SUBSTR(data_coleta, 1, 10) ORDER BY data_coleta DESC, id DESC) as rn
+        FROM perfis_historico
+        WHERE inativo = 0 AND LOWER(username) = LOWER(?)
+      ) WHERE rn = 1
+    `, [username]);
+    const segPorDia = new Map<string, number>(segRows.map((r: any) => [r.dia, Number(r.seguidores) || 0]));
+
     // Preenche todos os dias do primeiro snapshot até hoje (Brasília); dia sem
     // coleta fica null (sem barra) em vez de um zero enganoso.
     const porDia = new Map<string, number>(rows.map((r: any) => [r.dia, Number(r.views) || 0]));
     const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
-    const serie: { dia: string; views: number | null }[] = [];
+    const serie: { dia: string; views: number | null; seguidores: number | null }[] = [];
     const cursor = new Date(`${rows[0].dia}T12:00:00Z`);
     const fim = new Date(`${hoje > rows[rows.length - 1].dia ? hoje : rows[rows.length - 1].dia}T12:00:00Z`);
     while (cursor <= fim) {
       const dia = cursor.toISOString().substring(0, 10);
-      serie.push({ dia, views: porDia.has(dia) ? porDia.get(dia)! : null });
+      serie.push({
+        dia,
+        views: porDia.has(dia) ? porDia.get(dia)! : null,
+        seguidores: segPorDia.has(dia) ? segPorDia.get(dia)! : null
+      });
       cursor.setUTCDate(cursor.getUTCDate() + 1);
     }
 
