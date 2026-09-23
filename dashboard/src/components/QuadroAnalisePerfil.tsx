@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   TrendingUp, Users, Calendar, Eye, Target, Percent,
   Activity, MessageSquare, Check, Trash2, Edit, RefreshCw,
-  Hash, ChevronLeft, ChevronRight, MousePointerClick
+  Film, Image as ImageIcon, Aperture, ChevronLeft, ChevronRight, MousePointerClick, Lock
 } from 'lucide-react';
 import AvatarModelo from './AvatarModelo';
 
@@ -23,28 +23,75 @@ export interface RegistroAnalise {
   nao_seguidores_pct: number;
   contas_alcancadas: number; // Visualizadores
   visitas_perfil: number;
-  conteudo_principal: number | string;
+  // Calculados pela API a partir das publicações do período
+  reels?: number;
+  posts?: number;
+  stories?: number;
   impressoes?: number;
   engajamento?: number;
   criado_em?: string;
   atualizado_em?: string;
 }
 
-// Helper para calcular período semanal de Sábado a Sexta-feira
-function getPeriodoSabSex(offsetSemanas: number = 0) {
-  const hoje = new Date();
-  const diaSemana = hoje.getDay(); // 0 = Domingo, 1 = Seg, ..., 5 = Sex, 6 = Sáb
-  // Última sexta-feira (ou hoje se for sexta)
-  const diasAteSexta = (diaSemana + 7 - 5) % 7;
-  const fim = new Date(hoje);
-  fim.setDate(hoje.getDate() - diasAteSexta - (offsetSemanas * 7));
+// Helper para formatar Date em YYYY-MM-DD local (evitando shift UTC)
+function formatDateLocal(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
-  const ini = new Date(fim);
-  ini.setDate(fim.getDate() - 6); // Sábado (6 dias antes da sexta)
+// Helper para parsear YYYY-MM-DD em Date local
+function parseDateLocal(str: string): Date {
+  if (!str) return new Date();
+  const parts = str.split('-').map(Number);
+  if (parts.length !== 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) {
+    return new Date();
+  }
+  return new Date(parts[0], parts[1] - 1, parts[2]);
+}
+
+// Retorna a data de hoje no formato YYYY-MM-DD local
+function getHojeLocalStr(): string {
+  return formatDateLocal(new Date());
+}
+
+// Helper para sugerir o próximo período semanal (sempre iniciando em Sábado e terminando em Sexta)
+function getProximoPeriodo(ultimoRegistro?: RegistroAnalise | null, offsetSemanas: number = 0) {
+  let ini: Date;
+
+  if (ultimoRegistro && ultimoRegistro.data_fim) {
+    // Começa no dia seguinte ao término do último registro
+    const fimAnterior = parseDateLocal(ultimoRegistro.data_fim);
+    ini = new Date(fimAnterior);
+    ini.setDate(fimAnterior.getDate() + 1);
+
+    // Garante que é um sábado
+    const dia = ini.getDay(); // 0 = Dom, 6 = Sáb
+    if (dia !== 6) {
+      const diasAteSabado = (6 - dia + 7) % 7;
+      ini.setDate(ini.getDate() + diasAteSabado);
+    }
+  } else {
+    // Se não há registros, pega o sábado do ciclo semanal atual
+    const hoje = new Date();
+    const diaSemana = hoje.getDay(); // 0 = Domingo, 1 = Seg, ..., 6 = Sáb
+    const diasDesdeSabado = (diaSemana + 1) % 7;
+    ini = new Date(hoje);
+    ini.setDate(hoje.getDate() - diasDesdeSabado);
+  }
+
+  // Aplica o deslocamento semanal (0 = próximo sugerido, 1 = 1 semana anterior, etc.)
+  if (offsetSemanas !== 0) {
+    ini.setDate(ini.getDate() - (offsetSemanas * 7));
+  }
+
+  const fim = new Date(ini);
+  fim.setDate(ini.getDate() + 6); // Sexta-feira (+6 dias)
 
   return {
-    data_inicio: ini.toISOString().substring(0, 10),
-    data_fim: fim.toISOString().substring(0, 10)
+    data_inicio: formatDateLocal(ini),
+    data_fim: formatDateLocal(fim)
   };
 }
 
@@ -109,24 +156,60 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
   // 5. Não seguidores (%)
   // 6. Visualizadores (antigo contas alcançadas)
   // 7. Visitas ao Perfil
-  // 8. Conteúdo principal (número)
+  // Reels/Posts/Stories do período são carregados automaticamente do banco
   const [form, setForm] = useState({
     id: null as number | null,
-    data_inicio: getPeriodoSabSex(0).data_inicio,
-    data_fim: getPeriodoSabSex(0).data_fim,
+    data_inicio: getProximoPeriodo(null, 0).data_inicio,
+    data_fim: getProximoPeriodo(null, 0).data_fim,
     visualizacoes: '',
     seguidores: '',
     interacoes: '',
     nao_seguidores_pct: '',
     contas_alcancadas: '', // Visualizadores
-    visitas_perfil: '',
-    conteudo_principal: ''  // Número
+    visitas_perfil: ''
   });
+
+  const hojeStr = useMemo(() => getHojeLocalStr(), []);
+
+  // Se a data final do período ainda não chegou (período em andamento ou futuro)
+  // Caso esteja editando um registro existente (form.id), permite editar
+  const periodoNaoChegou = Boolean(!form.id && form.data_fim && form.data_fim > hojeStr);
+
+  // Manipulação manual das datas mantendo o ciclo Sábado a Sexta
+  const handleDataInicioChange = (val: string) => {
+    if (!val) {
+      setForm(f => ({ ...f, data_inicio: '' }));
+      return;
+    }
+    const d = parseDateLocal(val);
+    const fim = new Date(d);
+    fim.setDate(d.getDate() + 6);
+    setForm(f => ({
+      ...f,
+      data_inicio: val,
+      data_fim: formatDateLocal(fim)
+    }));
+  };
+
+  const handleDataFimChange = (val: string) => {
+    if (!val) {
+      setForm(f => ({ ...f, data_fim: '' }));
+      return;
+    }
+    const d = parseDateLocal(val);
+    const ini = new Date(d);
+    ini.setDate(d.getDate() - 6);
+    setForm(f => ({
+      ...f,
+      data_inicio: formatDateLocal(ini),
+      data_fim: val
+    }));
+  };
 
   // Atualiza período ao mudar offset de semana
   const mudarSemana = (novoOffset: number) => {
     setOffsetSemana(novoOffset);
-    const p = getPeriodoSabSex(novoOffset);
+    const p = getProximoPeriodo(registros[0], novoOffset);
     setForm(f => ({
       ...f,
       data_inicio: p.data_inicio,
@@ -143,7 +226,26 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
       const res = await fetch(`/api/analise?username=${encodeURIComponent(uname)}`);
       const json = await res.json();
       if (json.success) {
-        setRegistros(json.data || []);
+        const novosRegistros: RegistroAnalise[] = json.data || [];
+        setRegistros(novosRegistros);
+
+        // Se não estiver editando, já sugere automaticamente o próximo período para esta modelo
+        setForm(prevForm => {
+          if (prevForm.id) return prevForm;
+          const p = getProximoPeriodo(novosRegistros[0], 0);
+          return {
+            id: null,
+            data_inicio: p.data_inicio,
+            data_fim: p.data_fim,
+            visualizacoes: '',
+            seguidores: '',
+            interacoes: '',
+            nao_seguidores_pct: '',
+            contas_alcancadas: '',
+            visitas_perfil: ''
+          };
+        });
+        setOffsetSemana(0);
       }
     } catch (e) {
       console.error('Erro ao carregar análises:', e);
@@ -158,6 +260,29 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
     }
   }, [selectedUsername, carregarRegistros]);
 
+  // Reels / Posts / Stories publicados no período do formulário — carregados do banco ao informar o período.
+  // Guardamos a chave (modelo|início|fim) da resposta para ignorar resultados de um período que já mudou.
+  const [conteudoCarregado, setConteudoCarregado] = useState<{ chave: string; dados: { reels: number; posts: number; stories: number } | null } | null>(null);
+  const chaveConteudo = /^\d{4}-\d{2}-\d{2}$/.test(form.data_inicio) && /^\d{4}-\d{2}-\d{2}$/.test(form.data_fim) && selectedUsername
+    ? `${selectedUsername}|${form.data_inicio}|${form.data_fim}`
+    : null;
+  const conteudoPeriodo = conteudoCarregado && conteudoCarregado.chave === chaveConteudo ? conteudoCarregado.dados : null;
+  const carregandoConteudo = Boolean(chaveConteudo && conteudoCarregado?.chave !== chaveConteudo);
+
+  useEffect(() => {
+    if (!chaveConteudo) return;
+    const [username, data_inicio, data_fim] = chaveConteudo.split('|');
+    let cancelado = false;
+    fetch(`/api/analise/conteudo?${new URLSearchParams({ username, data_inicio, data_fim })}`)
+      .then(res => res.json())
+      .then(json => { if (!cancelado) setConteudoCarregado({ chave: chaveConteudo, dados: json.success ? json.data : null }); })
+      .catch(e => {
+        console.error('Erro ao carregar conteúdo do período:', e);
+        if (!cancelado) setConteudoCarregado({ chave: chaveConteudo, dados: null });
+      });
+    return () => { cancelado = true; };
+  }, [chaveConteudo]);
+
   // Somatório consolidado semanal dos registros da modelo
   const somatorioSemanal = useMemo(() => {
     const totalSemanas = registros.length;
@@ -170,7 +295,9 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
         mediaNaoSeguidores: 0,
         visualizadores: 0,
         visitas_perfil: 0,
-        conteudoPrincipal: 0
+        reels: 0,
+        posts: 0,
+        stories: 0
       };
     }
 
@@ -180,7 +307,9 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
     const mediaNaoSeg = registros.reduce((acc, r) => acc + (Number(r.nao_seguidores_pct) || 0), 0) / totalSemanas;
     const totalVisualizadores = registros.reduce((acc, r) => acc + (Number(r.contas_alcancadas) || 0), 0);
     const totalVisitas = registros.reduce((acc, r) => acc + (Number(r.visitas_perfil) || 0), 0);
-    const totalConteudo = registros.reduce((acc, r) => acc + (Number(r.conteudo_principal) || 0), 0);
+    const totalReels = registros.reduce((acc, r) => acc + (Number(r.reels) || 0), 0);
+    const totalPosts = registros.reduce((acc, r) => acc + (Number(r.posts) || 0), 0);
+    const totalStories = registros.reduce((acc, r) => acc + (Number(r.stories) || 0), 0);
 
     return {
       totalSemanas,
@@ -190,7 +319,9 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
       mediaNaoSeguidores: mediaNaoSeg,
       visualizadores: totalVisualizadores,
       visitas_perfil: totalVisitas,
-      conteudoPrincipal: totalConteudo
+      reels: totalReels,
+      posts: totalPosts,
+      stories: totalStories
     };
   }, [registros]);
 
@@ -220,6 +351,11 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
       return;
     }
 
+    if (periodoNaoChegou) {
+      alert(`A data final deste período (${fmtDataBr(form.data_fim)}) ainda não chegou. O preenchimento só é permitido após o término da semana.`);
+      return;
+    }
+
     setSalvando(true);
     setMsgFeedback(null);
     try {
@@ -234,7 +370,6 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
         nao_seguidores_pct: Number(form.nao_seguidores_pct) || 0,
         contas_alcancadas: Number(form.contas_alcancadas) || 0, // Visualizadores
         visitas_perfil: Number(form.visitas_perfil) || 0,
-        conteudo_principal: Number(form.conteudo_principal) || 0,
         impressoes: 0,
         engajamento: 0
       };
@@ -252,20 +387,11 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
           tipo: 'ok',
           texto: form.id ? 'Análise atualizada com sucesso!' : 'Novo período registrado com sucesso!'
         });
-        // Limpa para novo período mantendo o período padrão
-        const p = getPeriodoSabSex(offsetSemana);
-        setForm({
-          id: null,
-          data_inicio: p.data_inicio,
-          data_fim: p.data_fim,
-          visualizacoes: '',
-          seguidores: '', // Usuário informa manualmente
-          interacoes: '',
-          nao_seguidores_pct: '',
-          contas_alcancadas: '',
-          visitas_perfil: '',
-          conteudo_principal: ''
-        });
+        // Limpa estado de edição e recarrega registros (o que sugere o próximo período consecutivo)
+        setForm(f => ({
+          ...f,
+          id: null
+        }));
         carregarRegistros(selectedUsername);
         setTimeout(() => setMsgFeedback(null), 4000);
       } else {
@@ -290,7 +416,6 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
       nao_seguidores_pct: String(r.nao_seguidores_pct || ''),
       contas_alcancadas: String(r.contas_alcancadas || ''),
       visitas_perfil: String(r.visitas_perfil || ''),
-      conteudo_principal: String(r.conteudo_principal || '')
     });
     // Rola suavemente até o formulário
     const el = document.getElementById('quadro-analise-form');
@@ -483,21 +608,18 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                     key={m.username}
                     onClick={() => {
                       setSelectedUsername(m.username);
-                      if (form.id) {
-                        const p = getPeriodoSabSex(offsetSemana);
-                        setForm({
-                          id: null,
-                          data_inicio: p.data_inicio,
-                          data_fim: p.data_fim,
-                          visualizacoes: '',
-                          seguidores: '',
-                          interacoes: '',
-                          nao_seguidores_pct: '',
-                          contas_alcancadas: '',
-                          visitas_perfil: '',
-                          conteudo_principal: ''
-                        });
-                      }
+                      setOffsetSemana(0);
+                      setForm({
+                        id: null,
+                        data_inicio: '',
+                        data_fim: '',
+                        visualizacoes: '',
+                        seguidores: '',
+                        interacoes: '',
+                        nao_seguidores_pct: '',
+                        contas_alcancadas: '',
+                        visitas_perfil: ''
+                      });
                     }}
                     style={{
                       background: isSelected ? 'rgba(16, 185, 129, 0.12)' : '#161B22',
@@ -774,7 +896,7 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
               </div>
             </div>
 
-            {/* 7. Conteúdo Principal (Número) */}
+            {/* 7. Reels */}
             <div style={{
               background: '#0D1117',
               border: '1px solid rgba(16, 185, 129, 0.25)',
@@ -795,16 +917,84 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                 justifyContent: 'center',
                 flexShrink: 0
               }}>
-                <Hash size={20} />
+                <Film size={20} />
               </div>
               <div style={{ minWidth: 0 }}>
                 <span style={{ fontSize: '11px', fontWeight: 700, color: '#8B949E', textTransform: 'uppercase' }}>
-                  Conteúdo Total
+                  Reels
                 </span>
                 <div style={{ fontSize: '20px', fontWeight: 800, color: '#10B981', lineHeight: 1.1, marginTop: '2px' }}>
-                  {fmtNum(somatorioSemanal.conteudoPrincipal)}
+                  {fmtNum(somatorioSemanal.reels)}
                 </div>
-                <span style={{ fontSize: '10px', color: '#586069' }}>Qtd. conteúdos somados</span>
+                <span style={{ fontSize: '10px', color: '#586069' }}>Reels publicados</span>
+              </div>
+            </div>
+
+            {/* 8. Posts */}
+            <div style={{
+              background: '#0D1117',
+              border: '1px solid rgba(56, 189, 248, 0.25)',
+              borderRadius: '12px',
+              padding: '14px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
+            }}>
+              <div style={{
+                width: '40px',
+                height: '40px',
+                borderRadius: '10px',
+                background: 'rgba(56, 189, 248, 0.12)',
+                color: '#38BDF8',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <ImageIcon size={20} />
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: '#8B949E', textTransform: 'uppercase' }}>
+                  Posts
+                </span>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: '#38BDF8', lineHeight: 1.1, marginTop: '2px' }}>
+                  {fmtNum(somatorioSemanal.posts)}
+                </div>
+                <span style={{ fontSize: '10px', color: '#586069' }}>Fotos e carrosséis</span>
+              </div>
+            </div>
+
+            {/* 9. Stories */}
+            <div style={{
+              background: '#0D1117',
+              border: '1px solid rgba(244, 114, 182, 0.25)',
+              borderRadius: '12px',
+              padding: '14px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
+            }}>
+              <div style={{
+                width: '40px',
+                height: '40px',
+                borderRadius: '10px',
+                background: 'rgba(244, 114, 182, 0.12)',
+                color: '#F472B6',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <Aperture size={20} />
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: '#8B949E', textTransform: 'uppercase' }}>
+                  Stories
+                </span>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: '#F472B6', lineHeight: 1.1, marginTop: '2px' }}>
+                  {fmtNum(somatorioSemanal.stories)}
+                </div>
+                <span style={{ fontSize: '10px', color: '#586069' }}>Stories publicados</span>
               </div>
             </div>
           </div>
@@ -892,7 +1082,8 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                 <button
                   type="button"
                   onClick={() => {
-                    const p = getPeriodoSabSex(offsetSemana);
+                    const p = getProximoPeriodo(registros[0], 0);
+                    setOffsetSemana(0);
                     setForm({
                       id: null,
                       data_inicio: p.data_inicio,
@@ -902,8 +1093,7 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                       interacoes: '',
                       nao_seguidores_pct: '',
                       contas_alcancadas: '',
-                      visitas_perfil: '',
-                      conteudo_principal: ''
+                      visitas_perfil: ''
                     });
                   }}
                   style={{
@@ -942,6 +1132,43 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
             </div>
           )}
 
+          {/* Banner informativo quando o período ainda está em andamento */}
+          {periodoNaoChegou && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              background: 'rgba(234, 179, 8, 0.08)',
+              border: '1px solid rgba(234, 179, 8, 0.3)',
+              borderRadius: '10px',
+              padding: '12px 16px',
+              marginBottom: '18px',
+              color: '#FBBF24',
+              fontSize: '13px'
+            }}>
+              <div style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '8px',
+                background: 'rgba(234, 179, 8, 0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <Lock size={18} color="#FBBF24" />
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, color: '#FCD34D' }}>
+                  Período em andamento: {fmtDataBr(form.data_inicio)} a {fmtDataBr(form.data_fim)}
+                </div>
+                <div style={{ fontSize: '12px', color: '#D1D5DB', marginTop: '2px' }}>
+                  A data final deste período ainda não chegou. O preenchimento das métricas só é permitido após o encerramento da semana ({fmtDataBr(form.data_fim)}).
+                </div>
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleSalvar}>
             <div style={{
               display: 'grid',
@@ -958,7 +1185,7 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                   type="date"
                   required
                   value={form.data_inicio}
-                  onChange={e => setForm(f => ({ ...f, data_inicio: e.target.value }))}
+                  onChange={e => handleDataInicioChange(e.target.value)}
                   style={{
                     width: '100%',
                     background: '#161B22',
@@ -981,7 +1208,7 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                   type="date"
                   required
                   value={form.data_fim}
-                  onChange={e => setForm(f => ({ ...f, data_fim: e.target.value }))}
+                  onChange={e => handleDataFimChange(e.target.value)}
                   style={{
                     width: '100%',
                     background: '#161B22',
@@ -1003,19 +1230,22 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                 </label>
                 <input
                   type="number"
-                  placeholder="Ex: 150000"
+                  placeholder={periodoNaoChegou ? 'Bloqueado...' : 'Ex: 150000'}
+                  disabled={periodoNaoChegou}
                   value={form.visualizacoes}
                   onChange={e => setForm(f => ({ ...f, visualizacoes: e.target.value }))}
                   style={{
                     width: '100%',
-                    background: '#161B22',
-                    border: '1px solid #30363D',
+                    background: periodoNaoChegou ? '#0D1117' : '#161B22',
+                    border: periodoNaoChegou ? '1px solid #21262D' : '1px solid #30363D',
                     borderRadius: '8px',
                     padding: '10px 12px',
                     color: 'white',
                     fontSize: '13px',
                     outline: 'none',
-                    boxSizing: 'border-box'
+                    boxSizing: 'border-box',
+                    opacity: periodoNaoChegou ? 0.45 : 1,
+                    cursor: periodoNaoChegou ? 'not-allowed' : 'text'
                   }}
                 />
               </div>
@@ -1027,19 +1257,22 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                 </label>
                 <input
                   type="number"
-                  placeholder="Digite os seguidores..."
+                  placeholder={periodoNaoChegou ? 'Bloqueado...' : 'Digite os seguidores...'}
+                  disabled={periodoNaoChegou}
                   value={form.seguidores}
                   onChange={e => setForm(f => ({ ...f, seguidores: e.target.value }))}
                   style={{
                     width: '100%',
-                    background: '#161B22',
-                    border: '1px solid #30363D',
+                    background: periodoNaoChegou ? '#0D1117' : '#161B22',
+                    border: periodoNaoChegou ? '1px solid #21262D' : '1px solid #30363D',
                     borderRadius: '8px',
                     padding: '10px 12px',
                     color: 'white',
                     fontSize: '13px',
                     outline: 'none',
-                    boxSizing: 'border-box'
+                    boxSizing: 'border-box',
+                    opacity: periodoNaoChegou ? 0.45 : 1,
+                    cursor: periodoNaoChegou ? 'not-allowed' : 'text'
                   }}
                 />
               </div>
@@ -1051,19 +1284,22 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                 </label>
                 <input
                   type="number"
-                  placeholder="Ex: 3200"
+                  placeholder={periodoNaoChegou ? 'Bloqueado...' : 'Ex: 3200'}
+                  disabled={periodoNaoChegou}
                   value={form.interacoes}
                   onChange={e => setForm(f => ({ ...f, interacoes: e.target.value }))}
                   style={{
                     width: '100%',
-                    background: '#161B22',
-                    border: '1px solid #30363D',
+                    background: periodoNaoChegou ? '#0D1117' : '#161B22',
+                    border: periodoNaoChegou ? '1px solid #21262D' : '1px solid #30363D',
                     borderRadius: '8px',
                     padding: '10px 12px',
                     color: 'white',
                     fontSize: '13px',
                     outline: 'none',
-                    boxSizing: 'border-box'
+                    boxSizing: 'border-box',
+                    opacity: periodoNaoChegou ? 0.45 : 1,
+                    cursor: periodoNaoChegou ? 'not-allowed' : 'text'
                   }}
                 />
               </div>
@@ -1076,19 +1312,22 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                 <input
                   type="number"
                   step="0.1"
-                  placeholder="Ex: 82.5"
+                  placeholder={periodoNaoChegou ? 'Bloqueado...' : 'Ex: 82.5'}
+                  disabled={periodoNaoChegou}
                   value={form.nao_seguidores_pct}
                   onChange={e => setForm(f => ({ ...f, nao_seguidores_pct: e.target.value }))}
                   style={{
                     width: '100%',
-                    background: '#161B22',
-                    border: '1px solid #30363D',
+                    background: periodoNaoChegou ? '#0D1117' : '#161B22',
+                    border: periodoNaoChegou ? '1px solid #21262D' : '1px solid #30363D',
                     borderRadius: '8px',
                     padding: '10px 12px',
                     color: 'white',
                     fontSize: '13px',
                     outline: 'none',
-                    boxSizing: 'border-box'
+                    boxSizing: 'border-box',
+                    opacity: periodoNaoChegou ? 0.45 : 1,
+                    cursor: periodoNaoChegou ? 'not-allowed' : 'text'
                   }}
                 />
               </div>
@@ -1100,19 +1339,22 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                 </label>
                 <input
                   type="number"
-                  placeholder="Ex: 89000"
+                  placeholder={periodoNaoChegou ? 'Bloqueado...' : 'Ex: 89000'}
+                  disabled={periodoNaoChegou}
                   value={form.contas_alcancadas}
                   onChange={e => setForm(f => ({ ...f, contas_alcancadas: e.target.value }))}
                   style={{
                     width: '100%',
-                    background: '#161B22',
-                    border: '1px solid #30363D',
+                    background: periodoNaoChegou ? '#0D1117' : '#161B22',
+                    border: periodoNaoChegou ? '1px solid #21262D' : '1px solid #30363D',
                     borderRadius: '8px',
                     padding: '10px 12px',
                     color: 'white',
                     fontSize: '13px',
                     outline: 'none',
-                    boxSizing: 'border-box'
+                    boxSizing: 'border-box',
+                    opacity: periodoNaoChegou ? 0.45 : 1,
+                    cursor: periodoNaoChegou ? 'not-allowed' : 'text'
                   }}
                 />
               </div>
@@ -1124,45 +1366,55 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                 </label>
                 <input
                   type="number"
-                  placeholder="Ex: 1420"
+                  placeholder={periodoNaoChegou ? 'Bloqueado...' : 'Ex: 1420'}
+                  disabled={periodoNaoChegou}
                   value={form.visitas_perfil}
                   onChange={e => setForm(f => ({ ...f, visitas_perfil: e.target.value }))}
                   style={{
                     width: '100%',
-                    background: '#161B22',
-                    border: '1px solid #30363D',
+                    background: periodoNaoChegou ? '#0D1117' : '#161B22',
+                    border: periodoNaoChegou ? '1px solid #21262D' : '1px solid #30363D',
                     borderRadius: '8px',
                     padding: '10px 12px',
                     color: 'white',
                     fontSize: '13px',
                     outline: 'none',
-                    boxSizing: 'border-box'
+                    boxSizing: 'border-box',
+                    opacity: periodoNaoChegou ? 0.45 : 1,
+                    cursor: periodoNaoChegou ? 'not-allowed' : 'text'
                   }}
                 />
               </div>
 
-              {/* 8. CONTEÚDO PRINCIPAL (EM NÚMERO) */}
-              <div>
-                <label style={{ fontSize: '11px', color: '#8B949E', fontWeight: 700, display: 'block', marginBottom: '6px', textTransform: 'uppercase' }}>
-                  8. Conteúdo Principal (Número)
-                </label>
-                <input
-                  type="number"
-                  placeholder="Ex: 12"
-                  value={form.conteudo_principal}
-                  onChange={e => setForm(f => ({ ...f, conteudo_principal: e.target.value }))}
-                  style={{
-                    width: '100%',
+            </div>
+
+            {/* 8. CONTEÚDO PUBLICADO NO PERÍODO (automático, vindo do banco) */}
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ fontSize: '11px', color: '#8B949E', fontWeight: 700, marginBottom: '6px', textTransform: 'uppercase' }}>
+                8. Conteúdo publicado no período {carregandoConteudo && <span style={{ color: '#586069', fontWeight: 600, textTransform: 'none' }}>— carregando...</span>}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
+                {([
+                  { chave: 'reels', rotulo: 'Reels', cor: '#10B981', Icone: Film },
+                  { chave: 'posts', rotulo: 'Posts', cor: '#38BDF8', Icone: ImageIcon },
+                  { chave: 'stories', rotulo: 'Stories', cor: '#F472B6', Icone: Aperture }
+                ] as const).map(({ chave, rotulo, cor, Icone }) => (
+                  <div key={chave} style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
                     background: '#161B22',
                     border: '1px solid #30363D',
                     borderRadius: '8px',
-                    padding: '10px 12px',
-                    color: 'white',
-                    fontSize: '13px',
-                    outline: 'none',
-                    boxSizing: 'border-box'
-                  }}
-                />
+                    padding: '10px 12px'
+                  }}>
+                    <Icone size={16} color={cor} />
+                    <span style={{ fontSize: '12px', color: '#8B949E', fontWeight: 600 }}>{rotulo}</span>
+                    <span style={{ marginLeft: 'auto', fontSize: '16px', fontWeight: 800, color: cor }}>
+                      {conteudoPeriodo ? conteudoPeriodo[chave] : '—'}
+                    </span>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -1170,25 +1422,44 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '10px' }}>
               <button
                 type="submit"
-                disabled={salvando}
+                disabled={periodoNaoChegou || salvando}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
-                  background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
-                  color: 'white',
-                  border: 'none',
+                  background: periodoNaoChegou
+                    ? '#161B22'
+                    : 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                  border: periodoNaoChegou ? '1px solid #30363D' : 'none',
+                  color: periodoNaoChegou ? '#8B949E' : 'white',
                   borderRadius: '8px',
                   padding: '10px 20px',
                   fontSize: '13px',
                   fontWeight: 700,
-                  cursor: salvando ? 'not-allowed' : 'pointer',
-                  boxShadow: '0 4px 14px rgba(16, 185, 129, 0.3)',
-                  transition: 'all 0.2s'
+                  cursor: (periodoNaoChegou || salvando) ? 'not-allowed' : 'pointer',
+                  boxShadow: periodoNaoChegou ? 'none' : '0 4px 14px rgba(16, 185, 129, 0.3)',
+                  transition: 'all 0.2s',
+                  opacity: periodoNaoChegou ? 0.7 : 1
                 }}
               >
-                <Check size={16} />
-                <span>{salvando ? 'Salvando...' : form.id ? 'Salvar Alterações' : 'Salvar Dados da Semana'}</span>
+                {periodoNaoChegou ? (
+                  <>
+                    <Lock size={16} />
+                    <span>Período em Andamento (Liberado em {fmtDataBr(form.data_fim)})</span>
+                  </>
+                ) : salvando ? (
+                  <span>Salvando...</span>
+                ) : form.id ? (
+                  <>
+                    <Check size={16} />
+                    <span>Salvar Alterações</span>
+                  </>
+                ) : (
+                  <>
+                    <Check size={16} />
+                    <span>Salvar Dados da Semana</span>
+                  </>
+                )}
               </button>
             </div>
           </form>
@@ -1239,7 +1510,9 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                   <th style={{ padding: '10px 12px' }}>Não Seg. (%)</th>
                   <th style={{ padding: '10px 12px' }}>Visualizadores</th>
                   <th style={{ padding: '10px 12px' }}>Visitas Perfil</th>
-                  <th style={{ padding: '10px 12px' }}>Conteúdo Principal</th>
+                  <th style={{ padding: '10px 12px' }}>Reels</th>
+                  <th style={{ padding: '10px 12px' }}>Posts</th>
+                  <th style={{ padding: '10px 12px' }}>Stories</th>
                   <th style={{ padding: '10px 12px', textAlign: 'right' }}>Ações</th>
                 </tr>
               </thead>
@@ -1276,7 +1549,13 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                       {r.visitas_perfil > 0 ? fmtNum(r.visitas_perfil) : '—'}
                     </td>
                     <td style={{ padding: '10px 12px', color: '#10B981', fontWeight: 700 }}>
-                      {r.conteudo_principal ? String(r.conteudo_principal) : '—'}
+                      {r.reels ?? '—'}
+                    </td>
+                    <td style={{ padding: '10px 12px', color: '#38BDF8', fontWeight: 700 }}>
+                      {r.posts ?? '—'}
+                    </td>
+                    <td style={{ padding: '10px 12px', color: '#F472B6', fontWeight: 700 }}>
+                      {r.stories ?? '—'}
                     </td>
                     <td style={{ padding: '10px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                       <button

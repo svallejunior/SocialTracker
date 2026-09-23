@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
+import { contarConteudoPeriodo } from '@/lib/contagemConteudo';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -21,7 +22,13 @@ export async function GET(req: NextRequest) {
 
     query += ' ORDER BY data_inicio DESC, id DESC';
 
-    const registros = await db.all(query, params);
+    const registrosBase = await db.all(query, params);
+
+    // Reels/Posts/Stories de cada semana vêm do banco de publicações, não de digitação manual
+    const registros = await Promise.all(registrosBase.map(async (r: any) => ({
+      ...r,
+      ...(await contarConteudoPeriodo(db, String(r.username || '').toLowerCase(), r.data_inicio, r.data_fim))
+    })));
 
     return NextResponse.json({ success: true, data: registros }, {
       headers: { 'Cache-Control': 'no-store' }
@@ -45,6 +52,18 @@ export async function POST(req: NextRequest) {
 
     const data_inicio = body.data_inicio || '';
     const data_fim = body.data_fim || '';
+    if (!data_inicio || !data_fim) {
+      return NextResponse.json({ success: false, error: 'Período (data de início e fim) é obrigatório' }, { status: 400 });
+    }
+
+    const dHoje = new Date();
+    const hojeStr = `${dHoje.getFullYear()}-${String(dHoje.getMonth() + 1).padStart(2, '0')}-${String(dHoje.getDate()).padStart(2, '0')}`;
+    if (data_fim > hojeStr) {
+      return NextResponse.json({
+        success: false,
+        error: `O período selecionado termina em ${data_fim} e ainda não foi concluído. Só é permitido registrar após o término da semana.`
+      }, { status: 400 });
+    }
     const seguidores = Number(body.seguidores) || 0;
     const visualizacoes = Number(body.visualizacoes) || 0;
     const contas_alcancadas = Number(body.contas_alcancadas) || 0;
