@@ -466,14 +466,19 @@ export async function GET() {
       }
 
       const agsAtivos = await db.all(`
-        SELECT id, LOWER(username) as uname, tipo_postagem, data_especifica, dias_selecionados, recorrencia, tipo_agendamento, data_inicio, data_fim
+        SELECT id, LOWER(username) as uname, status, tipo_postagem, data_especifica, dias_selecionados, recorrencia, tipo_agendamento, data_inicio, data_fim
         FROM automacao_agendamentos
-        WHERE status = 'AGENDADO'
+        WHERE status IN ('AGENDADO', 'AGENDADO_INSTAGRAM')
       `).catch(() => []);
 
       const agReelsMap: Record<string, number> = {};
       const agPostMap: Record<string, number> = {};
       const agStoriesMap: Record<string, number> = {};
+      // Marcações "agendado direto no Instagram": contam como previsto até sair
+      // um post do mesmo tipo publicado fora do sistema (ver loop final)
+      const igReelsMap: Record<string, number> = {};
+      const igPostMap: Record<string, number> = {};
+      const igStoriesMap: Record<string, number> = {};
 
       for (const ag of agsAtivos) {
         const u = ag.uname;
@@ -512,12 +517,16 @@ export async function GET() {
         }
 
         if (ehHoje) {
+          const noInstagram = ag.status === 'AGENDADO_INSTAGRAM';
           if (tipo === 'REELS') {
-            agReelsMap[u] = (agReelsMap[u] || 0) + 1;
+            const m = noInstagram ? igReelsMap : agReelsMap;
+            m[u] = (m[u] || 0) + 1;
           } else if (tipo === 'STORIES' || tipo === 'STORY') {
-            agStoriesMap[u] = (agStoriesMap[u] || 0) + 1;
+            const m = noInstagram ? igStoriesMap : agStoriesMap;
+            m[u] = (m[u] || 0) + 1;
           } else {
-            agPostMap[u] = (agPostMap[u] || 0) + 1;
+            const m = noInstagram ? igPostMap : agPostMap;
+            m[u] = (m[u] || 0) + 1;
           }
         }
       }
@@ -525,8 +534,14 @@ export async function GET() {
       const allUsers = new Set([
         ...Object.keys(histReelsMap), ...Object.keys(histPostMap), ...Object.keys(histStoriesMap),
         ...Object.keys(autoReelsMap), ...Object.keys(autoPostMap), ...Object.keys(autoStoriesMap),
-        ...Object.keys(agReelsMap), ...Object.keys(agPostMap), ...Object.keys(agStoriesMap)
+        ...Object.keys(agReelsMap), ...Object.keys(agPostMap), ...Object.keys(agStoriesMap),
+        ...Object.keys(igReelsMap), ...Object.keys(igPostMap), ...Object.keys(igStoriesMap)
       ]);
+
+      // Posts de hoje que não saíram pelo publicador (histórico da Meta menos os do
+      // sistema) quitam as marcações do Instagram do mesmo tipo.
+      const igPendentes = (ig: number, hist: number, auto: number) =>
+        Math.max(0, ig - Math.max(0, hist - auto));
 
       for (const u of allUsers) {
         const st = getStatsModelo(u);
@@ -534,9 +549,9 @@ export async function GET() {
         st.reelsPub = Math.max(histReelsMap[u] || 0, autoReelsMap[u] || 0);
         st.storiesPub = Math.max(histStoriesMap[u] || 0, autoStoriesMap[u] || 0);
 
-        st.postAg = agPostMap[u] || 0;
-        st.reelsAg = agReelsMap[u] || 0;
-        st.storiesAg = agStoriesMap[u] || 0;
+        st.postAg = (agPostMap[u] || 0) + igPendentes(igPostMap[u] || 0, histPostMap[u] || 0, autoPostMap[u] || 0);
+        st.reelsAg = (agReelsMap[u] || 0) + igPendentes(igReelsMap[u] || 0, histReelsMap[u] || 0, autoReelsMap[u] || 0);
+        st.storiesAg = (agStoriesMap[u] || 0) + igPendentes(igStoriesMap[u] || 0, histStoriesMap[u] || 0, autoStoriesMap[u] || 0);
       }
     } catch (e) {
       console.warn("Aviso ao calcular stats de hoje em controle:", e);
