@@ -73,8 +73,7 @@ interface DiaPostagem {
   destaque: boolean;
 }
 
-interface PostagemData {
-  metrica: 'views' | 'likes';
+interface PostagemFormatoData {
   metricaLabel: string;
   postsConsiderados: number;
   temDados: boolean;
@@ -87,12 +86,17 @@ interface PostagemData {
   faixas: FaixaPostagem[];
   melhorDia?: string;
   dias: DiaPostagem[];
+  observacao?: string;
+}
+
+interface PostagemData {
+  reels: PostagemFormatoData;
+  fotos: PostagemFormatoData;
   qualidadeDados: {
     postsDesatualizados: number;
     percentualDesatualizado: number;
     observacao?: string;
   };
-  observacao?: string;
 }
 
 interface HorariosData {
@@ -160,6 +164,9 @@ export default function ModalMelhoresHorarios({ modelo, onClose }: ModalMelhores
   const [error, setError] = useState<string | null>(null);
   const [tabVisual, setTabVisual] = useState<'geral' | 'faixas_seguidores' | 'faixas_views' | 'faixas_postagem' | 'dias'>('geral');
   const [modoDiaSemana, setModoDiaSemana] = useState<'audiencia' | 'seguidores' | 'postagem'>('audiencia');
+  // Reels e Fotos/Carrossel nunca são misturados (alcance de cada formato é muito diferente),
+  // então o card e os detalhamentos de "Postagem" têm um seletor de formato próprio.
+  const [formatoPostagem, setFormatoPostagem] = useState<'reels' | 'fotos'>('reels');
 
   useEffect(() => {
     if (!modelo?.username) return;
@@ -172,6 +179,11 @@ export default function ModalMelhoresHorarios({ modelo, onClose }: ModalMelhores
       .then(json => {
         if (json.success) {
           setData(json);
+          // Preferimos mostrar Reels por padrão (métrica de views é mais rica), mas se a conta
+          // não tiver Reels com dados ainda, cai automaticamente pra Fotos/Carrossel.
+          if (json.postagem) {
+            setFormatoPostagem(json.postagem.reels?.temDados ? 'reels' : 'fotos');
+          }
         } else {
           setError(json.error || 'Erro ao carregar métricas da modelo');
         }
@@ -343,150 +355,182 @@ export default function ModalMelhoresHorarios({ modelo, onClose }: ModalMelhores
 
               {/* ─────────────────────────────────────────────────────────────
                   CARD 0: HORÁRIO REAL DE POSTAGEM (resultado final de cada post)
+                  Reels e Fotos/Carrossel nunca são misturados — alcance de cada
+                  formato é muito diferente, então cada um tem seu próprio bloco.
               ───────────────────────────────────────────────────────────── */}
-              {data.postagem && (
-                <div
-                  style={{
-                    background: 'linear-gradient(135deg, rgba(249, 115, 22, 0.10) 0%, #161B22 100%)',
-                    border: '1px solid rgba(249, 115, 22, 0.4)',
-                    borderRadius: 14,
-                    padding: '18px',
-                    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div
-                        style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: 8,
-                          background: 'rgba(249, 115, 22, 0.15)',
-                          border: '1px solid rgba(249, 115, 22, 0.35)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: '#FB923C'
-                        }}
-                      >
-                        <Sparkles size={16} />
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 11, fontWeight: 800, color: '#FB923C', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                          Horário Real de Postagem
-                        </div>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: '#8B949E' }}>
-                          Recomendação baseada no resultado final de cada post publicado
-                        </div>
-                      </div>
-                    </div>
-                    <span
-                      style={{
-                        fontSize: 10,
-                        fontWeight: 700,
-                        padding: '2px 8px',
-                        borderRadius: 10,
-                        background: 'rgba(249, 115, 22, 0.15)',
-                        color: '#FB923C',
-                        border: '1px solid rgba(249, 115, 22, 0.3)'
-                      }}
-                    >
-                      Recomendado
-                    </span>
-                  </div>
+              {data.postagem && (() => {
+                const blocoAtivo = data.postagem[formatoPostagem];
+                const corAtiva = formatoPostagem === 'reels' ? '#F97316' : '#EC4899';
+                const corAtivaTexto = formatoPostagem === 'reels' ? '#FB923C' : '#F472B6';
+                const corAtivaBg = formatoPostagem === 'reels' ? 'rgba(249, 115, 22, 0.15)' : 'rgba(236, 72, 153, 0.15)';
 
-                  {data.postagem.temDados ? (
-                    <div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, marginBottom: 12 }}>
+                return (
+                  <div
+                    style={{
+                      background: `linear-gradient(135deg, ${corAtivaBg} 0%, #161B22 100%)`,
+                      border: `1px solid ${corAtiva}66`,
+                      borderRadius: 14,
+                      padding: '18px',
+                      boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <div
                           style={{
-                            background: '#0D1117',
-                            border: '1px solid #F97316',
-                            borderRadius: 12,
-                            padding: '12px 16px'
+                            width: 32,
+                            height: 32,
+                            borderRadius: 8,
+                            background: corAtivaBg,
+                            border: `1px solid ${corAtiva}59`,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: corAtivaTexto
                           }}
                         >
-                          <div style={{ fontSize: 11, color: '#8B949E', fontWeight: 600 }}>Melhor faixa pra postar</div>
-                          <div style={{ fontSize: 22, fontWeight: 900, color: '#FB923C', letterSpacing: '-0.5px' }}>
-                            {data.postagem.melhorFaixa}
+                          <Sparkles size={16} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 11, fontWeight: 800, color: corAtivaTexto, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                            Horário Real de Postagem
+                          </div>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: '#8B949E' }}>
+                            Recomendação baseada no resultado final de cada post publicado
                           </div>
                         </div>
-                        {data.postagem.melhorDia && (
+                      </div>
+
+                      {/* Seletor de formato: Reels x Fotos/Carrossel nunca são comparados juntos */}
+                      <div style={{ display: 'flex', background: '#0D1117', padding: 2, borderRadius: 8, border: '1px solid #30363D', gap: 2 }}>
+                        <button
+                          type="button"
+                          onClick={() => setFormatoPostagem('reels')}
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: 6,
+                            border: formatoPostagem === 'reels' ? '1px solid #F97316' : '1px solid transparent',
+                            background: formatoPostagem === 'reels' ? 'rgba(249, 115, 22, 0.2)' : 'transparent',
+                            color: formatoPostagem === 'reels' ? '#FB923C' : '#8B949E',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          🎬 Reels ({data.postagem.reels.postsConsiderados})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFormatoPostagem('fotos')}
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: 6,
+                            border: formatoPostagem === 'fotos' ? '1px solid #EC4899' : '1px solid transparent',
+                            background: formatoPostagem === 'fotos' ? 'rgba(236, 72, 153, 0.2)' : 'transparent',
+                            color: formatoPostagem === 'fotos' ? '#F472B6' : '#8B949E',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          📷 Fotos/Carrossel ({data.postagem.fotos.postsConsiderados})
+                        </button>
+                      </div>
+                    </div>
+
+                    {blocoAtivo.temDados ? (
+                      <div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, marginBottom: 12 }}>
                           <div
                             style={{
                               background: '#0D1117',
-                              border: '1px solid #21262D',
+                              border: `1px solid ${corAtiva}`,
                               borderRadius: 12,
                               padding: '12px 16px'
                             }}
                           >
-                            <div style={{ fontSize: 11, color: '#8B949E', fontWeight: 600 }}>Melhor dia da semana</div>
-                            <div style={{ fontSize: 22, fontWeight: 900, color: '#FFFFFF', letterSpacing: '-0.5px' }}>
-                              {data.postagem.melhorDia}
+                            <div style={{ fontSize: 11, color: '#8B949E', fontWeight: 600 }}>Melhor faixa pra postar</div>
+                            <div style={{ fontSize: 22, fontWeight: 900, color: corAtivaTexto, letterSpacing: '-0.5px' }}>
+                              {blocoAtivo.melhorFaixa}
                             </div>
+                          </div>
+                          {blocoAtivo.melhorDia && (
+                            <div
+                              style={{
+                                background: '#0D1117',
+                                border: '1px solid #21262D',
+                                borderRadius: 12,
+                                padding: '12px 16px'
+                              }}
+                            >
+                              <div style={{ fontSize: 11, color: '#8B949E', fontWeight: 600 }}>Melhor dia da semana</div>
+                              <div style={{ fontSize: 22, fontWeight: 900, color: '#FFFFFF', letterSpacing: '-0.5px' }}>
+                                {blocoAtivo.melhorDia}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 11 }}>
+                          <div style={{ background: '#0D1117', padding: '8px 10px', borderRadius: 8, border: '1px solid #21262D' }}>
+                            <span style={{ color: '#8B949E' }}>Métrica usada: </span>
+                            <strong style={{ color: corAtivaTexto }}>{blocoAtivo.metricaLabel}</strong>
+                          </div>
+                          <div style={{ background: '#0D1117', padding: '8px 10px', borderRadius: 8, border: '1px solid #21262D' }}>
+                            <span style={{ color: '#8B949E' }}>Mediana na faixa: </span>
+                            <strong style={{ color: '#FFFFFF' }}>{formatNumber(blocoAtivo.melhorFaixaValor)}</strong>
+                          </div>
+                        </div>
+
+                        {blocoAtivo.amostraBaixa && (
+                          <div
+                            style={{
+                              marginTop: 10,
+                              background: 'rgba(245, 158, 11, 0.1)',
+                              padding: '6px 10px',
+                              borderRadius: 8,
+                              border: '1px solid rgba(245, 158, 11, 0.25)',
+                              fontSize: 11,
+                              color: '#FBBF24',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 6
+                            }}
+                          >
+                            <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                            <span>Faixa vencedora baseada em só {blocoAtivo.melhorFaixaAmostras} post(s) ({blocoAtivo.postsConsiderados} desse formato no total) — outras faixas com números maiores na grade abaixo podem ter só 1-2 posts (às vezes um viral isolado) e por isso ficaram de fora do "TOP". Confiança vai aumentar conforme mais posts forem publicados.</span>
+                          </div>
+                        )}
+
+                        {data.postagem.qualidadeDados.postsDesatualizados > 0 && (
+                          <div
+                            style={{
+                              marginTop: 8,
+                              background: 'rgba(239, 68, 68, 0.08)',
+                              padding: '6px 10px',
+                              borderRadius: 8,
+                              border: '1px solid rgba(239, 68, 68, 0.2)',
+                              fontSize: 11,
+                              color: '#F87171',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 6
+                            }}
+                          >
+                            <Info size={13} style={{ flexShrink: 0 }} />
+                            <span>{data.postagem.qualidadeDados.observacao}</span>
                           </div>
                         )}
                       </div>
-
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 11 }}>
-                        <div style={{ background: '#0D1117', padding: '8px 10px', borderRadius: 8, border: '1px solid #21262D' }}>
-                          <span style={{ color: '#8B949E' }}>Métrica usada: </span>
-                          <strong style={{ color: '#FB923C' }}>{data.postagem.metricaLabel}</strong>
-                        </div>
-                        <div style={{ background: '#0D1117', padding: '8px 10px', borderRadius: 8, border: '1px solid #21262D' }}>
-                          <span style={{ color: '#8B949E' }}>Mediana na faixa: </span>
-                          <strong style={{ color: '#FFFFFF' }}>{formatNumber(data.postagem.melhorFaixaValor)}</strong>
-                        </div>
+                    ) : (
+                      <div style={{ padding: '16px 12px', textAlign: 'center', color: '#8B949E', fontSize: 12 }}>
+                        <Clock size={20} style={{ margin: '0 auto 6px auto', opacity: 0.5 }} />
+                        <div>{blocoAtivo.observacao || 'Sem posts suficientes ainda.'}</div>
                       </div>
-
-                      {data.postagem.amostraBaixa && (
-                        <div
-                          style={{
-                            marginTop: 10,
-                            background: 'rgba(245, 158, 11, 0.1)',
-                            padding: '6px 10px',
-                            borderRadius: 8,
-                            border: '1px solid rgba(245, 158, 11, 0.25)',
-                            fontSize: 11,
-                            color: '#FBBF24',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 6
-                          }}
-                        >
-                          <AlertCircle size={13} style={{ flexShrink: 0 }} />
-                          <span>Faixa vencedora baseada em só {data.postagem.melhorFaixaAmostras} post(s) ({data.postagem.postsConsiderados} no total da conta) — outras faixas com números maiores na grade abaixo podem ter só 1-2 posts (às vezes um viral isolado) e por isso ficaram de fora do "TOP". Confiança vai aumentar conforme mais posts forem publicados.</span>
-                        </div>
-                      )}
-
-                      {data.postagem.qualidadeDados.postsDesatualizados > 0 && (
-                        <div
-                          style={{
-                            marginTop: 8,
-                            background: 'rgba(239, 68, 68, 0.08)',
-                            padding: '6px 10px',
-                            borderRadius: 8,
-                            border: '1px solid rgba(239, 68, 68, 0.2)',
-                            fontSize: 11,
-                            color: '#F87171',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 6
-                          }}
-                        >
-                          <Info size={13} style={{ flexShrink: 0 }} />
-                          <span>{data.postagem.qualidadeDados.observacao}</span>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div style={{ padding: '16px 12px', textAlign: 'center', color: '#8B949E', fontSize: 12 }}>
-                      <Clock size={20} style={{ margin: '0 auto 6px auto', opacity: 0.5 }} />
-                      <div>{data.postagem.observacao || 'Sem posts suficientes ainda.'}</div>
-                    </div>
-                  )}
-                </div>
-              )}
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* GRID PRINCIPAL: 2 CARDS GRANDES DE DESTAQUE */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
@@ -740,11 +784,13 @@ export default function ModalMelhoresHorarios({ modelo, onClose }: ModalMelhores
                     };
                   }
                   if (modoDiaSemana === 'postagem') {
-                    // Preferimos o bloco novo (data.postagem.dias), baseado em MEDIANA por post
-                    // e já livre de posts deletados/stubs corrompidos. Cai pro grupo antigo
-                    // (média, via crescimento de snapshots) só se o novo ainda não tiver dado.
-                    if (data.postagem && data.postagem.dias.length > 0) {
-                      const diasMapeados: DiaSemanaView[] = data.postagem.dias.map(d => ({
+                    // Preferimos o bloco novo (data.postagem[formatoPostagem].dias), baseado em
+                    // MEDIANA por post, já livre de posts deletados/stubs corrompidos, e nunca
+                    // misturando Reels com Fotos/Carrossel. Cai pro grupo antigo (média, via
+                    // crescimento de snapshots) só se o novo ainda não tiver dado nenhum.
+                    const blocoDias = data.postagem?.[formatoPostagem];
+                    if (blocoDias && blocoDias.dias.length > 0) {
+                      const diasMapeados: DiaSemanaView[] = blocoDias.dias.map(d => ({
                         dia: d.dia,
                         diaCurto: d.diaCurto,
                         diaIndex: d.diaIndex,
@@ -753,16 +799,17 @@ export default function ModalMelhoresHorarios({ modelo, onClose }: ModalMelhores
                         percentual: d.percentual,
                         destaque: d.destaque
                       }));
-                      const diasIndicados = data.postagem.melhorDia ? [data.postagem.melhorDia] : [];
+                      const diasIndicados = blocoDias.melhorDia ? [blocoDias.melhorDia] : [];
+                      const nomeMetrica = formatoPostagem === 'reels' ? 'views' : 'curtidas';
                       return {
                         dias: diasMapeados,
                         houveDiscrepancia: diasIndicados.length > 0,
                         diasIndicados,
-                        tituloDiscrepancia: `Melhor dia pra postar (mediana de ${data.postagem.metrica === 'views' ? 'views' : 'curtidas'} por post):`,
+                        tituloDiscrepancia: `Melhor dia pra postar ${formatoPostagem === 'reels' ? 'Reels' : 'Foto/Carrossel'} (mediana de ${nomeMetrica} por post):`,
                         corTema: '#A855F7',
                         corTemaBg: 'rgba(168, 85, 247, 0.15)',
                         corDestaque: '#C084FC',
-                        unidade: data.postagem.metrica === 'views' ? 'views/post (mediana)' : 'curtidas/post (mediana)',
+                        unidade: `${nomeMetrica}/post (mediana)`,
                         tipoValor: 'postagem' as const
                       };
                     }
@@ -1115,10 +1162,49 @@ export default function ModalMelhoresHorarios({ modelo, onClose }: ModalMelhores
                   </div>
                 </div>
 
+                {/* Sub-seletor de formato, só relevante na aba Postagem (Reels x Fotos/Carrossel
+                    nunca aparecem juntos) — compartilha o estado com o card de destaque acima. */}
+                {tabVisual === 'faixas_postagem' && data.postagem && (
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                    <button
+                      type="button"
+                      onClick={() => setFormatoPostagem('reels')}
+                      style={{
+                        padding: '3px 9px',
+                        borderRadius: 6,
+                        border: formatoPostagem === 'reels' ? '1px solid #F97316' : '1px solid #30363D',
+                        background: formatoPostagem === 'reels' ? 'rgba(249, 115, 22, 0.15)' : 'transparent',
+                        color: formatoPostagem === 'reels' ? '#FB923C' : '#8B949E',
+                        fontSize: 10.5,
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      🎬 Reels
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormatoPostagem('fotos')}
+                      style={{
+                        padding: '3px 9px',
+                        borderRadius: 6,
+                        border: formatoPostagem === 'fotos' ? '1px solid #EC4899' : '1px solid #30363D',
+                        background: formatoPostagem === 'fotos' ? 'rgba(236, 72, 153, 0.15)' : 'transparent',
+                        color: formatoPostagem === 'fotos' ? '#F472B6' : '#8B949E',
+                        fontSize: 10.5,
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      📷 Fotos/Carrossel
+                    </button>
+                  </div>
+                )}
+
                 {/* Tabela / Grid de Barras Horárias */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(105px, 1fr))', gap: 8 }}>
                   {(tabVisual === 'faixas_postagem'
-                    ? (data.postagem?.faixas || [])
+                    ? (data.postagem?.[formatoPostagem]?.faixas || [])
                     : tabVisual === 'faixas_views' ? data.visualizacoes.faixas : data.seguidores.faixas
                   ).map((item: any) => {
                     const isMelhor = item.isMelhor;
@@ -1129,8 +1215,8 @@ export default function ModalMelhoresHorarios({ modelo, onClose }: ModalMelhores
                       ? (valPrincipal > 0 ? `${formatNumber(valPrincipal)}` : '-')
                       : (valPrincipal > 0 ? `+${formatNumber(valPrincipal)}` : '-');
 
-                    const corTema = tabVisual === 'faixas_postagem' ? '#F97316' : tabVisual === 'faixas_views' ? '#58A6FF' : '#10B981';
-                    const corTemaBg = tabVisual === 'faixas_postagem' ? 'rgba(249, 115, 22, 0.15)' : tabVisual === 'faixas_views' ? 'rgba(56, 139, 253, 0.15)' : 'rgba(16, 185, 129, 0.15)';
+                    const corTema = tabVisual === 'faixas_postagem' ? (formatoPostagem === 'reels' ? '#F97316' : '#EC4899') : tabVisual === 'faixas_views' ? '#58A6FF' : '#10B981';
+                    const corTemaBg = tabVisual === 'faixas_postagem' ? (formatoPostagem === 'reels' ? 'rgba(249, 115, 22, 0.15)' : 'rgba(236, 72, 153, 0.15)') : tabVisual === 'faixas_views' ? 'rgba(56, 139, 253, 0.15)' : 'rgba(16, 185, 129, 0.15)';
                     const amostras: number = item.amostras ?? 0;
                     // Na aba Postagem, faixas com menos de 3 posts nunca podem virar "TOP" (mínimo
                     // pra entrar na disputa) — sinalizamos isso visualmente pra não parecer que o

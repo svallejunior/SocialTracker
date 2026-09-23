@@ -345,14 +345,20 @@ export async function GET(req: NextRequest) {
     // (não por crescimento de audiência via snapshot — essa tabela tem buracos
     // grandes de histórico em vários perfis), agrupado por faixa de 2h e dia da
     // semana de QUANDO foi publicado. Usa MEDIANA (não média) para 1-2 posts
-    // virais não distorcerem o horário "recomendado", e escolhe a métrica
-    // automaticamente: se o perfil tem Reels suficientes usa views de Reels
-    // (comparável entre si); senão usa curtidas de todos os formatos (funciona
-    // mesmo em contas majoritariamente de foto/carrossel, onde "views" não é real).
+    // virais não distorcerem o horário "recomendado".
+    //
+    // Reels e Fotos/Carrossel NUNCA são misturados no mesmo cálculo — mesmo usando
+    // curtidas (que existem nos dois formatos), um Reels tem alcance algorítmico
+    // muito maior que uma foto de feed, então comparar os dois juntos continua
+    // sendo comparar coisas diferentes. Cada formato vira seu próprio bloco
+    // independente, cada um com sua métrica adequada (views pra Reels, curtidas
+    // pra Fotos/Carrossel, já que "views" de foto é só um proxy de likes+comentários).
+    // Formato com poucos posts NÃO é descartado nem diluído no outro — aparece do
+    // mesmo jeito, só que marcado como baixa confiança até acumular mais dado.
     // ─────────────────────────────────────────────────────────
     const MIN_AMOSTRAS_FAIXA = 3;
     const MIN_AMOSTRAS_DIA = 3;
-    const MIN_REELS_PARA_VIEWS = 5;
+    const MIN_AMOSTRAS_CONFIAVEL = 6;
 
     function mediana(vals: number[]): number {
       if (vals.length === 0) return 0;
@@ -382,85 +388,109 @@ export async function GET(req: NextRequest) {
       })
       .filter((p: any): p is NonNullable<typeof p> => p !== null);
 
-    const reelsCount = postsParsed.filter((p: any) => p.formato === 'Reels').length;
-    const usarViewsReels = reelsCount >= MIN_REELS_PARA_VIEWS;
-    const postsBase = usarViewsReels ? postsParsed.filter((p: any) => p.formato === 'Reels') : postsParsed;
-    const campoMetrica: 'views' | 'likes' = usarViewsReels ? 'views' : 'likes';
-    const metricaLabel = usarViewsReels
-      ? `views de Reels (${reelsCount} posts)`
-      : `curtidas — todos os formatos (poucos Reels: ${reelsCount})`;
+    type PostParsed = (typeof postsParsed)[number];
 
-    // --- Faixas de 2h por horário de postagem ---
-    const faixasPostagemMap: { [f: number]: number[] } = {};
-    for (let f = 0; f < 24; f += 2) faixasPostagemMap[f] = [];
-    for (const p of postsBase) {
-      const f = Math.floor(p.hora / 2) * 2;
-      faixasPostagemMap[f].push((p as any)[campoMetrica]);
-    }
-
-    let melhorFaixaPostagemInicio = 15;
-    let melhorFaixaPostagemMediana = -1;
-    let faixaPostagemMaxMediana = 0;
-    for (let f = 0; f < 24; f += 2) {
-      const vals = faixasPostagemMap[f];
-      const med = mediana(vals);
-      if (vals.length >= MIN_AMOSTRAS_FAIXA && med > melhorFaixaPostagemMediana) {
-        melhorFaixaPostagemMediana = med;
-        melhorFaixaPostagemInicio = f;
+    function calcularBlocoPostagem(postsBase: PostParsed[], campoMetrica: 'views' | 'likes', metricaLabel: string) {
+      const faixasMap: { [f: number]: number[] } = {};
+      for (let f = 0; f < 24; f += 2) faixasMap[f] = [];
+      for (const p of postsBase) {
+        faixasMap[Math.floor(p.hora / 2) * 2].push(p[campoMetrica]);
       }
-      if (med > faixaPostagemMaxMediana) faixaPostagemMaxMediana = med;
-    }
-    const faixasPostagemList = [];
-    for (let f = 0; f < 24; f += 2) {
-      const vals = faixasPostagemMap[f];
-      const med = mediana(vals);
-      const media = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
-      const fFim = (f + 2) % 24;
-      faixasPostagemList.push({
-        faixa: `${String(f).padStart(2, '0')}:00 - ${String(fFim).padStart(2, '0')}:00`,
-        horaInicio: f,
-        mediana: Math.round(med),
-        media: Math.round(media),
-        amostras: vals.length,
-        percentual: faixaPostagemMaxMediana > 0 ? Math.round((med / faixaPostagemMaxMediana) * 100) : 0,
-        isMelhor: f === melhorFaixaPostagemInicio && melhorFaixaPostagemMediana > 0
-      });
+
+      let melhorFaixaInicio = 15;
+      let melhorFaixaMediana = -1;
+      let faixaMaxMediana = 0;
+      for (let f = 0; f < 24; f += 2) {
+        const vals = faixasMap[f];
+        const med = mediana(vals);
+        if (vals.length >= MIN_AMOSTRAS_FAIXA && med > melhorFaixaMediana) {
+          melhorFaixaMediana = med;
+          melhorFaixaInicio = f;
+        }
+        if (med > faixaMaxMediana) faixaMaxMediana = med;
+      }
+      const faixasList = [];
+      for (let f = 0; f < 24; f += 2) {
+        const vals = faixasMap[f];
+        const med = mediana(vals);
+        const media = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+        const fFim = (f + 2) % 24;
+        faixasList.push({
+          faixa: `${String(f).padStart(2, '0')}:00 - ${String(fFim).padStart(2, '0')}:00`,
+          horaInicio: f,
+          mediana: Math.round(med),
+          media: Math.round(media),
+          amostras: vals.length,
+          percentual: faixaMaxMediana > 0 ? Math.round((med / faixaMaxMediana) * 100) : 0,
+          isMelhor: f === melhorFaixaInicio && melhorFaixaMediana > 0
+        });
+      }
+
+      const diasMap: { [d: number]: number[] } = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
+      for (const p of postsBase) diasMap[p.diaSemana].push(p[campoMetrica]);
+      let melhorDiaIndex = -1;
+      let melhorDiaMediana = -1;
+      let diaMaxMediana = 0;
+      for (let d = 0; d < 7; d++) {
+        const vals = diasMap[d];
+        const med = mediana(vals);
+        if (vals.length >= MIN_AMOSTRAS_DIA && med > melhorDiaMediana) {
+          melhorDiaMediana = med;
+          melhorDiaIndex = d;
+        }
+        if (med > diaMaxMediana) diaMaxMediana = med;
+      }
+      const diasList = [];
+      for (const dIdx of ORDEM_DIAS) {
+        const vals = diasMap[dIdx];
+        const med = mediana(vals);
+        const media = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+        const { nome, curto } = DIAS_NOMES[dIdx];
+        diasList.push({
+          dia: nome,
+          diaCurto: curto,
+          diaIndex: dIdx,
+          mediana: Math.round(med),
+          media: Math.round(media),
+          amostras: vals.length,
+          percentual: diaMaxMediana > 0 ? Math.round((med / diaMaxMediana) * 100) : 0,
+          destaque: dIdx === melhorDiaIndex && melhorDiaMediana > 0
+        });
+      }
+
+      const amostrasMelhorFaixa = melhorFaixaMediana > 0 ? faixasMap[melhorFaixaInicio].length : 0;
+      const fFimPost = (melhorFaixaInicio + 2) % 24;
+
+      return {
+        metricaLabel,
+        postsConsiderados: postsBase.length,
+        temDados: melhorFaixaMediana > 0,
+        amostraBaixa: melhorFaixaMediana > 0 ? amostrasMelhorFaixa < MIN_AMOSTRAS_CONFIAVEL : true,
+        melhorFaixaAmostras: amostrasMelhorFaixa,
+        melhorFaixa: melhorFaixaMediana > 0
+          ? `${String(melhorFaixaInicio).padStart(2, '0')}:00 às ${String(fFimPost).padStart(2, '0')}:00`
+          : undefined,
+        melhorFaixaInicio,
+        melhorFaixaFim: fFimPost,
+        melhorFaixaValor: melhorFaixaMediana > 0 ? Math.round(melhorFaixaMediana) : 0,
+        faixas: faixasList,
+        melhorDia: melhorDiaIndex >= 0 ? DIAS_NOMES[melhorDiaIndex].nome : undefined,
+        dias: diasList,
+        observacao: postsBase.length === 0
+          ? 'Nenhum post desse formato publicado ainda.'
+          : melhorFaixaMediana > 0
+            ? (amostrasMelhorFaixa < MIN_AMOSTRAS_CONFIAVEL
+              ? `A faixa vencedora teve só ${amostrasMelhorFaixa} post(s) publicado(s) nela — é o mínimo pra entrar na disputa, mas ainda é pouco pra confiar de olhos fechados. Outras faixas com números maiores podem estar aparecendo só porque tiveram 1-2 posts (inclusive algum viral isolado), não porque o horário funciona melhor.`
+              : undefined)
+            : `Só ${postsBase.length} post(s) desse formato até agora — nenhuma faixa bateu o mínimo de 3 posts ainda para recomendar um horário com confiança.`
+      };
     }
 
-    // --- Dias da semana por horário de postagem (mediana) ---
-    const diasPostagemMedianaMap: { [d: number]: number[] } = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
-    for (const p of postsBase) {
-      diasPostagemMedianaMap[p.diaSemana].push((p as any)[campoMetrica]);
-    }
-    let melhorDiaPostagemIndex = -1;
-    let melhorDiaPostagemMediana = -1;
-    let diaPostagemMaxMediana = 0;
-    for (let d = 0; d < 7; d++) {
-      const vals = diasPostagemMedianaMap[d];
-      const med = mediana(vals);
-      if (vals.length >= MIN_AMOSTRAS_DIA && med > melhorDiaPostagemMediana) {
-        melhorDiaPostagemMediana = med;
-        melhorDiaPostagemIndex = d;
-      }
-      if (med > diaPostagemMaxMediana) diaPostagemMaxMediana = med;
-    }
-    const diasPostagemMedianaList = [];
-    for (const dIdx of ORDEM_DIAS) {
-      const vals = diasPostagemMedianaMap[dIdx];
-      const med = mediana(vals);
-      const media = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
-      const { nome, curto } = DIAS_NOMES[dIdx];
-      diasPostagemMedianaList.push({
-        dia: nome,
-        diaCurto: curto,
-        diaIndex: dIdx,
-        mediana: Math.round(med),
-        media: Math.round(media),
-        amostras: vals.length,
-        percentual: diaPostagemMaxMediana > 0 ? Math.round((med / diaPostagemMaxMediana) * 100) : 0,
-        destaque: dIdx === melhorDiaPostagemIndex && melhorDiaPostagemMediana > 0
-      });
-    }
+    const reelsPosts = postsParsed.filter((p: any) => p.formato === 'Reels');
+    const fotosPosts = postsParsed.filter((p: any) => p.formato !== 'Reels');
+
+    const postagemReels = calcularBlocoPostagem(reelsPosts, 'views', `views de Reels (${reelsPosts.length} posts)`);
+    const postagemFotos = calcularBlocoPostagem(fotosPosts, 'likes', `curtidas de Fotos/Carrossel (${fotosPosts.length} posts)`);
 
     // --- Qualidade de dados: posts cujo tracking "morreu" (Meta parou de mandar update) ---
     const datasAtualizacao = postsParsed
@@ -486,43 +516,16 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Confiança da recomendação: não basta a conta ter volume total razoável — o que importa
-    // é quantos posts caíram DENTRO da faixa vencedora. Uma faixa pode bater o mínimo absoluto
-    // (3, só pra entrar na disputa) e ainda assim ser um "TOP" pouco confiável se só teve 3-4
-    // posts, enquanto o total da conta parece saudável. MIN_AMOSTRAS_CONFIAVEL é o patamar acima
-    // do mínimo de elegibilidade onde já dá pra confiar mais na mediana.
-    const MIN_AMOSTRAS_CONFIAVEL = 6;
-    const amostrasMelhorFaixa = melhorFaixaPostagemMediana > 0 ? faixasPostagemMap[melhorFaixaPostagemInicio].length : 0;
-
-    const fFimPost = (melhorFaixaPostagemInicio + 2) % 24;
     const postagem = {
-      metrica: campoMetrica,
-      metricaLabel,
-      postsConsiderados: postsBase.length,
-      temDados: melhorFaixaPostagemMediana > 0,
-      amostraBaixa: melhorFaixaPostagemMediana > 0 ? amostrasMelhorFaixa < MIN_AMOSTRAS_CONFIAVEL : true,
-      melhorFaixaAmostras: amostrasMelhorFaixa,
-      melhorFaixa: melhorFaixaPostagemMediana > 0
-        ? `${String(melhorFaixaPostagemInicio).padStart(2, '0')}:00 às ${String(fFimPost).padStart(2, '0')}:00`
-        : undefined,
-      melhorFaixaInicio: melhorFaixaPostagemInicio,
-      melhorFaixaFim: fFimPost,
-      melhorFaixaValor: melhorFaixaPostagemMediana > 0 ? Math.round(melhorFaixaPostagemMediana) : 0,
-      faixas: faixasPostagemList,
-      melhorDia: melhorDiaPostagemIndex >= 0 ? DIAS_NOMES[melhorDiaPostagemIndex].nome : undefined,
-      dias: diasPostagemMedianaList,
+      reels: postagemReels,
+      fotos: postagemFotos,
       qualidadeDados: {
         postsDesatualizados,
         percentualDesatualizado: postsParsed.length > 0 ? Math.round((postsDesatualizados / postsParsed.length) * 100) : 0,
         observacao: postsDesatualizados > 0
           ? `${postsDesatualizados} post(s) pararam de receber atualização da Meta (métrica congelada) e foram mantidos no cálculo mesmo assim — resultado pode estar levemente subestimado para eles.`
           : undefined
-      },
-      observacao: melhorFaixaPostagemMediana > 0
-        ? (amostrasMelhorFaixa < MIN_AMOSTRAS_CONFIAVEL
-          ? `A faixa vencedora teve só ${amostrasMelhorFaixa} post(s) publicado(s) nela — é o mínimo pra entrar na disputa, mas ainda é pouco pra confiar de olhos fechados. Outras faixas com números maiores podem estar aparecendo só porque tiveram 1-2 posts (inclusive algum viral isolado), não porque o horário funciona melhor.`
-          : undefined)
-        : 'Sem posts suficientes em nenhuma faixa (mínimo 3) para recomendar um horário com confiança ainda.'
+      }
     };
 
     // Fallback: se o perfil não possuir snapshots periódicos registrados ainda,
