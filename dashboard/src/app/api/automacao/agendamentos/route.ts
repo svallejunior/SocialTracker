@@ -7,8 +7,10 @@ export const revalidate = 0;
 
 // Status aceitos para um agendamento. PUBLICANDO é escrito apenas pelo publicador
 // (reivindicação atômica) e ENCERRADO encerra as ocorrências futuras de uma rotina
-// preservando o histórico já publicado.
-const STATUS_VALIDOS = ['AGENDADO', 'PAUSADO', 'PUBLICADO', 'PUBLICANDO', 'ERRO', 'ENCERRADO'];
+// preservando o histórico já publicado. AGENDADO_INSTAGRAM marca um post que o
+// usuário agendou direto no app do Instagram: aparece na agenda, mas o publicador
+// (que só busca status = 'AGENDADO') nunca o dispara.
+const STATUS_VALIDOS = ['AGENDADO', 'AGENDADO_INSTAGRAM', 'PAUSADO', 'PUBLICADO', 'PUBLICANDO', 'ERRO', 'ENCERRADO'];
 
 // GET: Lista todos os agendamentos (ou filtra por username)
 export async function GET(req: NextRequest) {
@@ -249,7 +251,8 @@ export async function POST(req: NextRequest) {
     const data_fim = body.data_fim || '';
     const dias_selecionados = JSON.stringify(body.dias_selecionados || []);
     const modo_hora = body.modo_hora || 'FIXA'; // FIXA, ALEATORIA, VARIAR_MINUTOS
-    const hora_fixa = body.hora_fixa || '18:00';
+    // Marcação "agendado no Instagram" pode vir sem horário (só registra o dia)
+    const hora_fixa = body.hora_fixa || (String(body.status || '').toUpperCase() === 'AGENDADO_INSTAGRAM' ? '' : '18:00');
     const hora_janela_inicio = body.hora_janela_inicio || '18:00';
     const hora_janela_fim = body.hora_janela_fim || '21:00';
     const variacao_minutos = Number(body.variacao_minutos) || 15;

@@ -7,7 +7,7 @@ import {
   Plus, ExternalLink, Sliders, Image as ImageIcon, Check,
   AlertCircle, ChevronDown, Zap, X, Calendar, Clock, Film, UploadCloud,
   FileText, Repeat, Shuffle, ArrowDownAZ, ListOrdered, Layers,
-  ChevronLeft, ChevronRight, Info, Maximize2, Eye, EyeOff, Crop
+  ChevronLeft, ChevronRight, Info, Maximize2, Eye, EyeOff, Crop, Smartphone
 } from 'lucide-react';
 import ModalAjusteCorte from './ModalAjusteCorte';
 
@@ -66,7 +66,7 @@ export interface Agendamento {
   variacao_minutos: number;
   recorrencia: 'UNICA' | 'DIARIA' | 'SEMANAL' | 'DIAS_UTEIS' | 'PERSONALIZADA';
   legenda: string;
-  status: 'AGENDADO' | 'PUBLICADO' | 'PUBLICANDO' | 'PAUSADO' | 'ERRO' | 'ENCERRADO';
+  status: 'AGENDADO' | 'AGENDADO_INSTAGRAM' | 'PUBLICADO' | 'PUBLICANDO' | 'PAUSADO' | 'ERRO' | 'ENCERRADO';
   meta_media_id?: string;
   publicado_em?: string;
   erro_detalhe?: string;
@@ -338,7 +338,8 @@ export function getProximoEnvioInfo(agendamentos: Agendamento[], publicacoes: Pu
   }
 
   for (const ag of agendamentos) {
-    if (ag.status === 'PAUSADO' || ag.status === 'ENCERRADO') continue;
+    // AGENDADO_INSTAGRAM é só marcação: quem publica é o próprio Instagram
+    if (ag.status === 'PAUSADO' || ag.status === 'ENCERRADO' || ag.status === 'AGENDADO_INSTAGRAM') continue;
 
     const tipoRotulo: 'POST' | 'REELS' | 'STORIES' = ag.tipo_postagem === 'FEED' ? 'POST' : ag.tipo_postagem === 'REELS' ? 'REELS' : 'STORIES';
 
@@ -1084,6 +1085,10 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
       horaStr = `${ag.hora_fixa || '18:00'} (±${ag.variacao_minutos || 15}m)`;
     }
 
+    if (ag.status === 'AGENDADO_INSTAGRAM') {
+      return ag.hora_fixa ? `${programacaoStr} às ${ag.hora_fixa} · no Instagram` : `${programacaoStr} · no Instagram`;
+    }
+
     return `${programacaoStr} às ${horaStr}`;
   };
 
@@ -1413,14 +1418,16 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                 ? { texto: 'Publicado', cor: '#4ADE80', bg: 'rgba(34, 197, 94, 0.12)' }
                 : erro
                   ? { texto: 'Erro', cor: '#F87171', bg: 'rgba(239, 68, 68, 0.12)' }
-                  : { texto: 'Agendado', cor: '#8B949E', bg: 'rgba(139, 148, 158, 0.12)' };
+                  : ag.status === 'AGENDADO_INSTAGRAM'
+                    ? { texto: 'Agendado no Instagram', cor: '#F472B6', bg: 'rgba(236, 72, 153, 0.12)' }
+                    : { texto: 'Agendado', cor: '#8B949E', bg: 'rgba(139, 148, 158, 0.12)' };
               return (
                 <div key={ag.id} style={{
                   display: 'flex', alignItems: 'center', gap: 10,
                   background: '#0D1117', border: '1px solid #21262D', borderRadius: 8, padding: '8px 12px'
                 }}>
                   <span style={{ fontFamily: 'monospace', fontSize: 12.5, fontWeight: 700, color: '#E6EDF3', minWidth: 44 }}>
-                    {horaOrdenavel}
+                    {ag.status === 'AGENDADO_INSTAGRAM' && !ag.hora_fixa ? '--:--' : horaOrdenavel}
                   </span>
                   <AvatarModelo username={ag.username} src={perfil?.foto_url || perfil?.foto_perfil} size={22} showBadge={false} />
                   <span style={{ fontSize: 12.5, fontWeight: 600, color: '#C9D1D9', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -2492,6 +2499,8 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                             transition: 'border-color 0.15s, background 0.15s'
                           }}
                           onClick={() => {
+                            // Marcação "agendado no Instagram" não tem mídia/config para editar
+                            if (ag.status === 'AGENDADO_INSTAGRAM') return;
                             setEditingAgendamentoMap(prev => ({ ...prev, [perfil.username]: ag }));
                             setFormOpenMap(prev => ({ ...prev, [perfil.username]: true }));
                           }}
@@ -2567,6 +2576,25 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                               >
                                 <X size={13} strokeWidth={2.8} />
                               </span>
+                            ) : ag.status === 'AGENDADO_INSTAGRAM' ? (
+                              <span
+                                title="Agendado direto no Instagram (o sistema não publica)"
+                                style={{
+                                  width: 24,
+                                  height: 24,
+                                  borderRadius: 6,
+                                  background: 'rgba(236,72,153,0.15)',
+                                  border: '1px solid rgba(236,72,153,0.4)',
+                                  color: '#F472B6',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  flexShrink: 0,
+                                  cursor: 'help'
+                                }}
+                              >
+                                <Smartphone size={13} strokeWidth={2.5} />
+                              </span>
                             ) : (
                               <span
                                 title="Publicação Agendada"
@@ -2596,7 +2624,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                               background: ag.tipo_postagem === 'REELS' ? 'rgba(239,68,68,0.2)' : ag.tipo_postagem === 'FEED' ? 'rgba(59,130,246,0.2)' : 'rgba(245,158,11,0.2)',
                               color: ag.tipo_postagem === 'REELS' ? '#F87171' : ag.tipo_postagem === 'FEED' ? '#60A5FA' : '#FBBF24'
                             }}>
-                              {ag.tipo_postagem === 'FEED' ? (ag.arquivos && ag.arquivos.length > 1 ? `🖼️ Carrossel (${ag.arquivos.length})` : '🖼️ Feed') : ag.tipo_postagem === 'REELS' ? '🎬 Reels' : '📱 Stories'}
+                              {ag.tipo_postagem === 'FEED' ? (ag.arquivos && ag.arquivos.length > 1 ? `🖼️ Carrossel (${ag.arquivos.length})` : ag.status === 'AGENDADO_INSTAGRAM' ? '🖼️ Post/Carrossel' : '🖼️ Feed') : ag.tipo_postagem === 'REELS' ? '🎬 Reels' : '📱 Stories'}
                             </span>
 
                             {/* Miniaturas das mídias com hover zoom na lista */}
@@ -2652,7 +2680,7 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                           </div>
 
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                            {ag.status !== 'PUBLICADO' && (
+                            {ag.status !== 'PUBLICADO' && ag.status !== 'AGENDADO_INSTAGRAM' && (
                               <button
                                 type="button"
                                 title="Publicar no Instagram agora"
@@ -2748,6 +2776,19 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                   )}
                 </div>
               )}
+
+                  {/* MARCAÇÃO RÁPIDA: "já agendei direto no Instagram para este dia" */}
+                  {!isFormOpen && !isDiaPassado && (
+                    <MarcarAgendadoInstagram
+                      username={perfil.username}
+                      metaAccountId={cfg.metaAccountId || getPseudoMetaId(perfil.username)}
+                      dataIso={isoDataSelecionada}
+                      onSaved={() => {
+                        showToast('📱 Marcado como agendado no Instagram!');
+                        fetchAgendamentos();
+                      }}
+                    />
+                  )}
 
                   {/* FORMULÁRIO EXPANDIDO DE AGENDAMENTO */}
                   {isFormOpen && (
@@ -3814,6 +3855,169 @@ function CalendarioAgendamentos({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// =========================================================================
+// SUB-COMPONENTE: MARCAÇÃO RÁPIDA "JÁ AGENDEI NO INSTAGRAM"
+// Só um lembrete de que o post do dia já foi agendado direto no app. Salva com
+// status AGENDADO_INSTAGRAM, que o publicador ignora (ele só busca 'AGENDADO').
+// =========================================================================
+function MarcarAgendadoInstagram({
+  username,
+  metaAccountId,
+  dataIso,
+  onSaved
+}: {
+  username: string;
+  metaAccountId: string;
+  dataIso: string;
+  onSaved: () => void;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const [tipo, setTipo] = useState<'REELS' | 'FEED' | 'STORIES'>('REELS');
+  const [hora, setHora] = useState('');
+  const [salvando, setSalvando] = useState(false);
+
+  const salvar = async () => {
+    setSalvando(true);
+    try {
+      const res = await fetch('/api/automacao/agendamentos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username,
+          meta_account_id: metaAccountId,
+          tipo_postagem: tipo,
+          arquivos: [],
+          tipo_agendamento: 'DATA_ESPECIFICA',
+          data_especifica: dataIso,
+          dias_selecionados: [dataIso],
+          recorrencia: 'UNICA',
+          modo_hora: 'FIXA',
+          hora_fixa: hora,
+          status: 'AGENDADO_INSTAGRAM'
+        })
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || 'Falha ao salvar');
+      setAberto(false);
+      setHora('');
+      onSaved();
+    } catch (err: any) {
+      alert(`Erro ao marcar: ${err.message}`);
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  if (!aberto) {
+    return (
+      <button
+        type="button"
+        onClick={() => setAberto(true)}
+        style={{
+          width: '100%',
+          marginTop: 6,
+          padding: '6px 10px',
+          borderRadius: 6,
+          border: '1px dashed rgba(236,72,153,0.4)',
+          background: 'transparent',
+          color: '#F472B6',
+          fontSize: 11,
+          fontWeight: 600,
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 6
+        }}
+      >
+        <Smartphone size={12} />
+        Já agendei no Instagram para este dia
+      </button>
+    );
+  }
+
+  const opcoes: { valor: 'REELS' | 'FEED' | 'STORIES'; rotulo: string }[] = [
+    { valor: 'REELS', rotulo: '🎬 Reels' },
+    { valor: 'FEED', rotulo: '🖼️ Post/Carrossel' },
+    { valor: 'STORIES', rotulo: '📱 Stories' }
+  ];
+
+  return (
+    <div
+      style={{
+        marginTop: 6,
+        padding: 10,
+        borderRadius: 8,
+        border: '1px solid rgba(236,72,153,0.45)',
+        background: 'rgba(236,72,153,0.08)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8
+      }}
+    >
+      <span style={{ fontSize: 11, fontWeight: 700, color: '#F472B6', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <Smartphone size={12} />
+        O que você agendou no Instagram?
+      </span>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {opcoes.map(o => (
+          <button
+            key={o.valor}
+            type="button"
+            onClick={() => setTipo(o.valor)}
+            style={{
+              padding: '4px 10px',
+              borderRadius: 12,
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: 'pointer',
+              border: `1px solid ${tipo === o.valor ? '#EC4899' : '#30363D'}`,
+              background: tipo === o.valor ? 'rgba(236,72,153,0.2)' : '#0D1117',
+              color: tipo === o.valor ? '#F9A8D4' : '#8B949E'
+            }}
+          >
+            {o.rotulo}
+          </button>
+        ))}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontSize: 10, color: '#8B949E' }}>Horário (opcional):</span>
+        <input
+          type="time"
+          value={hora}
+          onChange={e => setHora(e.target.value)}
+          style={{ background: '#0D1117', border: '1px solid #30363D', borderRadius: 6, color: 'white', fontSize: 11, padding: '3px 6px', colorScheme: 'dark' }}
+        />
+        <div style={{ flex: 1 }} />
+        <button
+          type="button"
+          onClick={() => setAberto(false)}
+          style={{ background: 'none', border: 'none', color: '#8B949E', fontSize: 11, cursor: 'pointer' }}
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          disabled={salvando}
+          onClick={salvar}
+          style={{
+            padding: '5px 12px',
+            borderRadius: 6,
+            border: 'none',
+            background: '#DB2777',
+            color: 'white',
+            fontSize: 11,
+            fontWeight: 800,
+            cursor: salvando ? 'wait' : 'pointer'
+          }}
+        >
+          {salvando ? 'Salvando...' : '✓ Marcar'}
+        </button>
+      </div>
     </div>
   );
 }
