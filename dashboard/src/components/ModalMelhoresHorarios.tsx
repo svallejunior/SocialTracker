@@ -79,6 +79,7 @@ interface PostagemData {
   postsConsiderados: number;
   temDados: boolean;
   amostraBaixa: boolean;
+  melhorFaixaAmostras: number;
   melhorFaixa?: string;
   melhorFaixaInicio: number;
   melhorFaixaFim: number;
@@ -454,7 +455,7 @@ export default function ModalMelhoresHorarios({ modelo, onClose }: ModalMelhores
                           }}
                         >
                           <AlertCircle size={13} style={{ flexShrink: 0 }} />
-                          <span>Amostra ainda pequena ({data.postagem.postsConsiderados} posts) — confiança vai aumentar conforme mais posts forem publicados.</span>
+                          <span>Faixa vencedora baseada em só {data.postagem.melhorFaixaAmostras} post(s) ({data.postagem.postsConsiderados} no total da conta) — outras faixas com números maiores na grade abaixo podem ter só 1-2 posts (às vezes um viral isolado) e por isso ficaram de fora do "TOP". Confiança vai aumentar conforme mais posts forem publicados.</span>
                         </div>
                       )}
 
@@ -1130,6 +1131,11 @@ export default function ModalMelhoresHorarios({ modelo, onClose }: ModalMelhores
 
                     const corTema = tabVisual === 'faixas_postagem' ? '#F97316' : tabVisual === 'faixas_views' ? '#58A6FF' : '#10B981';
                     const corTemaBg = tabVisual === 'faixas_postagem' ? 'rgba(249, 115, 22, 0.15)' : tabVisual === 'faixas_views' ? 'rgba(56, 139, 253, 0.15)' : 'rgba(16, 185, 129, 0.15)';
+                    const amostras: number = item.amostras ?? 0;
+                    // Na aba Postagem, faixas com menos de 3 posts nunca podem virar "TOP" (mínimo
+                    // pra entrar na disputa) — sinalizamos isso visualmente pra não parecer que o
+                    // número foi ignorado à toa.
+                    const amostraInsuficiente = tabVisual === 'faixas_postagem' && amostras > 0 && amostras < 3;
 
                     return (
                       <div
@@ -1142,7 +1148,8 @@ export default function ModalMelhoresHorarios({ modelo, onClose }: ModalMelhores
                           display: 'flex',
                           flexDirection: 'column',
                           justifyContent: 'space-between',
-                          position: 'relative'
+                          position: 'relative',
+                          opacity: amostraInsuficiente ? 0.6 : 1
                         }}
                       >
                         <div style={{ fontSize: 10, fontWeight: 700, color: isMelhor ? corTema : '#8B949E', marginBottom: 4 }}>
@@ -1151,6 +1158,11 @@ export default function ModalMelhoresHorarios({ modelo, onClose }: ModalMelhores
                         <div style={{ fontSize: 13, fontWeight: 800, color: valPrincipal > 0 ? '#FFFFFF' : '#484F58' }}>
                           {valFormatado}
                         </div>
+                        {amostras > 0 && (
+                          <div style={{ fontSize: 9, color: amostraInsuficiente ? '#F87171' : '#6E7681', marginTop: 1 }}>
+                            {amostras} {amostras === 1 ? 'post' : 'posts'}{amostraInsuficiente ? ' (pouco p/ TOP)' : ''}
+                          </div>
+                        )}
                         <div style={{ marginTop: 6, width: '100%', height: 4, background: '#21262D', borderRadius: 2, overflow: 'hidden' }}>
                           <div
                             style={{

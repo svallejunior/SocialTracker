@@ -486,13 +486,22 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Confiança da recomendação: não basta a conta ter volume total razoável — o que importa
+    // é quantos posts caíram DENTRO da faixa vencedora. Uma faixa pode bater o mínimo absoluto
+    // (3, só pra entrar na disputa) e ainda assim ser um "TOP" pouco confiável se só teve 3-4
+    // posts, enquanto o total da conta parece saudável. MIN_AMOSTRAS_CONFIAVEL é o patamar acima
+    // do mínimo de elegibilidade onde já dá pra confiar mais na mediana.
+    const MIN_AMOSTRAS_CONFIAVEL = 6;
+    const amostrasMelhorFaixa = melhorFaixaPostagemMediana > 0 ? faixasPostagemMap[melhorFaixaPostagemInicio].length : 0;
+
     const fFimPost = (melhorFaixaPostagemInicio + 2) % 24;
     const postagem = {
       metrica: campoMetrica,
       metricaLabel,
       postsConsiderados: postsBase.length,
       temDados: melhorFaixaPostagemMediana > 0,
-      amostraBaixa: postsBase.length < MIN_AMOSTRAS_FAIXA * 4,
+      amostraBaixa: melhorFaixaPostagemMediana > 0 ? amostrasMelhorFaixa < MIN_AMOSTRAS_CONFIAVEL : true,
+      melhorFaixaAmostras: amostrasMelhorFaixa,
       melhorFaixa: melhorFaixaPostagemMediana > 0
         ? `${String(melhorFaixaPostagemInicio).padStart(2, '0')}:00 às ${String(fFimPost).padStart(2, '0')}:00`
         : undefined,
@@ -510,8 +519,8 @@ export async function GET(req: NextRequest) {
           : undefined
       },
       observacao: melhorFaixaPostagemMediana > 0
-        ? (postsBase.length < MIN_AMOSTRAS_FAIXA * 4
-          ? 'Poucos posts registrados ainda — a recomendação vai ficar mais confiável com mais publicações.'
+        ? (amostrasMelhorFaixa < MIN_AMOSTRAS_CONFIAVEL
+          ? `A faixa vencedora teve só ${amostrasMelhorFaixa} post(s) publicado(s) nela — é o mínimo pra entrar na disputa, mas ainda é pouco pra confiar de olhos fechados. Outras faixas com números maiores podem estar aparecendo só porque tiveram 1-2 posts (inclusive algum viral isolado), não porque o horário funciona melhor.`
           : undefined)
         : 'Sem posts suficientes em nenhuma faixa (mínimo 3) para recomendar um horário com confiança ainda.'
     };
