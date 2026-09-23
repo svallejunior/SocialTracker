@@ -1275,10 +1275,54 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                 />
               </div>
 
+              {/* Ações do formulário — na mesma linha dos campos 6 e 7, ocupando as últimas colunas */}
+              <div style={{ gridColumn: '-3 / -1', display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end' }}>
+                <button
+                  type="submit"
+                  disabled={periodoNaoChegou || salvando}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    background: periodoNaoChegou
+                      ? '#161B22'
+                      : 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                    border: periodoNaoChegou ? '1px solid #30363D' : 'none',
+                    color: periodoNaoChegou ? '#8B949E' : 'white',
+                    borderRadius: '8px',
+                    padding: '10px 20px',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: (periodoNaoChegou || salvando) ? 'not-allowed' : 'pointer',
+                    boxShadow: periodoNaoChegou ? 'none' : '0 4px 14px rgba(16, 185, 129, 0.3)',
+                    transition: 'all 0.2s',
+                    opacity: periodoNaoChegou ? 0.7 : 1
+                  }}
+                >
+                  {periodoNaoChegou ? (
+                    <>
+                      <Lock size={16} />
+                      <span>Período em Andamento (Liberado em {fmtDataBr(form.data_fim)})</span>
+                    </>
+                  ) : salvando ? (
+                    <span>Salvando...</span>
+                  ) : form.id ? (
+                    <>
+                      <Check size={16} />
+                      <span>Salvar Alterações</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check size={16} />
+                      <span>Salvar Dados da Semana</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
 
             {/* 8. CONTEÚDO PUBLICADO NO PERÍODO (automático, vindo do banco) */}
-            <div style={{ marginBottom: '20px' }}>
+            <div>
               <div style={{ fontSize: '11px', color: '#8B949E', fontWeight: 700, marginBottom: '6px', textTransform: 'uppercase' }}>
                 8. Conteúdo publicado no período {carregandoConteudo && <span style={{ color: '#586069', fontWeight: 600, textTransform: 'none' }}>— carregando...</span>}
               </div>
@@ -1305,51 +1349,6 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                   </div>
                 ))}
               </div>
-            </div>
-
-            {/* Ações do formulário */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '10px' }}>
-              <button
-                type="submit"
-                disabled={periodoNaoChegou || salvando}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  background: periodoNaoChegou
-                    ? '#161B22'
-                    : 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
-                  border: periodoNaoChegou ? '1px solid #30363D' : 'none',
-                  color: periodoNaoChegou ? '#8B949E' : 'white',
-                  borderRadius: '8px',
-                  padding: '10px 20px',
-                  fontSize: '13px',
-                  fontWeight: 700,
-                  cursor: (periodoNaoChegou || salvando) ? 'not-allowed' : 'pointer',
-                  boxShadow: periodoNaoChegou ? 'none' : '0 4px 14px rgba(16, 185, 129, 0.3)',
-                  transition: 'all 0.2s',
-                  opacity: periodoNaoChegou ? 0.7 : 1
-                }}
-              >
-                {periodoNaoChegou ? (
-                  <>
-                    <Lock size={16} />
-                    <span>Período em Andamento (Liberado em {fmtDataBr(form.data_fim)})</span>
-                  </>
-                ) : salvando ? (
-                  <span>Salvando...</span>
-                ) : form.id ? (
-                  <>
-                    <Check size={16} />
-                    <span>Salvar Alterações</span>
-                  </>
-                ) : (
-                  <>
-                    <Check size={16} />
-                    <span>Salvar Dados da Semana</span>
-                  </>
-                )}
-              </button>
             </div>
           </form>
         </div>
