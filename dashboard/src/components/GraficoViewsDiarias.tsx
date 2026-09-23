@@ -94,8 +94,8 @@ export default function GraficoViewsDiarias({ username }: { username: string }) 
             <BarChart data={serie} margin={{ top: 8, right: 0, left: 0, bottom: 0 }} barGap="-100%">
               <CartesianGrid stroke="#21262D" vertical={false} />
               <XAxis dataKey="dia" tickFormatter={fmtDia} tick={{ fill: '#8B949E', fontSize: 10 }} axisLine={{ stroke: '#30363D' }} tickLine={false} minTickGap={12} />
-              <YAxis yAxisId="views" tick={{ fill: '#00F0FF', fontSize: 10 }} axisLine={false} tickLine={false} width={48} tickFormatter={(v: number) => fmtNum(v)} />
-              <YAxis yAxisId="seg" orientation="right" tick={{ fill: '#F85149', fontSize: 10 }} axisLine={false} tickLine={false} width={48} tickFormatter={(v: number) => fmtNum(v)} />
+              {/* Mesma escala para visualizações e seguidores (proposital, para comparar grandezas) */}
+              <YAxis tick={{ fill: '#8B949E', fontSize: 10 }} axisLine={false} tickLine={false} width={48} tickFormatter={(v: number) => fmtNum(v)} />
               <Tooltip
                 cursor={{ fill: 'rgba(0, 240, 255, 0.06)' }}
                 contentStyle={{ background: '#161B22', border: '1px solid #30363D', borderRadius: 8, fontSize: 12 }}
@@ -103,8 +103,8 @@ export default function GraficoViewsDiarias({ username }: { username: string }) 
                 labelFormatter={(l: any) => fmtDia(String(l))}
                 formatter={(v: any, name: any) => [v === null || v === undefined ? 'sem coleta' : fmtNum(Number(v)), name]}
               />
-              <Bar yAxisId="views" dataKey="views" name="Visualizações" fill="#00F0FF" fillOpacity={0.55} radius={[3, 3, 0, 0]} maxBarSize={28} />
-              <Bar yAxisId="seg" dataKey="seguidores" name="Seguidores" fill="#F85149" fillOpacity={0.55} radius={[3, 3, 0, 0]} maxBarSize={28} />
+              <Bar dataKey="views" name="Visualizações" fill="#00F0FF" fillOpacity={0.55} radius={[3, 3, 0, 0]} maxBarSize={28} />
+              <Bar dataKey="seguidores" name="Seguidores" fill="#F85149" fillOpacity={0.55} radius={[3, 3, 0, 0]} maxBarSize={28} />
             </BarChart>
           </ResponsiveContainer>
         </div>
