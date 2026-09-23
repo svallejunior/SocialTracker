@@ -16,6 +16,24 @@ const fmtDia = (iso: string) => {
 
 const fmtNum = (n: number) => n.toLocaleString('pt-BR');
 
+// Caixa do hover: visualizações, seguidores e o fator (visualizações ÷ seguidores)
+function TooltipDia({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+  const ponto: PontoViews = payload[0].payload;
+  const fator = ponto.views !== null && ponto.seguidores ? ponto.views / ponto.seguidores : null;
+  const linha = (cor: string, rotulo: string, valor: string) => (
+    <div style={{ color: cor, marginTop: 2 }}>{rotulo}: <strong>{valor}</strong></div>
+  );
+  return (
+    <div style={{ background: '#161B22', border: '1px solid #30363D', borderRadius: 8, fontSize: 12, padding: '8px 10px' }}>
+      <div style={{ color: '#E6EDF3', fontWeight: 700, marginBottom: 2 }}>{fmtDia(String(label))}</div>
+      {linha('#00F0FF', 'Visualizações', ponto.views === null ? 'sem coleta' : fmtNum(ponto.views))}
+      {linha('#F85149', 'Seguidores', ponto.seguidores === null ? 'sem coleta' : fmtNum(ponto.seguidores))}
+      {linha('#E3B341', 'Fator', fator === null ? '—' : `${fator.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}x`)}
+    </div>
+  );
+}
+
 // Visualizações ganhas por dia do perfil, do primeiro dia coletado até hoje.
 export default function GraficoViewsDiarias({ username }: { username: string }) {
   const [serie, setSerie] = useState<PontoViews[]>([]);
@@ -96,13 +114,7 @@ export default function GraficoViewsDiarias({ username }: { username: string }) 
               <XAxis dataKey="dia" tickFormatter={fmtDia} tick={{ fill: '#8B949E', fontSize: 10 }} axisLine={{ stroke: '#30363D' }} tickLine={false} minTickGap={12} />
               {/* Mesma escala para visualizações e seguidores (proposital, para comparar grandezas) */}
               <YAxis tick={{ fill: '#8B949E', fontSize: 10 }} axisLine={false} tickLine={false} width={48} tickFormatter={(v: number) => fmtNum(v)} />
-              <Tooltip
-                cursor={{ fill: 'rgba(0, 240, 255, 0.06)' }}
-                contentStyle={{ background: '#161B22', border: '1px solid #30363D', borderRadius: 8, fontSize: 12 }}
-                labelStyle={{ color: '#E6EDF3', fontWeight: 700 }}
-                labelFormatter={(l: any) => fmtDia(String(l))}
-                formatter={(v: any, name: any) => [v === null || v === undefined ? 'sem coleta' : fmtNum(Number(v)), name]}
-              />
+              <Tooltip cursor={{ fill: 'rgba(0, 240, 255, 0.06)' }} content={<TooltipDia />} />
               <Bar dataKey="views" name="Visualizações" fill="#00F0FF" fillOpacity={0.55} radius={[3, 3, 0, 0]} maxBarSize={28} />
               <Bar dataKey="seguidores" name="Seguidores" fill="#F85149" fillOpacity={0.55} radius={[3, 3, 0, 0]} maxBarSize={28} />
             </BarChart>
