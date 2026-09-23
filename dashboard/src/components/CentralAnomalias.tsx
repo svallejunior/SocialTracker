@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import AvatarModelo from './AvatarModelo';
+import GraficoViewsDiarias from './GraficoViewsDiarias';
 import { formatDisplayDateBR, formatDisplayDateTimeBR, formatToBrazilDateTime } from '@/lib/timezone';
 import {
   AlertTriangle, CheckCircle2, Rocket, Trash2, RefreshCw, TrendingUp, Users,
@@ -1271,6 +1272,9 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                 </table>
               </div>
             )}
+
+            {/* Gráfico de visualizações por dia do perfil selecionado (histórico completo) */}
+            <GraficoViewsDiarias username={activeProfile.username} />
           </div>
         )}
       </div>
