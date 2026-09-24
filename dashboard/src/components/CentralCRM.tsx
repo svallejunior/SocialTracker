@@ -263,6 +263,7 @@ export default function CentralCRM({ profiles = [], controleData = [], onAbrirLa
         setModalClienteAberto(false);
         setClienteEdicao(null);
         carregarClientes();
+        if (!isNovo) onFinanceiroAlterado?.();
       } else {
         showToast(data.error || 'Erro ao salvar cliente', 'error');
       }

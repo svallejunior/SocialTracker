@@ -464,6 +464,23 @@ export async function PUT(request: NextRequest) {
       ]
     );
 
+    // Troca de modelo do cliente: as vendas que estavam na modelo antiga (e seus
+    // lançamentos no extrato) passam para a nova modelo.
+    const modeloAntigo = String(clienteExistente.perfil_modelo || '');
+    const modeloNovo = String(perfil_modelo || '').trim().replace(/^@+/, '');
+    if (modeloNovo && modeloNovo !== modeloAntigo) {
+      const vendas = await db.all(
+        `SELECT id FROM crm_transacoes WHERE cliente_id = ? AND COALESCE(perfil_modelo, '') IN (?, '')`,
+        [id, modeloAntigo]
+      );
+      const idsVendas = vendas.map((v: { id: number }) => v.id);
+      if (idsVendas.length > 0) {
+        const marcadores = idsVendas.map(() => '?').join(',');
+        await db.run(`UPDATE crm_transacoes SET perfil_modelo = ? WHERE id IN (${marcadores})`, [modeloNovo, ...idsVendas]);
+        await db.run(`UPDATE lancamentos SET username = ? WHERE crm_transacao_id IN (${marcadores})`, [modeloNovo, ...idsVendas]);
+      }
+    }
+
     return NextResponse.json({ success: true, message: 'Cliente atualizado com sucesso' });
   } catch (err: unknown) {
     console.error('[API CRM PUT] Erro:', err);
