@@ -1421,8 +1421,12 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                     <td style={{ padding: '10px 12px', fontWeight: 700, color: '#00F0FF' }}>
                       {r.visualizacoes > 0 ? fmtNum(r.visualizacoes) : '—'}
                     </td>
-                    <td style={{ padding: '10px 12px', color: '#10B981', fontWeight: 600 }}>
-                      {r.seguidores > 0 ? r.seguidores.toLocaleString('pt-BR') : '—'}
+                    <td style={{ padding: '10px 12px', color: Number(r.seguidores) < 0 ? '#F87171' : '#10B981', fontWeight: 600 }}>
+                      {Number(r.seguidores) > 0
+                        ? `+${Number(r.seguidores).toLocaleString('pt-BR')}`
+                        : Number(r.seguidores) < 0
+                          ? Number(r.seguidores).toLocaleString('pt-BR')
+                          : '—'}
                     </td>
                     <td style={{ padding: '10px 12px', fontWeight: 700, color: '#FF007A' }}>
                       {r.interacoes > 0 ? fmtNum(r.interacoes) : '—'}
