@@ -44,6 +44,29 @@ async function importarLeadTelegram(
   return res.lastID ?? null;
 }
 
+// Cria o lançamento "recebido" vinculado a uma transação do CRM. A descrição leva
+// o nome do cliente para ficar identificável no extrato.
+async function registrarLancamentoCrm(
+  db: Awaited<ReturnType<typeof getDb>>,
+  transacaoId: number,
+  username: string,
+  valor: number,
+  data: string,
+  descricao: string | undefined,
+  clienteId: number
+) {
+  const cliente = await db.get(`SELECT nome FROM crm_clientes WHERE id = ?`, [clienteId]);
+  const partes = [String(descricao || '').trim(), cliente?.nome ? String(cliente.nome).trim() : ''].filter(Boolean);
+  const desc = `CRM: ${partes.join(' - ') || 'venda'}`;
+  await db.run(
+    `INSERT INTO lancamentos
+       (username, tipo, valor_brl, valor_original, moeda, taxa_conversao,
+        data_lancamento, descricao, rateado, grupo_rateio, crm_transacao_id)
+     VALUES (?, 'recebido', ?, ?, 'BRL', 1, ?, ?, 0, NULL, ?)`,
+    [username, valor, valor, data, desc, transacaoId]
+  );
+}
+
 // ─────────────────────────────────────────────
 // GET: Lista de clientes com filtros e KPIs ou detalhes de um cliente
 // ─────────────────────────────────────────────
@@ -208,6 +231,12 @@ export async function POST(request: NextRequest) {
          VALUES (?, ?, ?, ?, ?, ?)`,
         [cliente_id, valNum, descricao || '', dataTx, metodo_pagamento || 'PIX', perfil_modelo || '']
       );
+
+      // Espelha a venda como receita no extrato de lançamentos (aba Análise) da modelo
+      const usernameModelo = String(perfil_modelo || '').trim().replace(/^@+/, '');
+      if (usernameModelo && valNum > 0 && res.lastID) {
+        await registrarLancamentoCrm(db, res.lastID, usernameModelo, valNum, dataTx, descricao, cliente_id);
+      }
 
       // Recalcula valor_gasto total do cliente somando todas as transações
       const totalRow = await db.get(
@@ -460,6 +489,7 @@ export async function DELETE(request: NextRequest) {
       }
 
       await db.run(`DELETE FROM crm_transacoes WHERE id = ?`, [transacaoId]);
+      await db.run(`DELETE FROM lancamentos WHERE crm_transacao_id = ?`, [transacaoId]);
 
       // Recalcula valor gasto
       const totalRow = await db.get(
@@ -481,6 +511,10 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'ID do cliente é obrigatório' }, { status: 400 });
     }
 
+    await db.run(
+      `DELETE FROM lancamentos WHERE crm_transacao_id IN (SELECT id FROM crm_transacoes WHERE cliente_id = ?)`,
+      [id]
+    );
     await db.run(`DELETE FROM crm_transacoes WHERE cliente_id = ?`, [id]);
     await db.run(`DELETE FROM crm_clientes WHERE id = ?`, [id]);
 

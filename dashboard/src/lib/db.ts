@@ -368,6 +368,21 @@ async function ensureSchema(db: Db): Promise<void> {
     );
     CREATE INDEX IF NOT EXISTS idx_crm_transacoes_cliente ON crm_transacoes(cliente_id);
   `);
+
+  // Vínculo lançamento ↔ transação do CRM: cada venda registrada no CRM gera um
+  // lançamento "recebido" no extrato da Análise, removido junto com a transação.
+  try {
+    const cols = await db.all("PRAGMA table_info(lancamentos)");
+    const colNames = new Set(cols.map((c: any) => c.name));
+    if (cols.length > 0 && !colNames.has("crm_transacao_id")) {
+      await db.exec(`ALTER TABLE lancamentos ADD COLUMN crm_transacao_id INTEGER`);
+    }
+    if (cols.length > 0) {
+      await db.exec(`CREATE INDEX IF NOT EXISTS idx_lancamentos_crm_transacao ON lancamentos(crm_transacao_id)`);
+    }
+  } catch (err) {
+    console.error("[ensureSchema] Erro em lancamentos:", err);
+  }
 }
 
 async function abrirConexao(): Promise<Db> {

@@ -6476,6 +6476,7 @@ export default function Dashboard() {
                                   {l.data_lancamento ? formatDate(l.data_lancamento) : ''}
                                 </span>
                                 {l.rateado === 1 && <span style={{ color: '#7100E2', marginLeft: 6, fontSize: 10, fontWeight: 700 }}>RATEIO</span>}
+                                {l.crm_transacao_id != null && <span style={{ color: '#00B4FF', marginLeft: 6, fontSize: 10, fontWeight: 700 }}>CRM</span>}
                                 {l.descricao && <div style={{ color: '#586069', fontSize: 11, marginTop: 2 }}>{l.descricao}</div>}
                               </div>
                               <span style={{ fontWeight: 700, color: l.tipo === 'despesa' ? '#FF007A' : '#39FF14' }}>
