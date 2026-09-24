@@ -6,8 +6,9 @@ import {
   MessageSquare, Phone, Mail, Send, ExternalLink,
   Edit2, Trash2, CheckCircle2, AlertCircle, ShoppingBag,
   Download, RefreshCw, X, ArrowUpDown, ChevronDown, Tag,
-  Kanban, Table as TableIcon, Calendar, UserCheck, MessageCircle
+  Kanban, Table as TableIcon, Calendar, UserCheck, MessageCircle, Receipt
 } from 'lucide-react';
+import ExtratoLancamentos from './ExtratoLancamentos';
 
 const InstagramIcon = ({ size = 14 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -60,6 +61,12 @@ interface Metricas {
 
 interface CentralCRMProps {
   profiles?: Array<{ username: string; nome?: string; meu_perfil?: number | boolean }>;
+  // Dados de /api/controle (perfis com seus lançamentos) para a visão Extrato
+  controleData?: any[];
+  onAbrirLancamento?: (lancamento: any, username: string) => void;
+  onNovoLancamento?: (username: string) => void;
+  // Vendas do CRM geram lançamentos: avisa a página para recarregar o extrato
+  onFinanceiroAlterado?: () => void;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; cor: string; bg: string; border: string }> = {
@@ -118,7 +125,7 @@ function getWhatsappUrl(tel: string): string {
   return `https://wa.me/${finalNum}`;
 }
 
-export default function CentralCRM({ profiles = [] }: CentralCRMProps) {
+export default function CentralCRM({ profiles = [], controleData = [], onAbrirLancamento, onNovoLancamento, onFinanceiroAlterado }: CentralCRMProps) {
   // Filtra estritamente apenas as "Minhas Modelos" (meu_perfil === 1)
   const minhasModelos = useMemo(() => {
     return (profiles || []).filter(p => {
@@ -148,7 +155,7 @@ export default function CentralCRM({ profiles = [] }: CentralCRMProps) {
   const [filtroOrigem, setFiltroOrigem] = useState('todos');
   const [sortBy, setSortBy] = useState('valor_gasto');
   const [sortOrder, setSortOrder] = useState<'DESC' | 'ASC'>('DESC');
-  const [viewMode, setViewMode] = useState<'tabela' | 'kanban'>('tabela');
+  const [viewMode, setViewMode] = useState<'tabela' | 'kanban' | 'extrato'>('tabela');
 
   // Modais
   const [modalClienteAberto, setModalClienteAberto] = useState(false);
@@ -306,6 +313,7 @@ export default function CentralCRM({ profiles = [] }: CentralCRMProps) {
         showToast('Cliente removido com sucesso!');
         if (clienteDetalhes?.id === id) setClienteDetalhes(null);
         carregarClientes();
+        onFinanceiroAlterado?.();
       } else {
         showToast(data.error || 'Erro ao excluir cliente', 'error');
       }
@@ -350,6 +358,7 @@ export default function CentralCRM({ profiles = [] }: CentralCRMProps) {
           perfil_modelo: ''
         });
         carregarClientes();
+        onFinanceiroAlterado?.();
         if (clienteDetalhes?.id === clienteTransacao.id) {
           abrirDetalhesCliente(clienteTransacao);
         }
@@ -373,6 +382,7 @@ export default function CentralCRM({ profiles = [] }: CentralCRMProps) {
       const data = await res.json();
       if (data.success) {
         showToast('Transação excluída com sucesso');
+        onFinanceiroAlterado?.();
         if (clienteDetalhes) {
           setHistoricoTransacoes(prev => prev.filter(t => t.id !== transacaoId));
           carregarClientes();
@@ -566,6 +576,26 @@ export default function CentralCRM({ profiles = [] }: CentralCRMProps) {
             >
               <Kanban size={15} />
               Funil / Kanban
+            </button>
+            <button
+              onClick={() => setViewMode('extrato')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '6px 12px',
+                borderRadius: 6,
+                background: viewMode === 'extrato' ? '#7100E2' : 'transparent',
+                color: viewMode === 'extrato' ? '#fff' : 'var(--text-secondary)',
+                border: 'none',
+                cursor: 'pointer',
+                fontWeight: 600,
+                fontSize: 13,
+                transition: 'all 0.2s'
+              }}
+            >
+              <Receipt size={15} />
+              Extrato
             </button>
           </div>
 
@@ -802,6 +832,7 @@ export default function CentralCRM({ profiles = [] }: CentralCRMProps) {
       </div>
 
       {/* Barra de Filtros e Busca */}
+      {viewMode !== 'extrato' && (
       <div style={{
         background: 'var(--background-card)',
         border: '1px solid var(--border-color)',
@@ -968,9 +999,16 @@ export default function CentralCRM({ profiles = [] }: CentralCRMProps) {
           </button>
         </div>
       </div>
+      )}
 
-      {/* Conteúdo Principal: Modo Tabela ou Modo Kanban */}
-      {loading ? (
+      {/* Conteúdo Principal: Modo Tabela, Kanban ou Extrato de Lançamentos */}
+      {viewMode === 'extrato' ? (
+        <ExtratoLancamentos
+          controleData={controleData}
+          onSelecionar={(l, u) => onAbrirLancamento?.(l, u)}
+          onNovo={(u) => onNovoLancamento?.(u)}
+        />
+      ) : loading ? (
         <div style={{
           display: 'flex',
           flexDirection: 'column',

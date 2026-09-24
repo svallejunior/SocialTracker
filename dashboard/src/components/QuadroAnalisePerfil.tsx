@@ -5,6 +5,7 @@ import {
   Activity, MessageSquare, Check, Trash2, Edit, RefreshCw,
   Film, Image as ImageIcon, Aperture, ChevronLeft, ChevronRight, MousePointerClick, Lock
 } from 'lucide-react';
+import { EVENTO_ANALISE_SEMANAL } from './GraficoSemanasRegistradas';
 import AvatarModelo from './AvatarModelo';
 
 interface QuadroAnalisePerfilProps {
@@ -384,6 +385,7 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
           id: null
         }));
         carregarRegistros(selectedUsername);
+        window.dispatchEvent(new Event(EVENTO_ANALISE_SEMANAL));
         setTimeout(() => setMsgFeedback(null), 4000);
       } else {
         setMsgFeedback({ tipo: 'erro', texto: `Erro ao salvar: ${json.error || 'Desconhecido'}` });
@@ -421,6 +423,7 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
       const json = await res.json();
       if (json.success) {
         carregarRegistros(selectedUsername);
+        window.dispatchEvent(new Event(EVENTO_ANALISE_SEMANAL));
       } else {
         alert(`Erro ao excluir: ${json.error}`);
       }
