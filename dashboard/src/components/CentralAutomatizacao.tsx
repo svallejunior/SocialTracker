@@ -1647,10 +1647,43 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
 
             const idsPublicados = new Set(pubsDoDiaSelecionado.map(p => p.agendamento_id).filter(Boolean));
             const metaIdsPublicados = new Set(pubsDoDiaSelecionado.map(p => p.meta_media_id).filter(Boolean));
+
+            // "Já agendei no Instagram" é só uma marcação manual (o Instagram publica, não o
+            // sistema), então o post real nunca chega com agendamento_id/meta_media_id vinculado
+            // a ela. Confirma comparando tipo + horário aproximado com o histórico real; cada
+            // post real confirma no máximo 1 marcação. Se o horário previsto já passou de 3h
+            // (ou o dia já acabou) sem post real correspondente, marca como falha em vez de
+            // deixar a previsão pendente para sempre.
+            const pubsDisponiveisParaConfirmar = [...pubsDoDiaSelecionado];
+            const confirmadosNoInstagram = new Set<string>();
+            const falhouNoInstagram = new Set<string>();
+            for (const ag of agendamentosDoDia) {
+              if (ag.status !== 'AGENDADO_INSTAGRAM') continue;
+              const horaPrevista = normalizarHora(ag.hora_fixa);
+              const idx = pubsDisponiveisParaConfirmar.findIndex(p => {
+                if (p.tipo_postagem !== ag.tipo_postagem) return false;
+                if (!ag.hora_fixa) return true;
+                const minPub = parseInt(getPubTime(p).slice(0, 2), 10) * 60 + parseInt(getPubTime(p).slice(3, 5), 10);
+                const minAg = parseInt(horaPrevista.slice(0, 2), 10) * 60 + parseInt(horaPrevista.slice(3, 5), 10);
+                return Math.abs(minPub - minAg) <= 240;
+              });
+              if (idx >= 0) {
+                confirmadosNoInstagram.add(ag.id);
+                pubsDisponiveisParaConfirmar.splice(idx, 1);
+              } else if (ag.hora_fixa) {
+                const [h, m] = horaPrevista.split(':').map(Number);
+                const previstoMs = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), h, m).getTime();
+                if (hojeObj.getTime() - previstoMs > 3 * 60 * 60 * 1000) {
+                  falhouNoInstagram.add(ag.id);
+                }
+              }
+            }
+
             const agsPendentesHoje = agendamentosDoDia.filter(a => {
               if (a.status === 'PUBLICADO') return false;
               if (idsPublicados.has(a.id)) return false;
               if (a.meta_media_id && metaIdsPublicados.has(a.meta_media_id)) return false;
+              if (a.status === 'AGENDADO_INSTAGRAM' && confirmadosNoInstagram.has(a.id)) return false;
               return true;
             });
             const agsExibicao = isDiaHoje ? agsPendentesHoje : agendamentosDoDia;
@@ -2575,6 +2608,40 @@ export default function CentralAutomatizacao({ profiles, onRefresh }: CentralAut
                                 }}
                               >
                                 <X size={13} strokeWidth={2.8} />
+                              </span>
+                            ) : ag.status === 'AGENDADO_INSTAGRAM' && falhouNoInstagram.has(ag.id) ? (
+                              <span
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const msg = `Você marcou que já tinha agendado esse post no Instagram (${ag.hora_fixa || 'sem horário'}), mas não encontramos essa publicação por lá.`;
+                                  if (navigator.clipboard) {
+                                    navigator.clipboard.writeText(msg);
+                                    showToast('📋 Erro copiado para a área de transferência!');
+                                  }
+                                }}
+                                title="❌ Não encontramos essa publicação no Instagram. Verifique se ela foi realmente feita.\n(Clique para copiar o erro)"
+                                style={{
+                                  width: 24,
+                                  height: 24,
+                                  borderRadius: 6,
+                                  background: 'rgba(239,68,68,0.15)',
+                                  border: '1px solid rgba(239,68,68,0.35)',
+                                  color: '#F87171',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  flexShrink: 0,
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s'
+                                }}
+                                onMouseEnter={e => {
+                                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.3)';
+                                }}
+                                onMouseLeave={e => {
+                                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)';
+                                }}
+                              >
+                                <AlertCircle size={13} strokeWidth={2.5} />
                               </span>
                             ) : ag.status === 'AGENDADO_INSTAGRAM' ? (
                               <span

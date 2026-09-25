@@ -117,20 +117,103 @@ export default function ModalTarefasModelo({ isOpen, onClose, modelo, onSaveConf
     }
   };
 
-  // Carrega estado de checkboxes salvo em localStorage por modelo
+  // Utilitários de Data no fuso de Brasília (UTC-3)
+  const getTodayDateString = (): string => {
+    try {
+      const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Sao_Paulo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      });
+      return formatter.format(new Date()); // "YYYY-MM-DD"
+    } catch {
+      const d = new Date();
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+  };
+
+  const getTodayDisplay = (): string => {
+    try {
+      const formatter = new Intl.DateTimeFormat('pt-BR', {
+        timeZone: 'America/Sao_Paulo',
+        day: '2-digit',
+        month: '2-digit'
+      });
+      return formatter.format(new Date());
+    } catch {
+      const d = new Date();
+      return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+    }
+  };
+
+  // Identifica quais tarefas são operacionais diárias (rotina diária que deve zerar a cada dia)
+  const isDailyTask = (id: string): boolean => {
+    return id.startsWith('aq_') || id.startsWith('d4_');
+  };
+
+  // Carrega estado de checkboxes salvo em localStorage por modelo com controle de data diária
   useEffect(() => {
-    if (modelo?.username) {
-      try {
-        const key = `st_tarefas_${modelo.username.toLowerCase()}`;
-        const saved = localStorage.getItem(key);
-        if (saved) {
-          setTarefasConcluidas(JSON.parse(saved));
+    if (!isOpen || !modelo?.username) return;
+
+    try {
+      const hoje = getTodayDateString();
+      const key = `st_tarefas_${modelo.username.toLowerCase()}`;
+      const saved = localStorage.getItem(key);
+
+      if (saved) {
+        const parsed = JSON.parse(saved);
+
+        // Se for o formato novo estruturado com campo data
+        if (parsed && typeof parsed === 'object' && ('data' in parsed || 'tarefas' in parsed)) {
+          const savedDate = parsed.data;
+          const tarefasSalvas = (parsed.tarefas || {}) as Record<string, boolean>;
+
+          if (savedDate === hoje) {
+            // Mesmo dia: mantém o status das tarefas
+            setTarefasConcluidas(tarefasSalvas);
+          } else {
+            // NOVO DIA: Zera automaticamente todas as tarefas diárias! Preserva tarefas permanentes de onboarding
+            const mantidas: Record<string, boolean> = {};
+            for (const [taskId, checked] of Object.entries(tarefasSalvas)) {
+              if (!isDailyTask(taskId) && checked) {
+                mantidas[taskId] = true;
+              }
+            }
+            setTarefasConcluidas(mantidas);
+            localStorage.setItem(key, JSON.stringify({
+              data: hoje,
+              tarefas: mantidas
+            }));
+          }
+        } else if (parsed && typeof parsed === 'object') {
+          // Formato legado antigo (sem campo data):
+          // Como era anterior ao controle de data diária, reseta tarefas diárias e preserva apenas permanentes
+          const mantidas: Record<string, boolean> = {};
+          for (const [taskId, checked] of Object.entries(parsed)) {
+            if (!isDailyTask(taskId) && Boolean(checked)) {
+              mantidas[taskId] = true;
+            }
+          }
+          setTarefasConcluidas(mantidas);
+          localStorage.setItem(key, JSON.stringify({
+            data: hoje,
+            tarefas: mantidas
+          }));
         } else {
           setTarefasConcluidas({});
         }
-      } catch (e) {}
+      } else {
+        setTarefasConcluidas({});
+      }
+    } catch (e) {
+      console.warn("Erro ao carregar tarefas da modelo:", e);
+      setTarefasConcluidas({});
     }
-  }, [modelo?.username]);
+  }, [isOpen, modelo?.username]);
 
   // Tecla Escape para fechar
   useEffect(() => {
@@ -145,12 +228,46 @@ export default function ModalTarefasModelo({ isOpen, onClose, modelo, onSaveConf
   if (!isOpen || !modelo) return null;
 
   const toggleCheck = (id: string) => {
+    if (!modelo?.username) return;
+    const hoje = getTodayDateString();
+    const key = `st_tarefas_${modelo.username.toLowerCase()}`;
+
     setTarefasConcluidas(prev => {
-      const next = { ...prev, [id]: !prev[id] };
+      const next = { ...prev };
+      if (next[id]) {
+        delete next[id];
+      } else {
+        next[id] = true;
+      }
       try {
-        localStorage.setItem(`st_tarefas_${modelo.username.toLowerCase()}`, JSON.stringify(next));
+        localStorage.setItem(key, JSON.stringify({
+          data: hoje,
+          tarefas: next
+        }));
       } catch (e) {}
       return next;
+    });
+  };
+
+  const handleZerarTarefasDiarias = () => {
+    if (!modelo?.username) return;
+    const hoje = getTodayDateString();
+    const key = `st_tarefas_${modelo.username.toLowerCase()}`;
+
+    setTarefasConcluidas(prev => {
+      const mantidas: Record<string, boolean> = {};
+      for (const [taskId, checked] of Object.entries(prev)) {
+        if (!isDailyTask(taskId) && checked) {
+          mantidas[taskId] = true;
+        }
+      }
+      try {
+        localStorage.setItem(key, JSON.stringify({
+          data: hoje,
+          tarefas: mantidas
+        }));
+      } catch (e) {}
+      return mantidas;
     });
   };
 
@@ -1167,8 +1284,8 @@ CRONOGRAMA DIÁRIO:
                   </div>
 
                   {/* LISTA DE TAREFAS DIÁRIAS (COM FOLLOW & UNFOLLOW INCLUSOS) */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {[
+                  {(() => {
+                    const tarefasDiarias = [
                       {
                         id: 'aq_follow',
                         titulo: `Follow Diário de Leads (${followStats.follows_dia}/${followStats.meta_dia})`,
@@ -1188,72 +1305,142 @@ CRONOGRAMA DIÁRIO:
                       { id: 'aq_3', titulo: 'Publicação de Stories Diários', desc: 'Postar sequência de Stories (enquetes, bastidores e chamadas para ação).' },
                       { id: 'aq_4', titulo: 'Interação Orgânica do Dia', desc: 'Consumir conteúdo por 15 minutos e interagir organicamente no nicho.' },
                       { id: 'aq_5', titulo: 'Acompanhar Tração e Métricas', desc: 'Verificar a aba Análise para acompanhar views e novos seguidores.' },
-                    ].map(t => {
-                      const checked = Boolean(tarefasConcluidas[t.id]);
-                      return (
-                        <div
-                          key={t.id}
-                          onClick={() => toggleCheck(t.id)}
-                          style={{
-                            background: checked
-                              ? 'rgba(0, 255, 102, 0.05)'
-                              : t.destaqueFollow
-                              ? 'rgba(0, 240, 255, 0.03)'
-                              : '#161B22',
-                            border: `1px solid ${
-                              checked
-                                ? 'rgba(0, 255, 102, 0.35)'
-                                : t.destaqueFollow
-                                ? 'rgba(0, 240, 255, 0.25)'
-                                : '#30363D'
-                            }`,
-                            borderRadius: 10,
-                            padding: '14px 18px',
-                            display: 'flex',
-                            alignItems: 'flex-start',
-                            justifyContent: 'space-between',
-                            gap: 14,
-                            cursor: 'pointer',
-                            transition: 'all 0.15s'
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-                            <div style={{ color: checked ? '#00FF66' : '#8B949E', marginTop: 2 }}>
-                              {checked ? <CheckSquare size={18} /> : <Square size={18} />}
-                            </div>
-                            <div>
-                              <div style={{
-                                fontSize: 14,
-                                fontWeight: 700,
-                                color: checked ? '#00FF66' : '#F0F6FC',
-                                textDecoration: checked ? 'line-through' : 'none'
-                              }}>
-                                {t.titulo}
-                              </div>
-                              <div style={{ fontSize: 12, color: '#8B949E', marginTop: 3, lineHeight: 1.4 }}>
-                                {t.desc}
-                              </div>
-                            </div>
-                          </div>
+                    ];
 
-                          {t.badge && (
+                    const concluidasCount = tarefasDiarias.filter(t => Boolean(tarefasConcluidas[t.id])).length;
+
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        {/* Barra de Status e Ações do Ciclo Diário */}
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          flexWrap: 'wrap',
+                          gap: 10,
+                          padding: '0 2px',
+                          marginTop: 4
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Calendar size={15} color="#00F0FF" />
+                            <span style={{ fontSize: 13, fontWeight: 700, color: '#C9D1D9' }}>
+                              Tarefas Diárias de Hoje <span style={{ color: '#00F0FF', fontWeight: 800 }}>({getTodayDisplay()})</span>
+                            </span>
                             <span style={{
                               fontSize: 11,
-                              fontWeight: 800,
-                              padding: '3px 8px',
-                              borderRadius: 6,
-                              background: t.destaqueFollow ? 'rgba(0, 240, 255, 0.15)' : 'rgba(255, 170, 0, 0.15)',
-                              border: `1px solid ${t.destaqueFollow ? 'rgba(0, 240, 255, 0.4)' : 'rgba(255, 170, 0, 0.4)'}`,
-                              color: t.destaqueFollow ? '#00F0FF' : '#FFAA00',
-                              whiteSpace: 'nowrap'
+                              padding: '2px 8px',
+                              borderRadius: 10,
+                              background: concluidasCount === tarefasDiarias.length ? 'rgba(0, 255, 102, 0.2)' : 'rgba(0, 255, 102, 0.08)',
+                              border: `1px solid ${concluidasCount === tarefasDiarias.length ? 'rgba(0, 255, 102, 0.5)' : 'rgba(0, 255, 102, 0.25)'}`,
+                              color: '#00FF66',
+                              fontWeight: 700
                             }}>
-                              {t.badge}
+                              {concluidasCount}/{tarefasDiarias.length} concluídas
                             </span>
-                          )}
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={handleZerarTarefasDiarias}
+                            title="Zerar status das tarefas diárias de hoje"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              padding: '5px 11px',
+                              background: 'rgba(255, 255, 255, 0.04)',
+                              border: '1px solid #30363D',
+                              borderRadius: 6,
+                              color: '#8B949E',
+                              fontSize: 11,
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              transition: 'all 0.15s'
+                            }}
+                            onMouseEnter={e => {
+                              e.currentTarget.style.color = '#F85149';
+                              e.currentTarget.style.borderColor = 'rgba(248, 81, 73, 0.4)';
+                              e.currentTarget.style.background = 'rgba(248, 81, 73, 0.1)';
+                            }}
+                            onMouseLeave={e => {
+                              e.currentTarget.style.color = '#8B949E';
+                              e.currentTarget.style.borderColor = '#30363D';
+                              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+                            }}
+                          >
+                            <RotateCcw size={12} />
+                            Zerar tarefas de hoje
+                          </button>
                         </div>
-                      );
-                    })}
-                  </div>
+
+                        {tarefasDiarias.map(t => {
+                          const checked = Boolean(tarefasConcluidas[t.id]);
+                          return (
+                            <div
+                              key={t.id}
+                              onClick={() => toggleCheck(t.id)}
+                              style={{
+                                background: checked
+                                  ? 'rgba(0, 255, 102, 0.05)'
+                                  : t.destaqueFollow
+                                  ? 'rgba(0, 240, 255, 0.03)'
+                                  : '#161B22',
+                                border: `1px solid ${
+                                  checked
+                                    ? 'rgba(0, 255, 102, 0.35)'
+                                    : t.destaqueFollow
+                                    ? 'rgba(0, 240, 255, 0.25)'
+                                    : '#30363D'
+                                }`,
+                                borderRadius: 10,
+                                padding: '14px 18px',
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                justifyContent: 'space-between',
+                                gap: 14,
+                                cursor: 'pointer',
+                                transition: 'all 0.15s'
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                                <div style={{ color: checked ? '#00FF66' : '#8B949E', marginTop: 2 }}>
+                                  {checked ? <CheckSquare size={18} /> : <Square size={18} />}
+                                </div>
+                                <div>
+                                  <div style={{
+                                    fontSize: 14,
+                                    fontWeight: 700,
+                                    color: checked ? '#00FF66' : '#F0F6FC',
+                                    textDecoration: checked ? 'line-through' : 'none'
+                                  }}>
+                                    {t.titulo}
+                                  </div>
+                                  <div style={{ fontSize: 12, color: '#8B949E', marginTop: 3, lineHeight: 1.4 }}>
+                                    {t.desc}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {t.badge && (
+                                <span style={{
+                                  fontSize: 11,
+                                  fontWeight: 800,
+                                  padding: '3px 8px',
+                                  borderRadius: 6,
+                                  background: t.destaqueFollow ? 'rgba(0, 240, 255, 0.15)' : 'rgba(255, 170, 0, 0.15)',
+                                  border: `1px solid ${t.destaqueFollow ? 'rgba(0, 240, 255, 0.4)' : 'rgba(255, 170, 0, 0.4)'}`,
+                                  color: t.destaqueFollow ? '#00F0FF' : '#FFAA00',
+                                  whiteSpace: 'nowrap'
+                                }}>
+                                  {t.badge}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 
