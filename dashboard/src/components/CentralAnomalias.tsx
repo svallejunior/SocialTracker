@@ -931,6 +931,9 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
               </div>
             </div>
 
+            {/* Gráfico de visualizações por dia do perfil selecionado (histórico completo) */}
+            <GraficoViewsDiarias username={activeProfile.username} />
+
             {/* Tabela de Coletas do Perfil */}
             {itemsLoading ? (
               <div className="anomalias-empty-state">
@@ -1272,9 +1275,6 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                 </table>
               </div>
             )}
-
-            {/* Gráfico de visualizações por dia do perfil selecionado (histórico completo) */}
-            <GraficoViewsDiarias username={activeProfile.username} />
           </div>
         )}
       </div>
