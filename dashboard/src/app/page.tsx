@@ -5585,46 +5585,167 @@ export default function Dashboard() {
             </div>
 
             {/* Atalhos rápidos: filtros de modelos (por default marcados com check; ao desmarcar, some da lista) */}
-            {profiles.some(p => p.exibir !== 0) && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                <span style={{ color: 'var(--text-secondary)', fontSize: '11px', fontWeight: 700, marginRight: '2px' }}>
-                  ⭐ MINHAS MODELOS:
-                </span>
+            {profiles.some(p => p.exibir !== 0) && (() => {
+              const minhasModelos = [...profiles]
+                .filter(p => (Number(p.meu_perfil) === 1 || p.meu_perfil === true) && p.exibir !== 0)
+                .sort((a, b) => a.username.localeCompare(b.username));
+              const demaisProfiles = profiles.filter(p => Number(p.meu_perfil) !== 1 && p.meu_perfil !== true && p.exibir !== 0);
+              const temDemais = demaisProfiles.length > 0;
+              const demaisCount = demaisProfiles.length;
 
-                {/* Ações rápidas: Marcar todas */}
-                {unselectedProfiles.size > 0 && (
+              const isDemaisChecked = !unselectedProfiles.has('__DEMAIS__');
+              const isAllChecked = unselectedProfiles.size === 0;
+
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '11px', fontWeight: 700, marginRight: '2px', flexShrink: 0 }}>
+                    ⭐ MINHAS MODELOS:
+                  </span>
+
+                  {/* 1. Botão MARCAR TODAS (sempre visível por default, tamanho constante) */}
                   <button
                     type="button"
                     onClick={() => {
-                      setUnselectedProfiles(new Set());
+                      if (isAllChecked) {
+                        const allKeys = [
+                          ...profiles.filter(p => p.exibir !== 0).map(p => p.username.toLowerCase()),
+                          '__DEMAIS__'
+                        ];
+                        setUnselectedProfiles(new Set(allKeys));
+                      } else {
+                        setUnselectedProfiles(new Set());
+                      }
                       setSelectedProfileFilter('Todos');
                       setPostsPage(1);
                     }}
-                    title="Marcar todas as modelos novamente"
+                    title={isAllChecked ? "Clique para desmarcar todas as modelos" : "Clique para marcar todas as modelos"}
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: '4px',
-                      padding: '4px 9px',
-                      borderRadius: '6px',
-                      border: '1px solid rgba(168, 85, 247, 0.45)',
-                      background: 'rgba(113, 0, 226, 0.15)',
-                      color: '#C084FC',
-                      fontSize: '11px',
+                      gap: '6px',
+                      padding: '6px 12px',
+                      height: '32px',
+                      boxSizing: 'border-box',
+                      borderRadius: '8px',
+                      border: isAllChecked ? '1px solid #A855F7' : '1px solid rgba(113, 0, 226, 0.35)',
+                      background: isAllChecked ? '#7100E2' : 'rgba(0, 0, 0, 0.35)',
+                      color: isAllChecked ? '#FFFFFF' : '#8B949E',
+                      fontSize: '12px',
                       fontWeight: 700,
                       cursor: 'pointer',
-                      marginRight: '2px'
+                      transition: 'all 0.15s ease',
+                      whiteSpace: 'nowrap',
+                      boxShadow: isAllChecked ? '0 2px 8px rgba(113, 0, 226, 0.4)' : 'none',
+                      opacity: isAllChecked ? 1 : 0.55,
+                      flexShrink: 0
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isAllChecked) {
+                        e.currentTarget.style.opacity = '0.9';
+                        e.currentTarget.style.borderColor = 'rgba(113, 0, 226, 0.6)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isAllChecked) {
+                        e.currentTarget.style.opacity = '0.55';
+                        e.currentTarget.style.borderColor = 'rgba(113, 0, 226, 0.35)';
+                      }
                     }}
                   >
-                    <Check size={12} strokeWidth={2.8} /> Marcar todas
+                    <span style={{
+                      width: '14px',
+                      height: '14px',
+                      borderRadius: '3px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      boxSizing: 'border-box',
+                      border: isAllChecked ? '1px solid #FFFFFF' : '1px solid rgba(255, 255, 255, 0.25)',
+                      background: isAllChecked ? 'rgba(255, 255, 255, 0.2)' : 'transparent',
+                      transition: 'all 0.15s ease'
+                    }}>
+                      {isAllChecked && <Check size={11} strokeWidth={3} />}
+                    </span>
+                    Marcar todas
                   </button>
-                )}
 
-                {/* Botões individuais de Minhas Modelos */}
-                {[...profiles]
-                  .filter(p => (Number(p.meu_perfil) === 1 || p.meu_perfil === true) && p.exibir !== 0)
-                  .sort((a, b) => a.username.localeCompare(b.username))
-                  .map(p => {
+                  {/* 2. Botão Demais Modelos (ao lado de Marcar Todas, tamanho constante) */}
+                  {temDemais && (
+                    <button
+                      key="__DEMAIS__"
+                      type="button"
+                      onClick={() => {
+                        setUnselectedProfiles(prev => {
+                          const next = new Set(prev);
+                          if (next.has('__DEMAIS__')) next.delete('__DEMAIS__');
+                          else next.add('__DEMAIS__');
+                          return next;
+                        });
+                        setSelectedProfileFilter('Todos');
+                        setPostsPage(1);
+                      }}
+                      title={isDemaisChecked ? "Clique para desmarcar e ocultar as demais modelos" : "Clique para marcar e exibir as demais modelos"}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '6px 12px',
+                        height: '32px',
+                        boxSizing: 'border-box',
+                        borderRadius: '8px',
+                        border: isDemaisChecked ? '1px solid #00F0FF' : '1px solid rgba(0, 240, 255, 0.3)',
+                        background: isDemaisChecked ? 'rgba(0, 240, 255, 0.22)' : 'rgba(0, 0, 0, 0.35)',
+                        color: isDemaisChecked ? '#00F0FF' : '#8B949E',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                        whiteSpace: 'nowrap',
+                        boxShadow: isDemaisChecked ? '0 2px 8px rgba(0, 240, 255, 0.3)' : 'none',
+                        opacity: isDemaisChecked ? 1 : 0.55,
+                        flexShrink: 0
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isDemaisChecked) {
+                          e.currentTarget.style.opacity = '0.9';
+                          e.currentTarget.style.borderColor = 'rgba(0, 240, 255, 0.5)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isDemaisChecked) {
+                          e.currentTarget.style.opacity = '0.55';
+                          e.currentTarget.style.borderColor = 'rgba(0, 240, 255, 0.3)';
+                        }
+                      }}
+                    >
+                      <span style={{
+                        width: '14px',
+                        height: '14px',
+                        borderRadius: '3px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        boxSizing: 'border-box',
+                        border: isDemaisChecked ? '1px solid #00F0FF' : '1px solid rgba(0, 240, 255, 0.3)',
+                        background: isDemaisChecked ? 'rgba(0, 240, 255, 0.25)' : 'transparent',
+                        transition: 'all 0.15s ease'
+                      }}>
+                        {isDemaisChecked && <Check size={11} strokeWidth={3} color="#00F0FF" />}
+                      </span>
+                      <Users size={13} style={{ flexShrink: 0 }} />
+                      Demais Modelos ({demaisCount})
+                    </button>
+                  )}
+
+                  {/* Divisória entre os botões de ação e as modelos individuais */}
+                  {minhasModelos.length > 0 && (
+                    <div style={{ width: '1px', height: '18px', background: 'var(--border-color)', margin: '0 2px', flexShrink: 0 }} />
+                  )}
+
+                  {/* 3. Botões individuais de Minhas Modelos (tamanho constante) */}
+                  {minhasModelos.map(p => {
                     const uKey = p.username.toLowerCase();
                     const isChecked = !unselectedProfiles.has(uKey);
                     return (
@@ -5647,6 +5768,8 @@ export default function Dashboard() {
                           alignItems: 'center',
                           gap: '6px',
                           padding: '6px 12px',
+                          height: '32px',
+                          boxSizing: 'border-box',
                           borderRadius: '8px',
                           border: isChecked ? '1px solid #A855F7' : '1px solid rgba(113, 0, 226, 0.35)',
                           background: isChecked ? '#7100E2' : 'rgba(0, 0, 0, 0.35)',
@@ -5657,7 +5780,8 @@ export default function Dashboard() {
                           transition: 'all 0.15s ease',
                           whiteSpace: 'nowrap',
                           boxShadow: isChecked ? '0 2px 8px rgba(113, 0, 226, 0.4)' : 'none',
-                          opacity: isChecked ? 1 : 0.55
+                          opacity: isChecked ? 1 : 0.55,
+                          flexShrink: 0
                         }}
                         onMouseEnter={(e) => {
                           if (!isChecked) {
@@ -5680,6 +5804,7 @@ export default function Dashboard() {
                           alignItems: 'center',
                           justifyContent: 'center',
                           flexShrink: 0,
+                          boxSizing: 'border-box',
                           border: isChecked ? '1px solid #FFFFFF' : '1px solid rgba(255, 255, 255, 0.25)',
                           background: isChecked ? 'rgba(255, 255, 255, 0.2)' : 'transparent',
                           transition: 'all 0.15s ease'
@@ -5690,82 +5815,9 @@ export default function Dashboard() {
                       </button>
                     );
                   })}
-
-                {/* Divisória e Botão Demais Modelos */}
-                {profiles.some(p => Number(p.meu_perfil) !== 1 && p.meu_perfil !== true && p.exibir !== 0) && (
-                  <>
-                    <div style={{ width: '1px', height: '18px', background: 'var(--border-color)', margin: '0 2px' }} />
-                    {(() => {
-                      const isDemaisChecked = !unselectedProfiles.has('__DEMAIS__');
-                      const demaisCount = profiles.filter(p => Number(p.meu_perfil) !== 1 && p.meu_perfil !== true && p.exibir !== 0).length;
-                      return (
-                        <button
-                          key="__DEMAIS__"
-                          type="button"
-                          onClick={() => {
-                            setUnselectedProfiles(prev => {
-                              const next = new Set(prev);
-                              if (next.has('__DEMAIS__')) next.delete('__DEMAIS__');
-                              else next.add('__DEMAIS__');
-                              return next;
-                            });
-                            setSelectedProfileFilter('Todos');
-                            setPostsPage(1);
-                          }}
-                          title={isDemaisChecked ? "Clique para desmarcar e ocultar as demais modelos" : "Clique para marcar e exibir as demais modelos"}
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            padding: '6px 12px',
-                            borderRadius: '8px',
-                            border: isDemaisChecked ? '1px solid #00F0FF' : '1px solid rgba(0, 240, 255, 0.3)',
-                            background: isDemaisChecked ? 'rgba(0, 240, 255, 0.22)' : 'rgba(0, 0, 0, 0.35)',
-                            color: isDemaisChecked ? '#00F0FF' : '#8B949E',
-                            fontSize: '12px',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            transition: 'all 0.15s ease',
-                            whiteSpace: 'nowrap',
-                            boxShadow: isDemaisChecked ? '0 2px 8px rgba(0, 240, 255, 0.3)' : 'none',
-                            opacity: isDemaisChecked ? 1 : 0.55
-                          }}
-                          onMouseEnter={(e) => {
-                            if (!isDemaisChecked) {
-                              e.currentTarget.style.opacity = '0.9';
-                              e.currentTarget.style.borderColor = 'rgba(0, 240, 255, 0.5)';
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            if (!isDemaisChecked) {
-                              e.currentTarget.style.opacity = '0.55';
-                              e.currentTarget.style.borderColor = 'rgba(0, 240, 255, 0.3)';
-                            }
-                          }}
-                        >
-                          <span style={{
-                            width: '14px',
-                            height: '14px',
-                            borderRadius: '3px',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            flexShrink: 0,
-                            border: isDemaisChecked ? '1px solid #00F0FF' : '1px solid rgba(0, 240, 255, 0.3)',
-                            background: isDemaisChecked ? 'rgba(0, 240, 255, 0.25)' : 'transparent',
-                            transition: 'all 0.15s ease'
-                          }}>
-                            {isDemaisChecked && <Check size={11} strokeWidth={3} color="#00F0FF" />}
-                          </span>
-                          <Users size={13} style={{ flexShrink: 0 }} />
-                          Demais Modelos ({demaisCount})
-                        </button>
-                      );
-                    })()}
-                  </>
-                )}
-              </div>
-            )}
+                </div>
+              );
+            })()}
           </div>
 
           {/* Tabela de Posts */}
