@@ -3,7 +3,8 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   TrendingUp, Users, Calendar, Eye, Target, Percent,
   Activity, MessageSquare, Check, Trash2, Edit, RefreshCw,
-  Film, Image as ImageIcon, Aperture, ChevronLeft, ChevronRight, MousePointerClick, Lock
+  Film, Image as ImageIcon, Aperture, ChevronLeft, ChevronRight, MousePointerClick, Lock,
+  ArrowUp, ArrowDown, Minus
 } from 'lucide-react';
 import { EVENTO_ANALISE_SEMANAL } from './GraficoSemanasRegistradas';
 import AvatarModelo from './AvatarModelo';
@@ -94,6 +95,63 @@ function getProximoPeriodo(ultimoRegistro?: RegistroAnalise | null, offsetSemana
     data_inicio: formatDateLocal(ini),
     data_fim: formatDateLocal(fim)
   };
+}
+
+// Indicador visual de tendência comparando a métrica com a semana imediatamente anterior
+function IndicadorTendencia({
+  atual,
+  anterior,
+  formatar,
+  sufixo = ''
+}: {
+  atual?: number | null;
+  anterior?: number | null;
+  formatar?: (val: number) => string;
+  sufixo?: string;
+}) {
+  if (
+    atual === null ||
+    atual === undefined ||
+    isNaN(Number(atual)) ||
+    anterior === null ||
+    anterior === undefined ||
+    isNaN(Number(anterior))
+  ) {
+    return null;
+  }
+
+  const vAtual = Number(atual);
+  const vAnterior = Number(anterior);
+  const textoAnterior = formatar ? `${formatar(vAnterior)}${sufixo}` : `${vAnterior.toLocaleString('pt-BR')}${sufixo}`;
+
+  if (vAtual > vAnterior) {
+    return (
+      <span
+        title={`Acima do período anterior (${textoAnterior})`}
+        style={{ display: 'inline-flex', alignItems: 'center', lineHeight: 1 }}
+      >
+        <ArrowUp size={12} strokeWidth={3} color="#00FF66" />
+      </span>
+    );
+  }
+  if (vAtual < vAnterior) {
+    return (
+      <span
+        title={`Abaixo do período anterior (${textoAnterior})`}
+        style={{ display: 'inline-flex', alignItems: 'center', lineHeight: 1 }}
+      >
+        <ArrowDown size={12} strokeWidth={3} color="#FF4444" />
+      </span>
+    );
+  }
+  return (
+    <span
+      title={`Igual ao período anterior (${textoAnterior})`}
+      style={{ display: 'inline-flex', alignItems: 'center', lineHeight: 1 }}
+    >
+      <Minus size={12} strokeWidth={3} color="#FFD700" />
+    </span>
+  );
 }
 
 export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }: QuadroAnalisePerfilProps) {
@@ -1408,83 +1466,133 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                 </tr>
               </thead>
               <tbody>
-                {registros.map((r, idx) => (
-                  <tr
-                    key={r.id}
-                    style={{
-                      borderBottom: idx < registros.length - 1 ? '1px solid #21262D' : 'none',
-                      transition: 'background 0.15s'
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.background = '#161B22'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                  >
-                    <td style={{ padding: '10px 12px', fontWeight: 700, color: '#E6EDF3', whiteSpace: 'nowrap' }}>
-                      📅 {fmtDataBr(r.data_inicio)} a {fmtDataBr(r.data_fim)}
-                    </td>
-                    <td style={{ padding: '10px 12px', fontWeight: 700, color: '#00F0FF' }}>
-                      {r.visualizacoes > 0 ? fmtNum(r.visualizacoes) : '—'}
-                    </td>
-                    <td style={{ padding: '10px 12px', color: Number(r.seguidores) < 0 ? '#F87171' : '#10B981', fontWeight: 600 }}>
-                      {Number(r.seguidores) > 0
-                        ? `+${Number(r.seguidores).toLocaleString('pt-BR')}`
-                        : Number(r.seguidores) < 0
-                          ? Number(r.seguidores).toLocaleString('pt-BR')
-                          : '—'}
-                    </td>
-                    <td style={{ padding: '10px 12px', fontWeight: 700, color: '#FF007A' }}>
-                      {r.interacoes > 0 ? fmtNum(r.interacoes) : '—'}
-                    </td>
-                    <td style={{ padding: '10px 12px', color: '#3B82F6' }}>
-                      {r.nao_seguidores_pct > 0 ? `${r.nao_seguidores_pct}%` : '—'}
-                    </td>
-                    <td style={{ padding: '10px 12px', color: '#A855F7' }}>
-                      {r.contas_alcancadas > 0 ? fmtNum(r.contas_alcancadas) : '—'}
-                    </td>
-                    <td style={{ padding: '10px 12px', color: '#F59E0B' }}>
-                      {r.visitas_perfil > 0 ? fmtNum(r.visitas_perfil) : '—'}
-                    </td>
-                    <td style={{ padding: '10px 12px', color: '#10B981', fontWeight: 700 }}>
-                      {r.reels ?? '—'}
-                    </td>
-                    <td style={{ padding: '10px 12px', color: '#38BDF8', fontWeight: 700 }}>
-                      {r.posts ?? '—'}
-                    </td>
-                    <td style={{ padding: '10px 12px', color: '#F472B6', fontWeight: 700 }}>
-                      {r.stories ?? '—'}
-                    </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                      <button
-                        onClick={() => handleEditar(r)}
-                        title="Editar esta semana"
-                        style={{
-                          background: 'rgba(59, 130, 246, 0.12)',
-                          border: '1px solid #3B82F6',
-                          color: '#60A5FA',
-                          borderRadius: '6px',
-                          padding: '4px 8px',
-                          cursor: 'pointer',
-                          marginRight: '6px'
-                        }}
-                      >
-                        <Edit size={12} />
-                      </button>
-                      <button
-                        onClick={() => handleExcluir(r.id)}
-                        title="Excluir esta semana"
-                        style={{
-                          background: 'rgba(239, 68, 68, 0.12)',
-                          border: '1px solid #EF4444',
-                          color: '#F87171',
-                          borderRadius: '6px',
-                          padding: '4px 8px',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {registros.map((r, idx) => {
+                  const prev = registros[idx + 1];
+                  return (
+                    <tr
+                      key={r.id}
+                      style={{
+                        borderBottom: idx < registros.length - 1 ? '1px solid #21262D' : 'none',
+                        transition: 'background 0.15s'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#161B22'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <td style={{ padding: '10px 12px', fontWeight: 700, color: '#E6EDF3', whiteSpace: 'nowrap' }}>
+                        📅 {fmtDataBr(r.data_inicio)} a {fmtDataBr(r.data_fim)}
+                      </td>
+                      <td style={{ padding: '10px 12px', fontWeight: 700, color: '#00F0FF', whiteSpace: 'nowrap' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <span>{r.visualizacoes > 0 ? fmtNum(r.visualizacoes) : '—'}</span>
+                          {r.visualizacoes > 0 && prev && prev.visualizacoes > 0 && (
+                            <IndicadorTendencia atual={r.visualizacoes} anterior={prev.visualizacoes} formatar={fmtNum} />
+                          )}
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px 12px', color: Number(r.seguidores) < 0 ? '#F87171' : '#10B981', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <span>
+                            {Number(r.seguidores) > 0
+                              ? `+${Number(r.seguidores).toLocaleString('pt-BR')}`
+                              : Number(r.seguidores) < 0
+                                ? Number(r.seguidores).toLocaleString('pt-BR')
+                                : '—'}
+                          </span>
+                          {Number(r.seguidores) !== 0 && prev && Number(prev.seguidores) !== 0 && (
+                            <IndicadorTendencia atual={Number(r.seguidores)} anterior={Number(prev.seguidores)} />
+                          )}
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px 12px', fontWeight: 700, color: '#FF007A', whiteSpace: 'nowrap' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <span>{r.interacoes > 0 ? fmtNum(r.interacoes) : '—'}</span>
+                          {r.interacoes > 0 && prev && prev.interacoes > 0 && (
+                            <IndicadorTendencia atual={r.interacoes} anterior={prev.interacoes} formatar={fmtNum} />
+                          )}
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px 12px', color: '#3B82F6', whiteSpace: 'nowrap' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <span>{r.nao_seguidores_pct > 0 ? `${r.nao_seguidores_pct}%` : '—'}</span>
+                          {r.nao_seguidores_pct > 0 && prev && prev.nao_seguidores_pct > 0 && (
+                            <IndicadorTendencia atual={r.nao_seguidores_pct} anterior={prev.nao_seguidores_pct} sufixo="%" />
+                          )}
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px 12px', color: '#A855F7', whiteSpace: 'nowrap' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <span>{r.contas_alcancadas > 0 ? fmtNum(r.contas_alcancadas) : '—'}</span>
+                          {r.contas_alcancadas > 0 && prev && prev.contas_alcancadas > 0 && (
+                            <IndicadorTendencia atual={r.contas_alcancadas} anterior={prev.contas_alcancadas} formatar={fmtNum} />
+                          )}
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px 12px', color: '#F59E0B', whiteSpace: 'nowrap' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <span>{r.visitas_perfil > 0 ? fmtNum(r.visitas_perfil) : '—'}</span>
+                          {r.visitas_perfil > 0 && prev && prev.visitas_perfil > 0 && (
+                            <IndicadorTendencia atual={r.visitas_perfil} anterior={prev.visitas_perfil} formatar={fmtNum} />
+                          )}
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px 12px', color: '#10B981', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <span>{r.reels ?? '—'}</span>
+                          {r.reels !== null && r.reels !== undefined && prev && prev.reels !== null && prev.reels !== undefined && (
+                            <IndicadorTendencia atual={Number(r.reels)} anterior={Number(prev.reels)} />
+                          )}
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px 12px', color: '#38BDF8', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <span>{r.posts ?? '—'}</span>
+                          {r.posts !== null && r.posts !== undefined && prev && prev.posts !== null && prev.posts !== undefined && (
+                            <IndicadorTendencia atual={Number(r.posts)} anterior={Number(prev.posts)} />
+                          )}
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px 12px', color: '#F472B6', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <span>{r.stories ?? '—'}</span>
+                          {r.stories !== null && r.stories !== undefined && prev && prev.stories !== null && prev.stories !== undefined && (
+                            <IndicadorTendencia atual={Number(r.stories)} anterior={Number(prev.stories)} />
+                          )}
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        <button
+                          onClick={() => handleEditar(r)}
+                          title="Editar esta semana"
+                          style={{
+                            background: 'rgba(59, 130, 246, 0.12)',
+                            border: '1px solid #3B82F6',
+                            color: '#60A5FA',
+                            borderRadius: '6px',
+                            padding: '4px 8px',
+                            cursor: 'pointer',
+                            marginRight: '6px'
+                          }}
+                        >
+                          <Edit size={12} />
+                        </button>
+                        <button
+                          onClick={() => handleExcluir(r.id)}
+                          title="Excluir esta semana"
+                          style={{
+                            background: 'rgba(239, 68, 68, 0.12)',
+                            border: '1px solid #EF4444',
+                            color: '#F87171',
+                            borderRadius: '6px',
+                            padding: '4px 8px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
