@@ -1122,11 +1122,17 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                               {item.views_dia !== null && item.views_dia !== undefined &&
                                item.views_dia_anterior !== null && item.views_dia_anterior !== undefined && (
                                 item.views_dia > item.views_dia_anterior ? (
-                                  <ArrowUp size={13} strokeWidth={3} color="#00FF66" title={`Acima do dia anterior (${item.views_dia_anterior.toLocaleString('pt-BR')})`} />
+                                  <span title={`Acima do dia anterior (${item.views_dia_anterior.toLocaleString('pt-BR')})`} style={{ display: 'inline-flex' }}>
+                                    <ArrowUp size={13} strokeWidth={3} color="#00FF66" />
+                                  </span>
                                 ) : item.views_dia < item.views_dia_anterior ? (
-                                  <ArrowDown size={13} strokeWidth={3} color="#FF4444" title={`Abaixo do dia anterior (${item.views_dia_anterior.toLocaleString('pt-BR')})`} />
+                                  <span title={`Abaixo do dia anterior (${item.views_dia_anterior.toLocaleString('pt-BR')})`} style={{ display: 'inline-flex' }}>
+                                    <ArrowDown size={13} strokeWidth={3} color="#FF4444" />
+                                  </span>
                                 ) : (
-                                  <Minus size={13} strokeWidth={3} color="#FFD700" title="Igual ao dia anterior" />
+                                  <span title="Igual ao dia anterior" style={{ display: 'inline-flex' }}>
+                                    <Minus size={13} strokeWidth={3} color="#FFD700" />
+                                  </span>
                                 )
                               )}
                             </span>
