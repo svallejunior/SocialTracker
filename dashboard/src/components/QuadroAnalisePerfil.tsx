@@ -50,7 +50,11 @@ function parseDateLocal(str: string): Date {
   if (parts.length !== 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) {
     return new Date();
   }
-  return new Date(parts[0], parts[1] - 1, parts[2]);
+  let year = parts[0];
+  if (year < 100) year += 2000;
+  const d = new Date(year, parts[1] - 1, parts[2]);
+  d.setFullYear(year);
+  return d;
 }
 
 // Retorna a data de hoje no formato YYYY-MM-DD local
@@ -240,6 +244,12 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
       setForm(f => ({ ...f, data_inicio: '' }));
       return;
     }
+    const parts = val.split('-').map(Number);
+    // Se o ano for menor que 1000 (ex: usuário ainda digitando os dígitos do ano), não corrompe data_fim
+    if (parts[0] < 1000) {
+      setForm(f => ({ ...f, data_inicio: val }));
+      return;
+    }
     const d = parseDateLocal(val);
     const fim = new Date(d);
     fim.setDate(d.getDate() + 6);
@@ -255,6 +265,11 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
       setForm(f => ({ ...f, data_fim: '' }));
       return;
     }
+    const parts = val.split('-').map(Number);
+    if (parts[0] < 1000) {
+      setForm(f => ({ ...f, data_fim: val }));
+      return;
+    }
     const d = parseDateLocal(val);
     const ini = new Date(d);
     ini.setDate(d.getDate() - 6);
@@ -265,10 +280,22 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
     }));
   };
 
+  // Registros sempre ordenados estritamente em ordem decrescente (da data mais recente para a mais antiga)
+  const registrosOrdenados = useMemo(() => {
+    return [...registros].sort((a, b) => {
+      const dataA = a.data_inicio || '';
+      const dataB = b.data_inicio || '';
+      if (dataA !== dataB) {
+        return dataB.localeCompare(dataA); // Ordem decrescente
+      }
+      return (b.id || 0) - (a.id || 0);
+    });
+  }, [registros]);
+
   // Atualiza período ao mudar offset de semana
   const mudarSemana = (novoOffset: number) => {
     setOffsetSemana(novoOffset);
-    const p = getProximoPeriodo(registros[0], novoOffset);
+    const p = getProximoPeriodo(registrosOrdenados[0], novoOffset);
     setForm(f => ({
       ...f,
       data_inicio: p.data_inicio,
@@ -285,7 +312,12 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
       const res = await fetch(`/api/analise?username=${encodeURIComponent(uname)}`);
       const json = await res.json();
       if (json.success) {
-        const novosRegistros: RegistroAnalise[] = json.data || [];
+        const novosRegistros: RegistroAnalise[] = [...(json.data || [])].sort((a: any, b: any) => {
+          const dA = a.data_inicio || '';
+          const dB = b.data_inicio || '';
+          if (dA !== dB) return dB.localeCompare(dA);
+          return (b.id || 0) - (a.id || 0);
+        });
         setRegistros(novosRegistros);
 
         // Se não estiver editando, já sugere automaticamente o próximo período para esta modelo
@@ -344,7 +376,7 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
 
   // Somatório consolidado semanal dos registros da modelo
   const somatorioSemanal = useMemo(() => {
-    const totalSemanas = registros.length;
+    const totalSemanas = registrosOrdenados.length;
     if (totalSemanas === 0) {
       return {
         totalSemanas: 0,
@@ -357,12 +389,12 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
       };
     }
 
-    const totalViews = registros.reduce((acc, r) => acc + (Number(r.visualizacoes) || 0), 0);
-    const ultimosSeguidores = registros[0]?.seguidores ? Number(registros[0].seguidores) : 0;
-    const totalInteracoes = registros.reduce((acc, r) => acc + (Number(r.interacoes) || 0), 0);
-    const mediaNaoSeg = registros.reduce((acc, r) => acc + (Number(r.nao_seguidores_pct) || 0), 0) / totalSemanas;
-    const totalVisualizadores = registros.reduce((acc, r) => acc + (Number(r.contas_alcancadas) || 0), 0);
-    const totalVisitas = registros.reduce((acc, r) => acc + (Number(r.visitas_perfil) || 0), 0);
+    const totalViews = registrosOrdenados.reduce((acc, r) => acc + (Number(r.visualizacoes) || 0), 0);
+    const ultimosSeguidores = registrosOrdenados[0]?.seguidores ? Number(registrosOrdenados[0].seguidores) : 0;
+    const totalInteracoes = registrosOrdenados.reduce((acc, r) => acc + (Number(r.interacoes) || 0), 0);
+    const mediaNaoSeg = registrosOrdenados.reduce((acc, r) => acc + (Number(r.nao_seguidores_pct) || 0), 0) / totalSemanas;
+    const totalVisualizadores = registrosOrdenados.reduce((acc, r) => acc + (Number(r.contas_alcancadas) || 0), 0);
+    const totalVisitas = registrosOrdenados.reduce((acc, r) => acc + (Number(r.visitas_perfil) || 0), 0);
 
     return {
       totalSemanas,
@@ -373,7 +405,7 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
       visualizadores: totalVisualizadores,
       visitas_perfil: totalVisitas
     };
-  }, [registros]);
+  }, [registrosOrdenados]);
 
   // Formatação de números
   const fmtNum = (num: number) => {
@@ -398,6 +430,13 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
     }
     if (!form.data_inicio || !form.data_fim) {
       alert('Por favor, informe o período (de sábado a sexta).');
+      return;
+    }
+
+    const anoIni = Number((form.data_inicio || '').split('-')[0]);
+    const anoFim = Number((form.data_fim || '').split('-')[0]);
+    if (anoIni < 2000 || anoFim < 2000) {
+      alert('Por favor, informe uma data válida com ano de 4 dígitos (ex: 2026).');
       return;
     }
 
@@ -1424,12 +1463,12 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
             <h4 style={{ fontSize: '14px', fontWeight: 800, color: 'white', margin: 0 }}>
-              Histórico de Semanas Registradas ({registros.length})
+              Histórico de Semanas Registradas ({registrosOrdenados.length})
             </h4>
             {loading && <span style={{ fontSize: '12px', color: '#8B949E' }}>Carregando histórico...</span>}
           </div>
 
-          {registros.length === 0 ? (
+          {registrosOrdenados.length === 0 ? (
             <div style={{
               display: 'flex',
               flexDirection: 'column',
@@ -1466,13 +1505,13 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
                 </tr>
               </thead>
               <tbody>
-                {registros.map((r, idx) => {
-                  const prev = registros[idx + 1];
+                {registrosOrdenados.map((r, idx) => {
+                  const prev = registrosOrdenados[idx + 1];
                   return (
                     <tr
                       key={r.id}
                       style={{
-                        borderBottom: idx < registros.length - 1 ? '1px solid #21262D' : 'none',
+                        borderBottom: idx < registrosOrdenados.length - 1 ? '1px solid #21262D' : 'none',
                         transition: 'background 0.15s'
                       }}
                       onMouseEnter={e => e.currentTarget.style.background = '#161B22'}

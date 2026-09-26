@@ -56,6 +56,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Período (data de início e fim) é obrigatório' }, { status: 400 });
     }
 
+    const anoIni = Number((data_inicio || '').split('-')[0]);
+    const anoFim = Number((data_fim || '').split('-')[0]);
+    if (anoIni < 2000 || anoFim < 2000) {
+      return NextResponse.json({ success: false, error: 'O ano da data deve ter 4 dígitos válido (ex: 2026).' }, { status: 400 });
+    }
+
     const dHoje = new Date();
     const hojeStr = `${dHoje.getFullYear()}-${String(dHoje.getMonth() + 1).padStart(2, '0')}-${String(dHoje.getDate()).padStart(2, '0')}`;
     if (data_fim > hojeStr) {
@@ -108,6 +114,14 @@ export async function PUT(req: NextRequest) {
     const username = (body.username || '').trim().toLowerCase().replace(/^@+/, '');
     const data_inicio = body.data_inicio || '';
     const data_fim = body.data_fim || '';
+
+    if (data_inicio || data_fim) {
+      const anoIni = Number((data_inicio || '').split('-')[0]);
+      const anoFim = Number((data_fim || '').split('-')[0]);
+      if ((data_inicio && anoIni < 2000) || (data_fim && anoFim < 2000)) {
+        return NextResponse.json({ success: false, error: 'O ano da data deve ter 4 dígitos válido (ex: 2026).' }, { status: 400 });
+      }
+    }
     const seguidores = Number(body.seguidores) || 0;
     const visualizacoes = Number(body.visualizacoes) || 0;
     const contas_alcancadas = Number(body.contas_alcancadas) || 0;
