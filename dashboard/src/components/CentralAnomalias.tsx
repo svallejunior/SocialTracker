@@ -6,7 +6,8 @@ import { formatDisplayDateBR, formatDisplayDateTimeBR, formatToBrazilDateTime } 
 import {
   AlertTriangle, CheckCircle2, Rocket, Trash2, RefreshCw, TrendingUp, Users,
   FileText, Search, Zap, Filter, Edit3, Calendar, ChevronLeft, ChevronRight,
-  ExternalLink, Sparkles, ShieldAlert, Check, ArrowRight, History
+  ExternalLink, Sparkles, ShieldAlert, Check, ArrowRight, History,
+  ArrowUp, ArrowDown, Minus
 } from 'lucide-react';
 
 interface AnomaliaItem {
@@ -14,6 +15,7 @@ interface AnomaliaItem {
   username: string;
   data_coleta: string;
   views_dia?: number | null;
+  views_dia_anterior?: number | null;
   seguidores: number;
   total_posts: number;
   foto_url: string;
@@ -1113,9 +1115,21 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                                 : 'Sem dados de visualizações para este dia'
                             }
                           >
-                            {item.views_dia !== null && item.views_dia !== undefined
-                              ? item.views_dia.toLocaleString('pt-BR')
-                              : '—'}
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}>
+                              {item.views_dia !== null && item.views_dia !== undefined
+                                ? item.views_dia.toLocaleString('pt-BR')
+                                : '—'}
+                              {item.views_dia !== null && item.views_dia !== undefined &&
+                               item.views_dia_anterior !== null && item.views_dia_anterior !== undefined && (
+                                item.views_dia > item.views_dia_anterior ? (
+                                  <ArrowUp size={13} strokeWidth={3} color="#00FF66" title={`Acima do dia anterior (${item.views_dia_anterior.toLocaleString('pt-BR')})`} />
+                                ) : item.views_dia < item.views_dia_anterior ? (
+                                  <ArrowDown size={13} strokeWidth={3} color="#FF4444" title={`Abaixo do dia anterior (${item.views_dia_anterior.toLocaleString('pt-BR')})`} />
+                                ) : (
+                                  <Minus size={13} strokeWidth={3} color="#FFD700" title="Igual ao dia anterior" />
+                                )
+                              )}
+                            </span>
                           </td>
 
                           {/* 3. Seguidores */}

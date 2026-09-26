@@ -178,19 +178,27 @@ export async function GET(request: NextRequest) {
           LAG(max_views) OVER (PARTITION BY uname, post_id ORDER BY dia) as prev_views
         FROM daily_post_views
       ),
-      views_por_dia AS (
-        SELECT 
+      views_por_dia_raw AS (
+        SELECT
           uname,
           dia,
           SUM(
-            CASE 
+            CASE
               WHEN prev_views IS NOT NULL THEN MAX(0, max_views - prev_views)
               WHEN dia_postagem = dia THEN max_views
-              ELSE 0 
+              ELSE 0
             END
           ) as views_dia
         FROM with_prev_views
         GROUP BY uname, dia
+      ),
+      views_por_dia AS (
+        SELECT
+          uname,
+          dia,
+          views_dia,
+          LAG(views_dia) OVER (PARTITION BY uname ORDER BY dia) as views_dia_anterior
+        FROM views_por_dia_raw
       )
       SELECT
         h.id,
@@ -206,7 +214,8 @@ export async function GET(request: NextRequest) {
         COALESCE(NULLIF(pm.foto_perfil_meta, ''), NULLIF(cp.foto_url, ''), '') as foto_url,
         COALESCE(pm.primeira_postagem, cp.inicio) as primeira_postagem,
         COALESCE(pm.meu_perfil, 0) as meu_perfil,
-        v.views_dia
+        v.views_dia,
+        v.views_dia_anterior
       FROM historico_com_anterior h
       LEFT JOIN perfis_monitorados pm ON LOWER(pm.username) = LOWER(h.username)
       LEFT JOIN controle_perfis cp ON LOWER(cp.username) = LOWER(h.username)
@@ -291,6 +300,7 @@ export async function GET(request: NextRequest) {
         username: item.username,
         data_coleta: item.data_coleta,
         views_dia: item.views_dia !== null && item.views_dia !== undefined ? Number(item.views_dia) : null,
+        views_dia_anterior: item.views_dia_anterior !== null && item.views_dia_anterior !== undefined ? Number(item.views_dia_anterior) : null,
         seguidores: item.seguidores,
         total_posts: item.total_posts,
         foto_url: item.foto_url || '',
