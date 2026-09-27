@@ -8,7 +8,7 @@ import {
   TrendingUp, ExternalLink, LogOut, Calendar, Search, Users, MessageSquare, Eye, EyeOff, Heart, Filter,
   BarChart3, Play, Hash, Hash as TagIcon, Image as ImageIcon, Film as VideoIcon, Layers as LayersIcon,
   HelpCircle, CheckCircle2, DollarSign, Wallet, FileText, X, Brain, AlertTriangle, BadgeCheck, History,
-  Smartphone, RefreshCw, Clock, Sliders, ChevronRight, PlusCircle, Film, Target, Check, Hourglass
+  Smartphone, RefreshCw, Clock, Sliders, ChevronRight, PlusCircle, Film, Target, Check
 } from "lucide-react";
 import {
   LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, AreaChart, Area, ReferenceLine, CartesianGrid,
@@ -4151,9 +4151,9 @@ export default function Dashboard() {
                         onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
                       >
                         {perfil.mineracao ? (
-                          <Hourglass size={18} color="#F59E0B" style={{ filter: 'drop-shadow(0 0 5px rgba(245, 158, 11, 0.6))' }} />
+                          <Search size={18} strokeWidth={2.5} color="#00F0FF" style={{ filter: 'drop-shadow(0 0 5px rgba(0, 240, 255, 0.6))' }} />
                         ) : (
-                          <Hourglass size={18} color="#444C56" style={{ opacity: 0.35 }} />
+                          <Search size={18} strokeWidth={2} color="#444C56" style={{ opacity: 0.35 }} />
                         )}
                       </button>
                     </div>
