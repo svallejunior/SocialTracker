@@ -6,7 +6,8 @@ import {
   Smartphone, Calendar, CheckCircle2, Copy, Check, ArrowRight,
   RotateCcw, Sparkles, AlertTriangle, Layers,
   UserPlus, UserMinus, Users, Target, ChevronDown, ChevronUp, RefreshCw, Edit3,
-  Clock, ExternalLink, ShieldCheck, Video, HelpCircle, AlertOctagon
+  Clock, ExternalLink, ShieldCheck, Video, HelpCircle, AlertOctagon,
+  ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 interface Props {
@@ -32,6 +33,7 @@ export default function ModalTarefasModelo({ isOpen, onClose, modelo, onSaveConf
   const [copiado, setCopiado] = useState(false);
   const [etapaManual, setEtapaManual] = useState<'AUTO' | 'PERGUNTAR_SITUACAO' | 'ESCOLHER_ESTEIRA' | 'VER_TAREFAS'>('AUTO');
   const [tarefasConcluidas, setTarefasConcluidas] = useState<Record<string, boolean>>({});
+  const [diaAceleradoSelecionado, setDiaAceleradoSelecionado] = useState<number>(4);
 
   // Estado para Contabilidade de Follows & Unfollows do Dia
   const [followStats, setFollowStats] = useState<{
@@ -152,7 +154,7 @@ export default function ModalTarefasModelo({ isOpen, onClose, modelo, onSaveConf
 
   // Identifica quais tarefas são operacionais diárias (rotina diária que deve zerar a cada dia)
   const isDailyTask = (id: string): boolean => {
-    return id.startsWith('aq_') || id.startsWith('d4_');
+    return id.startsWith('aq_');
   };
 
   // Carrega estado de checkboxes salvo em localStorage por modelo com controle de data diária
@@ -1673,66 +1675,243 @@ CRONOGRAMA DIÁRIO:
                     </div>
                   </div>
 
-                  {/* BLOCO 4: DIA 4 ATÉ O DIA 20 */}
+                  {/* BLOCO 4: DIA 4 ATÉ O DIA 20 (SELETOR DINÂMICO DE DIAS) */}
                   <div style={{
                     background: 'linear-gradient(180deg, #161B22 0%, rgba(22, 27, 34, 0.6) 100%)',
                     border: '1.5px solid rgba(0, 255, 102, 0.3)',
                     borderRadius: 12,
                     padding: '18px 20px'
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                    {/* Cabeçalho do Bloco */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <Calendar size={16} color="#00FF66" />
                         <span style={{ fontSize: 13, fontWeight: 800, color: '#00FF66', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-                          DIA 4: ESCALA DIÁRIA (REPITA ATÉ O DIA 20)
+                          ESCALA DIÁRIA (DIA 4 AO DIA 20)
                         </span>
                       </div>
-                      <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: 'rgba(0, 255, 102, 0.15)', color: '#00FF66' }}>
-                        REPITA ATÉ O DIA 20
-                      </span>
+                      {(() => {
+                        const totalCompletos = Array.from({ length: 17 }, (_, i) => i + 4).filter(d =>
+                          [1, 2, 3, 4, 5, 6].every(num => Boolean(tarefasConcluidas[`d${d}_${num}`]))
+                        ).length;
+                        return (
+                          <span style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            padding: '3px 10px',
+                            borderRadius: 6,
+                            background: totalCompletos === 17 ? 'rgba(0, 255, 102, 0.25)' : 'rgba(0, 255, 102, 0.12)',
+                            color: '#00FF66',
+                            border: '1px solid rgba(0, 255, 102, 0.25)'
+                          }}>
+                            {totalCompletos}/17 DIAS CONCLUÍDOS
+                          </span>
+                        );
+                      })()}
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {[
-                        { id: 'd4_1', texto: 'Poste 2 REELS por dia' },
-                        { id: 'd4_2', texto: 'Poste 1 FEED por dia' },
-                        { id: 'd4_3', texto: 'Poste 1 STORY por dia' },
-                        { id: 'd4_4', texto: 'Consuma conteúdo (pelo menos 15 minutos diários)' },
-                        { id: 'd4_5', texto: 'Siga entre 10 modelos de conteúdo adulto OU DE LEAD (5/5, 3/7, etc..)' },
-                        { id: 'd4_6', texto: '5 curtidas + comentários por dia, NÃO MAIS QUE ISSO' },
-                      ].map(item => {
-                        const checked = Boolean(tarefasConcluidas[item.id]);
-                        return (
-                          <div
-                            key={item.id}
-                            onClick={() => toggleCheck(item.id)}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 10,
-                              background: checked ? 'rgba(0, 255, 102, 0.06)' : 'rgba(0, 0, 0, 0.2)',
-                              border: `1px solid ${checked ? 'rgba(0, 255, 102, 0.3)' : '#21262D'}`,
-                              borderRadius: 8,
-                              padding: '8px 12px',
-                              cursor: 'pointer',
-                              transition: 'all 0.15s'
-                            }}
-                          >
-                            <span style={{ color: checked ? '#00FF66' : '#8B949E' }}>
-                              {checked ? <CheckSquare size={16} /> : <Square size={16} />}
-                            </span>
-                            <span style={{
-                              fontSize: 12,
-                              fontWeight: 600,
-                              color: checked ? '#00FF66' : '#C9D1D9',
-                              textDecoration: checked ? 'line-through' : 'none'
-                            }}>
-                              {item.texto}
-                            </span>
-                          </div>
-                        );
-                      })}
+                    {/* Barra Seletora de Dias (Pills Dia 4 a Dia 20) */}
+                    <div style={{ marginBottom: 16 }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: '#8B949E', marginBottom: 8 }}>
+                        Selecione o dia para acompanhar e marcar as tarefas:
+                      </div>
+                      <div style={{
+                        display: 'flex',
+                        gap: 6,
+                        overflowX: 'auto',
+                        paddingBottom: 6,
+                        scrollbarWidth: 'thin'
+                      }}>
+                        {Array.from({ length: 17 }, (_, i) => i + 4).map(dia => {
+                          const isSelected = diaAceleradoSelecionado === dia;
+                          const concluidas = [1, 2, 3, 4, 5, 6].filter(num => Boolean(tarefasConcluidas[`d${dia}_${num}`])).length;
+                          const completo = concluidas === 6;
+
+                          return (
+                            <button
+                              key={dia}
+                              type="button"
+                              onClick={() => setDiaAceleradoSelecionado(dia)}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 5,
+                                padding: '6px 12px',
+                                borderRadius: 8,
+                                fontSize: 12,
+                                fontWeight: isSelected ? 800 : 600,
+                                cursor: 'pointer',
+                                whiteSpace: 'nowrap',
+                                transition: 'all 0.15s ease',
+                                background: isSelected
+                                  ? 'rgba(0, 255, 102, 0.2)'
+                                  : completo
+                                  ? 'rgba(0, 255, 102, 0.08)'
+                                  : 'rgba(0, 0, 0, 0.25)',
+                                border: isSelected
+                                  ? '1.5px solid #00FF66'
+                                  : completo
+                                  ? '1px solid rgba(0, 255, 102, 0.4)'
+                                  : '1px solid #30363D',
+                                color: isSelected
+                                  ? '#00FF66'
+                                  : completo
+                                  ? '#00FF66'
+                                  : '#C9D1D9',
+                                boxShadow: isSelected ? '0 0 10px rgba(0, 255, 102, 0.25)' : 'none'
+                              }}
+                            >
+                              <span>Dia {dia}</span>
+                              {completo ? (
+                                <Check size={12} color="#00FF66" strokeWidth={3} />
+                              ) : concluidas > 0 ? (
+                                <span style={{
+                                  fontSize: 10,
+                                  background: 'rgba(0, 255, 102, 0.15)',
+                                  color: '#00FF66',
+                                  padding: '1px 4px',
+                                  borderRadius: 4
+                                }}>
+                                  {concluidas}/6
+                                </span>
+                              ) : null}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
+
+                    {/* Detalhes do Dia Selecionado */}
+                    {(() => {
+                      const tarefasDoDia = [
+                        { id: `d${diaAceleradoSelecionado}_1`, texto: 'Poste 2 REELS por dia' },
+                        { id: `d${diaAceleradoSelecionado}_2`, texto: 'Poste 1 FEED por dia' },
+                        { id: `d${diaAceleradoSelecionado}_3`, texto: 'Poste 1 STORY por dia' },
+                        { id: `d${diaAceleradoSelecionado}_4`, texto: 'Consuma conteúdo (pelo menos 15 minutos diários)' },
+                        { id: `d${diaAceleradoSelecionado}_5`, texto: 'Siga entre 10 modelos de conteúdo adulto OU DE LEAD (5/5, 3/7, etc..)' },
+                        { id: `d${diaAceleradoSelecionado}_6`, texto: '5 curtidas + comentários por dia, NÃO MAIS QUE ISSO' },
+                      ];
+                      const totalFeitas = tarefasDoDia.filter(t => Boolean(tarefasConcluidas[t.id])).length;
+                      const diaCompleto = totalFeitas === 6;
+
+                      return (
+                        <div style={{
+                          background: 'rgba(0, 0, 0, 0.25)',
+                          border: `1px solid ${diaCompleto ? 'rgba(0, 255, 102, 0.4)' : '#30363D'}`,
+                          borderRadius: 10,
+                          padding: '14px 16px'
+                        }}>
+                          {/* Barra de Navegação do Dia */}
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            marginBottom: 12,
+                            flexWrap: 'wrap',
+                            gap: 10
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ fontSize: 13, fontWeight: 800, color: diaCompleto ? '#00FF66' : '#F0F6FC' }}>
+                                DIA {diaAceleradoSelecionado} DE 20
+                              </span>
+                              <span style={{
+                                fontSize: 11,
+                                fontWeight: 700,
+                                padding: '2px 8px',
+                                borderRadius: 6,
+                                background: diaCompleto ? 'rgba(0, 255, 102, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                                color: diaCompleto ? '#00FF66' : '#8B949E',
+                                border: `1px solid ${diaCompleto ? 'rgba(0, 255, 102, 0.4)' : '#30363D'}`
+                              }}>
+                                {diaCompleto ? '✓ DIA CONCLUÍDO!' : `${totalFeitas}/6 CONCLUÍDAS`}
+                              </span>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <button
+                                type="button"
+                                disabled={diaAceleradoSelecionado <= 4}
+                                onClick={() => setDiaAceleradoSelecionado(prev => Math.max(4, prev - 1))}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  padding: '4px 10px',
+                                  borderRadius: 6,
+                                  fontSize: 11,
+                                  fontWeight: 600,
+                                  background: diaAceleradoSelecionado <= 4 ? 'rgba(255, 255, 255, 0.02)' : 'rgba(255, 255, 255, 0.06)',
+                                  border: '1px solid #30363D',
+                                  color: diaAceleradoSelecionado <= 4 ? '#484F58' : '#C9D1D9',
+                                  cursor: diaAceleradoSelecionado <= 4 ? 'not-allowed' : 'pointer'
+                                }}
+                              >
+                                <ChevronLeft size={13} />
+                                Dia Anterior
+                              </button>
+
+                              <button
+                                type="button"
+                                disabled={diaAceleradoSelecionado >= 20}
+                                onClick={() => setDiaAceleradoSelecionado(prev => Math.min(20, prev + 1))}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  padding: '4px 10px',
+                                  borderRadius: 6,
+                                  fontSize: 11,
+                                  fontWeight: 600,
+                                  background: diaAceleradoSelecionado >= 20 ? 'rgba(255, 255, 255, 0.02)' : 'rgba(255, 255, 255, 0.06)',
+                                  border: '1px solid #30363D',
+                                  color: diaAceleradoSelecionado >= 20 ? '#484F58' : '#C9D1D9',
+                                  cursor: diaAceleradoSelecionado >= 20 ? 'not-allowed' : 'pointer'
+                                }}
+                              >
+                                Próximo Dia
+                                <ChevronRight size={13} />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Lista de Checkboxes do Dia */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {tarefasDoDia.map(item => {
+                              const checked = Boolean(tarefasConcluidas[item.id]);
+                              return (
+                                <div
+                                  key={item.id}
+                                  onClick={() => toggleCheck(item.id)}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 10,
+                                    background: checked ? 'rgba(0, 255, 102, 0.06)' : 'rgba(0, 0, 0, 0.2)',
+                                    border: `1px solid ${checked ? 'rgba(0, 255, 102, 0.3)' : '#21262D'}`,
+                                    borderRadius: 8,
+                                    padding: '8px 12px',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.15s'
+                                  }}
+                                >
+                                  <span style={{ color: checked ? '#00FF66' : '#8B949E' }}>
+                                    {checked ? <CheckSquare size={16} /> : <Square size={16} />}
+                                  </span>
+                                  <span style={{
+                                    fontSize: 12,
+                                    fontWeight: 600,
+                                    color: checked ? '#00FF66' : '#C9D1D9',
+                                    textDecoration: checked ? 'line-through' : 'none'
+                                  }}>
+                                    {item.texto}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               )}
