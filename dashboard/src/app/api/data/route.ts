@@ -918,7 +918,8 @@ export async function PUT(request: NextRequest) {
       seguidores,
       inativo,
       is_verified,
-      isVerified
+      isVerified,
+      mineracao
     } = body;
 
     if (!username) {
@@ -1047,6 +1048,12 @@ export async function PUT(request: NextRequest) {
     if (isVerifiedVal !== undefined) {
       fields.push("is_verified = ?");
       params.push(isVerifiedVal ? 1 : 0);
+    }
+
+    const mineracaoVal = mineracao !== undefined ? mineracao : body.mineracao;
+    if (mineracaoVal !== undefined) {
+      fields.push("mineracao = ?");
+      params.push(mineracaoVal ? 1 : 0);
     }
 
     if (exibir !== undefined) {

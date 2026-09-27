@@ -8,7 +8,7 @@ import {
   TrendingUp, ExternalLink, LogOut, Calendar, Search, Users, MessageSquare, Eye, EyeOff, Heart, Filter,
   BarChart3, Play, Hash, Hash as TagIcon, Image as ImageIcon, Film as VideoIcon, Layers as LayersIcon,
   HelpCircle, CheckCircle2, DollarSign, Wallet, FileText, X, Brain, AlertTriangle, BadgeCheck, History,
-  Smartphone, RefreshCw, Clock, Sliders, ChevronRight, PlusCircle, Film, Target, Check
+  Smartphone, RefreshCw, Clock, Sliders, ChevronRight, PlusCircle, Film, Target, Check, Hourglass
 } from "lucide-react";
 import {
   LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, AreaChart, Area, ReferenceLine, CartesianGrid,
@@ -2108,7 +2108,7 @@ export default function Dashboard() {
       setAcompSortDir(acompSortDir === 'asc' ? 'desc' : 'asc');
     } else {
       setAcompSortField(field);
-      setAcompSortDir(['meu_perfil', 'performance_score', 'seguidores', 'evolucao', 'pctCrescimento', 'is_verified'].includes(field) ? 'desc' : 'asc');
+      setAcompSortDir(['meu_perfil', 'performance_score', 'seguidores', 'evolucao', 'pctCrescimento', 'is_verified', 'mineracao'].includes(field) ? 'desc' : 'asc');
     }
   };
 
@@ -2228,6 +2228,9 @@ export default function Dashboard() {
         } else if (acompSortField === 'pctCrescimento') {
           av = a.pctCrescimento ?? -Infinity;
           bv = b.pctCrescimento ?? -Infinity;
+        } else if (acompSortField === 'mineracao') {
+          av = Number(a.mineracao) || 0;
+          bv = Number(b.mineracao) || 0;
         } else if (acompSortField === 'is_verified') {
           av = Number(a.is_verified) || 0;
           bv = Number(b.is_verified) || 0;
@@ -3980,8 +3983,8 @@ export default function Dashboard() {
             <div style={{
               display: "grid",
               gridTemplateColumns: isMaster2802
-                ? "1.3fr 85px 90px 120px 70px 110px 110px 125px 110px 80px 80px 44px 95px 85px"
-                : "1.3fr 85px 90px 120px 70px 110px 110px 125px 110px 80px 80px 44px",
+                ? "1.3fr 90px 85px 90px 120px 70px 110px 110px 125px 110px 80px 80px 44px 95px 85px"
+                : "1.3fr 90px 85px 90px 120px 70px 110px 110px 125px 110px 80px 80px 44px",
               padding: "12px 16px",
               borderBottom: "1px solid #30363D",
               color: "#8B949E",
@@ -3990,10 +3993,11 @@ export default function Dashboard() {
               textTransform: "uppercase",
               letterSpacing: "0.05em",
               alignItems: "center",
-              minWidth: isMaster2802 ? 1420 : 1240
+              minWidth: isMaster2802 ? 1510 : 1330
             }}>
               {([
                 { key: 'username', label: 'Perfil', align: 'left' },
+                { key: 'mineracao', label: 'Mineiração', align: 'center' },
                 { key: 'is_verified', label: 'Verificado', align: 'center' },
                 { key: 'performance_score', label: 'Score PS', align: 'center' },
                 { key: 'primeira_postagem', label: '1ª Post', align: 'center' },
@@ -4054,12 +4058,12 @@ export default function Dashboard() {
                     style={{
                       display: "grid",
                       gridTemplateColumns: isMaster2802
-                        ? "1.3fr 85px 90px 120px 70px 110px 110px 125px 110px 80px 80px 44px 95px 85px"
-                        : "1.3fr 85px 90px 120px 70px 110px 110px 125px 110px 80px 80px 44px",
+                        ? "1.3fr 90px 85px 90px 120px 70px 110px 110px 125px 110px 80px 80px 44px 95px 85px"
+                        : "1.3fr 90px 85px 90px 120px 70px 110px 110px 125px 110px 80px 80px 44px",
                       padding: "14px 16px",
                       borderBottom: idx < profilesFiltrados.length - 1 ? "1px solid #21262D" : "none",
                       alignItems: "center",
-                      minWidth: isMaster2802 ? 1420 : 1240,
+                      minWidth: isMaster2802 ? 1510 : 1330,
                       transition: "background 0.15s",
                       background: isMorreu ? 'rgba(248,81,73,0.08)' : (isYellowRow ? 'rgba(245,158,11,0.08)' : (isGreenRow ? 'rgba(46,160,67,0.08)' : 'transparent')),
                       borderLeft: isMorreu ? '3px solid #F85149' : (isYellowRow ? '3px solid #F59E0B' : (isGreenRow ? '3px solid #2ea043' : '3px solid transparent')),
@@ -4117,6 +4121,42 @@ export default function Dashboard() {
                         </div>
                       </div>
                     </a>
+
+                    {/* ── Mineiração (Ampulheta) ── */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <button
+                        title={perfil.mineracao ? "Perfil em mineração (clique para alternar)" : "Marcar perfil em mineração"}
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          const novoValor = perfil.mineracao ? 0 : 1;
+                          setProfiles(prev => prev.map(p => p.username === perfil.username ? { ...p, mineracao: novoValor } : p));
+                          await fetch('/api/data', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username: perfil.username, mineracao: novoValor })
+                          });
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          padding: 4,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderRadius: '50%',
+                          transition: 'transform 0.15s, opacity 0.15s',
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.2)')}
+                        onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+                      >
+                        {perfil.mineracao ? (
+                          <Hourglass size={18} color="#F59E0B" style={{ filter: 'drop-shadow(0 0 5px rgba(245, 158, 11, 0.6))' }} />
+                        ) : (
+                          <Hourglass size={18} color="#444C56" style={{ opacity: 0.35 }} />
+                        )}
+                      </button>
+                    </div>
 
                     {/* ── Verificado (Instagram Verified) ── */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

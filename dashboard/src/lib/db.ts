@@ -47,6 +47,12 @@ async function ensureSchema(db: Db): Promise<void> {
     if (!colNames.has("favorito")) {
       await db.exec(`ALTER TABLE perfis_monitorados ADD COLUMN favorito INTEGER NOT NULL DEFAULT 0`);
     }
+    if (!colNames.has("is_verified")) {
+      await db.exec(`ALTER TABLE perfis_monitorados ADD COLUMN is_verified INTEGER NOT NULL DEFAULT 0`);
+    }
+    if (!colNames.has("mineracao")) {
+      await db.exec(`ALTER TABLE perfis_monitorados ADD COLUMN mineracao INTEGER NOT NULL DEFAULT 0`);
+    }
     if (!colNames.has("tipo_conta")) {
       await db.exec(`ALTER TABLE perfis_monitorados ADD COLUMN tipo_conta TEXT DEFAULT 'Geral'`);
     }
