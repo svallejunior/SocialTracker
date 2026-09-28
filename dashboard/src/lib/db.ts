@@ -375,6 +375,33 @@ async function ensureSchema(db: Db): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_crm_transacoes_cliente ON crm_transacoes(cliente_id);
   `);
 
+  // --- Produtividade: checklist diário de tarefas por modelo, agrupado pela senha responsável ---
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS produtividade_perfil_senha (
+      username TEXT PRIMARY KEY,
+      senha TEXT NOT NULL,
+      atualizado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS produtividade_tarefas (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL,
+      texto TEXT NOT NULL,
+      ativa INTEGER NOT NULL DEFAULT 1,
+      criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_produtividade_tarefas_username ON produtividade_tarefas(username);
+
+    CREATE TABLE IF NOT EXISTS produtividade_conclusoes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tarefa_id INTEGER NOT NULL REFERENCES produtividade_tarefas(id) ON DELETE CASCADE,
+      data_ref TEXT NOT NULL,
+      concluida_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(tarefa_id, data_ref)
+    );
+    CREATE INDEX IF NOT EXISTS idx_produtividade_conclusoes_tarefa_data ON produtividade_conclusoes(tarefa_id, data_ref);
+  `);
+
   // Vínculo lançamento ↔ transação do CRM: cada venda registrada no CRM gera um
   // lançamento "recebido" no extrato da Análise, removido junto com a transação.
   try {

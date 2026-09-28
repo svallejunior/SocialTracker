@@ -8,7 +8,7 @@ import {
   TrendingUp, ExternalLink, LogOut, Calendar, Search, Users, MessageSquare, Eye, EyeOff, Heart, Filter,
   BarChart3, Play, Hash, Hash as TagIcon, Image as ImageIcon, Film as VideoIcon, Layers as LayersIcon,
   HelpCircle, CheckCircle2, DollarSign, Wallet, FileText, X, Brain, AlertTriangle, BadgeCheck, History,
-  Smartphone, RefreshCw, Clock, Sliders, ChevronRight, PlusCircle, Film, Target, Check
+  Smartphone, RefreshCw, Clock, Sliders, ChevronRight, PlusCircle, Film, Target, Check, ClipboardCheck
 } from "lucide-react";
 import {
   LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, AreaChart, Area, ReferenceLine, CartesianGrid,
@@ -189,6 +189,10 @@ const CentralRespostas = nextDynamic(() => import("../components/CentralResposta
   ssr: false,
 });
 const CentralCRM = nextDynamic(() => import("../components/CentralCRM"), {
+  loading: TabLoading,
+  ssr: false,
+});
+const CentralProdutividade = nextDynamic(() => import("../components/CentralProdutividade"), {
   loading: TabLoading,
   ssr: false,
 });
@@ -2044,7 +2048,7 @@ export default function Dashboard() {
   }, [ultimaAtualizacaoGeral]);
 
   // Estados de Navegação e Filtros
-  const [activeTab, setActiveTab] = useState<'perfis' | 'cards' | 'graficos' | 'posts' | 'anomalias' | 'automatizacao' | 'respostas' | 'crm'>('perfis');
+  const [activeTab, setActiveTab] = useState<'perfis' | 'produtividade' | 'cards' | 'graficos' | 'posts' | 'anomalias' | 'automatizacao' | 'respostas' | 'crm'>('perfis');
   const [anomaliasCount, setAnomaliasCount] = useState<number>(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFormats, setSelectedFormats] = useState<Set<string>>(new Set(['Imagem', 'Carrossel', 'Reels']));
@@ -3250,38 +3254,11 @@ export default function Dashboard() {
               Perfis
             </button>
             <button
-              className={`tab-btn ${activeTab === 'graficos' ? 'active' : ''}`}
-              onClick={() => setActiveTab('graficos')}
+              className={`tab-btn ${activeTab === 'produtividade' ? 'active' : ''}`}
+              onClick={() => setActiveTab('produtividade')}
             >
-              <BarChart3 size={16} />
-              Análise
-            </button>
-            {/* Temporariamente ocultado a pedido do usuário */}
-            {/*
-            <button
-              className={`tab-btn ${activeTab === 'cards' ? 'active' : ''}`}
-              onClick={() => setActiveTab('cards')}
-            >
-              <BarChart3 size={16} />
-              Posts Virais
-            </button>
-            */}
-            <button
-              className={`tab-btn ${activeTab === 'posts' ? 'active' : ''}`}
-              onClick={() => setActiveTab('posts')}
-            >
-              <LayersIcon size={16} />
-              Feed Geral
-            </button>
-            <button
-              className={`tab-btn ${activeTab === 'anomalias' ? 'active' : ''}`}
-              onClick={() => setActiveTab('anomalias')}
-            >
-              <History size={16} />
-              Histórico Conta
-              {anomaliasCount > 0 && (
-                <span className="tab-badge">{anomaliasCount}</span>
-              )}
+              <ClipboardCheck size={16} />
+              Produtividade
             </button>
             <button
               className={`tab-btn ${activeTab === 'automatizacao' ? 'active' : ''}`}
@@ -3308,6 +3285,40 @@ export default function Dashboard() {
                 ) : null;
               })()}
             </button>
+            <button
+              className={`tab-btn ${activeTab === 'posts' ? 'active' : ''}`}
+              onClick={() => setActiveTab('posts')}
+            >
+              <LayersIcon size={16} />
+              Feed Geral
+            </button>
+            <button
+              className={`tab-btn ${activeTab === 'anomalias' ? 'active' : ''}`}
+              onClick={() => setActiveTab('anomalias')}
+            >
+              <History size={16} />
+              Histórico Conta
+              {anomaliasCount > 0 && (
+                <span className="tab-badge">{anomaliasCount}</span>
+              )}
+            </button>
+            <button
+              className={`tab-btn ${activeTab === 'graficos' ? 'active' : ''}`}
+              onClick={() => setActiveTab('graficos')}
+            >
+              <BarChart3 size={16} />
+              Análise
+            </button>
+            {/* Temporariamente ocultado a pedido do usuário */}
+            {/*
+            <button
+              className={`tab-btn ${activeTab === 'cards' ? 'active' : ''}`}
+              onClick={() => setActiveTab('cards')}
+            >
+              <BarChart3 size={16} />
+              Posts Virais
+            </button>
+            */}
             <button
               className={`tab-btn ${activeTab === 'crm' ? 'active' : ''}`}
               onClick={() => setActiveTab('crm')}
@@ -6194,6 +6205,17 @@ export default function Dashboard() {
           </div>
           <CentralAnomalias onCountUpdate={(count: number) => setAnomaliasCount(count)} />
         </div>
+      )}
+
+      {/* ====================================================
+        ABA: PRODUTIVIDADE (CHECKLIST DIÁRIO POR MODELO)
+      ==================================================== */}
+      {activeTab === 'produtividade' && (
+        <CentralProdutividade
+          profiles={profiles}
+          userRole={userRole}
+          isMaster2802={isMaster2802}
+        />
       )}
 
       {/* ====================================================
