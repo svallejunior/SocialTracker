@@ -441,10 +441,16 @@ export async function GET() {
         }
       }
 
+      // origem IN ('AGENDADOR','MANUAL') é essencial: exclui as linhas 'META_API' que a
+      // ingestão grava ao sincronizar o histórico real do Instagram. Sem esse filtro, todo
+      // post confirmado (inclusive os "AGENDADO_INSTAGRAM" que o próprio usuário publicou
+      // manualmente) entrava em hist E em auto ao mesmo tempo, zerando "hist - auto" e
+      // fazendo a marcação do Instagram nunca dar baixa em hoje_*_ag.
       const autoPubsHoje = await db.all(`
         SELECT LOWER(username) as uname, tipo_postagem, COUNT(DISTINCT COALESCE(NULLIF(meta_media_id, ''), id)) as total
         FROM automacao_publicacoes
         WHERE status = 'PUBLICADO' AND (is_deleted IS NULL OR is_deleted = 0) AND (data_local = ? OR publicado_em LIKE ?)
+          AND origem IN ('AGENDADOR', 'MANUAL')
         GROUP BY LOWER(username), tipo_postagem
       `, [hojeIso, `${hojeIso}%`]).catch(() => []);
 
