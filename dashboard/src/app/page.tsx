@@ -3256,6 +3256,8 @@ export default function Dashboard() {
               <BarChart3 size={16} />
               Análise
             </button>
+            {/* Temporariamente ocultado a pedido do usuário */}
+            {/*
             <button
               className={`tab-btn ${activeTab === 'cards' ? 'active' : ''}`}
               onClick={() => setActiveTab('cards')}
@@ -3263,6 +3265,7 @@ export default function Dashboard() {
               <BarChart3 size={16} />
               Posts Virais
             </button>
+            */}
             <button
               className={`tab-btn ${activeTab === 'posts' ? 'active' : ''}`}
               onClick={() => setActiveTab('posts')}
