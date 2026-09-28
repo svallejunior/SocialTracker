@@ -6,7 +6,7 @@ import { formatDisplayDateBR, formatDisplayDateTimeBR, formatToBrazilDateTime } 
 import {
   AlertTriangle, CheckCircle2, Rocket, Trash2, RefreshCw, TrendingUp, Users,
   FileText, Search, Zap, Filter, Edit3, Calendar, ChevronLeft, ChevronRight,
-  ExternalLink, Sparkles, ShieldAlert, Check, ArrowRight, History,
+  ExternalLink, ShieldAlert, Check, ArrowRight, History,
   ArrowUp, ArrowDown, Minus
 } from 'lucide-react';
 
@@ -986,7 +986,7 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                         style={{ color: sortCol === 'views_dia' ? '#00F0FF' : undefined, textAlign: 'right' }}
                       >
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
-                          Visualizações (Dia)
+                          Visualizações
                           <span className="anomalias-sort-arrow">{sortCol === 'views_dia' ? (sortDir === 'asc' ? '▲' : '▼') : '⬍'}</span>
                         </span>
                       </th>
@@ -1010,7 +1010,7 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                         style={{ color: sortCol === 'delta_s' ? '#00F0FF' : undefined, textAlign: 'right' }}
                       >
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
-                          ΔS (Ganho)
+                          ΔS
                           <span className="anomalias-sort-arrow">{sortCol === 'delta_s' ? (sortDir === 'asc' ? '▲' : '▼') : '⬍'}</span>
                         </span>
                       </th>
@@ -1031,18 +1031,18 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                       <th style={{ textAlign: 'center' }}>ΔPosts</th>
 
                       {/* ALERTA / GATILHO */}
-                      <th>Gatilhos Detectados</th>
+                      <th>Gatilhos</th>
 
                       {/* POST VIRAL */}
-                      <th style={{ textAlign: 'center' }}>Publicação na Janela</th>
+                      <th style={{ textAlign: 'center' }}>Pesquisa</th>
 
                       {/* CLASSIFICAÇÃO ATUAL */}
                       <th
                         onClick={() => handleSort('tipo_janela')}
                         className="anomalias-th-sortable"
-                        style={{ color: sortCol === 'tipo_janela' ? '#00F0FF' : undefined }}
+                        style={{ color: sortCol === 'tipo_janela' ? '#00F0FF' : undefined, textAlign: 'center' }}
                       >
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, justifyContent: 'center' }}>
                           Classificação
                           <span className="anomalias-sort-arrow">{sortCol === 'tipo_janela' ? (sortDir === 'asc' ? '▲' : '▼') : '⬍'}</span>
                         </span>
@@ -1210,16 +1210,13 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                                   <span>Buscando...</span>
                                 </>
                               ) : (
-                                <>
-                                  <Sparkles size={12} />
-                                  <span>Auditar Post</span>
-                                </>
+                                <span>Auditar</span>
                               )}
                             </button>
                           </td>
 
                           {/* 9. CLASSIFICAÇÃO (TIPO DE JANELA) */}
-                          <td>
+                          <td style={{ textAlign: 'center' }}>
                             <select
                               value={item.tipo_janela}
                               disabled={isActioning}
@@ -1231,10 +1228,10 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                                 borderColor: badge.border
                               }}
                             >
-                              <option value="ORGANICO" style={{ background: '#161B22', color: '#00FFC8' }}>🌱 ORGANICO</option>
-                              <option value="VIRAL_ORGANICO" style={{ background: '#161B22', color: '#39FF14' }}>🔥 VIRAL_ORGANICO</option>
-                              <option value="ADS" style={{ background: '#161B22', color: '#FF6B35' }}>🚀 ADS (Tráfego Pago)</option>
-                              <option value="IGNORAR" style={{ background: '#161B22', color: '#8B949E' }}>🗑️ IGNORAR (Descartar)</option>
+                              <option value="ORGANICO" style={{ background: '#161B22', color: '#00FFC8' }}>ORGANICO</option>
+                              <option value="VIRAL_ORGANICO" style={{ background: '#161B22', color: '#39FF14' }}>VIRAL</option>
+                              <option value="ADS" style={{ background: '#161B22', color: '#FF6B35' }}>ADS</option>
+                              <option value="IGNORAR" style={{ background: '#161B22', color: '#8B949E' }}>IGNORAR</option>
                             </select>
                           </td>
 
