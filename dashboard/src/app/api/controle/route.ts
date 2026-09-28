@@ -474,16 +474,42 @@ export async function GET() {
       }
 
       const agsAtivos = await db.all(`
-        SELECT id, LOWER(username) as uname, status, tipo_postagem, data_especifica, dias_selecionados, recorrencia, tipo_agendamento, data_inicio, data_fim
+        SELECT id, LOWER(username) as uname, status, tipo_postagem, data_especifica, dias_selecionados, recorrencia, tipo_agendamento, data_inicio, data_fim, hora_fixa
         FROM automacao_agendamentos
         WHERE status IN ('AGENDADO', 'AGENDADO_INSTAGRAM')
       `).catch(() => []);
 
+      // Pool de publicações reais de hoje (qualquer origem) com horário, usado só para
+      // confirmar marcações AGENDADO_INSTAGRAM por tipo + janela de +-4h. Sem a janela,
+      // um segundo post do mesmo tipo já publicado no dia (ex: reels de manhã) "quitava"
+      // indevidamente uma marcação de outro horário que ainda não tinha saído.
+      const normTipoChave = (t: string) => {
+        const up = (t || '').toUpperCase();
+        return up === 'STORY' ? 'STORIES' : up;
+      };
+      const horaParaMinutos = (hora: string) => {
+        const [h, m] = (hora || '00:00').slice(0, 5).split(':').map((n: string) => parseInt(n, 10) || 0);
+        return h * 60 + m;
+      };
+      const HORA_JANELA_MATCH_MIN = 240;
+
+      const pubsHojeDetalhado = await db.all(`
+        SELECT LOWER(username) as uname, tipo_postagem, hora_local
+        FROM automacao_publicacoes
+        WHERE status = 'PUBLICADO' AND (is_deleted IS NULL OR is_deleted = 0) AND (data_local = ? OR publicado_em LIKE ?)
+      `, [hojeIso, `${hojeIso}%`]).catch(() => []);
+
+      const poolPorChave: Record<string, number[]> = {};
+      for (const p of pubsHojeDetalhado) {
+        const chave = `${p.uname}|${normTipoChave(p.tipo_postagem)}`;
+        (poolPorChave[chave] ??= []).push(horaParaMinutos(p.hora_local));
+      }
+
       const agReelsMap: Record<string, number> = {};
       const agPostMap: Record<string, number> = {};
       const agStoriesMap: Record<string, number> = {};
-      // Marcações "agendado direto no Instagram": contam como previsto até sair
-      // um post do mesmo tipo publicado fora do sistema (ver loop final)
+      // Marcações "agendado direto no Instagram" ainda NÃO confirmadas por um post real
+      // dentro da janela de horário (ver matching abaixo) — as confirmadas não entram aqui.
       const igReelsMap: Record<string, number> = {};
       const igPostMap: Record<string, number> = {};
       const igStoriesMap: Record<string, number> = {};
@@ -526,15 +552,32 @@ export async function GET() {
 
         if (ehHoje) {
           const noInstagram = ag.status === 'AGENDADO_INSTAGRAM';
-          if (tipo === 'REELS') {
-            const m = noInstagram ? igReelsMap : agReelsMap;
-            m[u] = (m[u] || 0) + 1;
-          } else if (tipo === 'STORIES' || tipo === 'STORY') {
-            const m = noInstagram ? igStoriesMap : agStoriesMap;
-            m[u] = (m[u] || 0) + 1;
+          const tipoChave = normTipoChave(tipo);
+          const mapaAg = tipoChave === 'REELS' ? agReelsMap : tipoChave === 'STORIES' ? agStoriesMap : agPostMap;
+          const mapaIg = tipoChave === 'REELS' ? igReelsMap : tipoChave === 'STORIES' ? igStoriesMap : igPostMap;
+
+          if (noInstagram) {
+            const pool = poolPorChave[`${u}|${tipoChave}`];
+            let confirmado = false;
+            if (pool && pool.length > 0) {
+              const horaFixa = (ag.hora_fixa || '').trim();
+              if (!horaFixa) {
+                pool.shift();
+                confirmado = true;
+              } else {
+                const alvo = horaParaMinutos(horaFixa);
+                const idx = pool.findIndex((min: number) => Math.abs(min - alvo) <= HORA_JANELA_MATCH_MIN);
+                if (idx >= 0) {
+                  pool.splice(idx, 1);
+                  confirmado = true;
+                }
+              }
+            }
+            if (!confirmado) {
+              mapaIg[u] = (mapaIg[u] || 0) + 1;
+            }
           } else {
-            const m = noInstagram ? igPostMap : agPostMap;
-            m[u] = (m[u] || 0) + 1;
+            mapaAg[u] = (mapaAg[u] || 0) + 1;
           }
         }
       }
@@ -546,20 +589,15 @@ export async function GET() {
         ...Object.keys(igReelsMap), ...Object.keys(igPostMap), ...Object.keys(igStoriesMap)
       ]);
 
-      // Posts de hoje que não saíram pelo publicador (histórico da Meta menos os do
-      // sistema) quitam as marcações do Instagram do mesmo tipo.
-      const igPendentes = (ig: number, hist: number, auto: number) =>
-        Math.max(0, ig - Math.max(0, hist - auto));
-
       for (const u of allUsers) {
         const st = getStatsModelo(u);
         st.postPub = Math.max(histPostMap[u] || 0, autoPostMap[u] || 0);
         st.reelsPub = Math.max(histReelsMap[u] || 0, autoReelsMap[u] || 0);
         st.storiesPub = Math.max(histStoriesMap[u] || 0, autoStoriesMap[u] || 0);
 
-        st.postAg = (agPostMap[u] || 0) + igPendentes(igPostMap[u] || 0, histPostMap[u] || 0, autoPostMap[u] || 0);
-        st.reelsAg = (agReelsMap[u] || 0) + igPendentes(igReelsMap[u] || 0, histReelsMap[u] || 0, autoReelsMap[u] || 0);
-        st.storiesAg = (agStoriesMap[u] || 0) + igPendentes(igStoriesMap[u] || 0, histStoriesMap[u] || 0, autoStoriesMap[u] || 0);
+        st.postAg = (agPostMap[u] || 0) + (igPostMap[u] || 0);
+        st.reelsAg = (agReelsMap[u] || 0) + (igReelsMap[u] || 0);
+        st.storiesAg = (agStoriesMap[u] || 0) + (igStoriesMap[u] || 0);
       }
     } catch (e) {
       console.warn("Aviso ao calcular stats de hoje em controle:", e);
