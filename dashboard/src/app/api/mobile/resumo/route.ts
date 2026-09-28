@@ -304,12 +304,21 @@ export async function GET(req: NextRequest) {
         FROM automacao_agendamentos a
         WHERE status IN ('AGENDADO', 'PUBLICANDO')
            OR (status = 'AGENDADO_INSTAGRAM' AND NOT EXISTS (
+                -- Confirma por tipo + mesmo dia, e por horário só quando a marcação tem
+                -- hora_fixa: sem a janela de +-4h, um segundo post do mesmo tipo no
+                -- mesmo dia (ex: outro reels publicado de manhã) escondia erroneamente
+                -- uma marcação da noite que ainda não tinha saído.
                 SELECT 1 FROM automacao_publicacoes p
                 WHERE LOWER(p.username) = LOWER(a.username)
                   AND p.tipo_postagem = a.tipo_postagem
                   AND p.status = 'PUBLICADO'
                   AND (p.is_deleted IS NULL OR p.is_deleted = 0)
                   AND p.data_local = a.data_especifica
+                  AND (
+                    a.hora_fixa IS NULL OR a.hora_fixa = ''
+                    OR ABS(strftime('%s', p.data_local || ' ' || p.hora_local) -
+                           strftime('%s', a.data_especifica || ' ' || a.hora_fixa)) <= 14400
+                  )
               ))
         ORDER BY
           CASE WHEN tipo_agendamento = 'DATA_ESPECIFICA' THEN data_especifica ELSE '9999-99-99' END ASC,
