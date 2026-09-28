@@ -291,16 +291,26 @@ export async function GET(req: NextRequest) {
     });
 
     // 4. Agendamentos: "O que tem pra fazer" vs "O que foi feito"
-    // "O que tem pra fazer": automacao_agendamentos com status AGENDADO ou PUBLICANDO
+    // "O que tem pra fazer": automacao_agendamentos com status AGENDADO, PUBLICANDO ou
+    // AGENDADO_INSTAGRAM (marcação manual — o usuário já agendou direto no Instagram,
+    // mas ainda não foi confirmado no histórico real, então continua pendente aqui).
     let aFazer: any[] = [];
     try {
       const rowsAFazer = await db.all(`
-        SELECT 
+        SELECT
           id, username, tipo_postagem, tipo_agendamento, data_especifica,
           data_inicio, data_fim, dias_selecionados, modo_hora, hora_fixa,
           hora_janela_inicio, hora_janela_fim, legenda, status, criado_em, arquivos
-        FROM automacao_agendamentos
+        FROM automacao_agendamentos a
         WHERE status IN ('AGENDADO', 'PUBLICANDO')
+           OR (status = 'AGENDADO_INSTAGRAM' AND NOT EXISTS (
+                SELECT 1 FROM automacao_publicacoes p
+                WHERE LOWER(p.username) = LOWER(a.username)
+                  AND p.tipo_postagem = a.tipo_postagem
+                  AND p.status = 'PUBLICADO'
+                  AND (p.is_deleted IS NULL OR p.is_deleted = 0)
+                  AND p.data_local = a.data_especifica
+              ))
         ORDER BY
           CASE WHEN tipo_agendamento = 'DATA_ESPECIFICA' THEN data_especifica ELSE '9999-99-99' END ASC,
           COALESCE(hora_fixa, hora_janela_inicio, '99:99') ASC,

@@ -56,13 +56,15 @@ export async function GET() {
     // 3. Busca todo o histórico de observações
     const todasObs = await db.all(`SELECT * FROM controle_perfis_obs ORDER BY datetime(criado_em) DESC`);
 
-    // 4. Busca quantidade de agendamentos futuros (status = 'AGENDADO') por username na tabela automacao_agendamentos
+    // 4. Busca quantidade de agendamentos futuros por username na tabela automacao_agendamentos.
+    // Inclui AGENDADO_INSTAGRAM (marcação manual de post já agendado direto no Instagram) —
+    // sem isso, esses posts somem da "reserva" mesmo estando ativos.
     const contagemReserva: { [username: string]: number } = {};
     try {
       const reservas = await db.all(`
         SELECT LOWER(username) as uname, COUNT(*) as total
         FROM automacao_agendamentos
-        WHERE status = 'AGENDADO'
+        WHERE status IN ('AGENDADO', 'AGENDADO_INSTAGRAM')
         GROUP BY LOWER(username)
       `);
       reservas.forEach((r: any) => {

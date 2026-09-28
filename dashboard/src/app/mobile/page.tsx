@@ -92,7 +92,7 @@ export default function MobileDashboard() {
             ultima_atualizacao: jsonData.profiles[0]?.data_coleta || new Date().toISOString(),
             perfis: perfisM,
             agendamentos: {
-              a_fazer: (jsonAg?.agendamentos || []).filter((a: any) => a.status === 'AGENDADO' || a.status === 'PUBLICANDO'),
+              a_fazer: (jsonAg?.agendamentos || []).filter((a: any) => a.status === 'AGENDADO' || a.status === 'PUBLICANDO' || a.status === 'AGENDADO_INSTAGRAM'),
               concluidos: jsonAg?.publicacoes || []
             }
           });
@@ -805,13 +805,13 @@ export default function MobileDashboard() {
 
                       <div style={{
                         background: '#0F172A',
-                        color: '#C084FC',
+                        color: ag.status === 'AGENDADO_INSTAGRAM' ? '#F472B6' : '#C084FC',
                         borderRadius: '6px',
                         padding: '3px 8px',
                         fontSize: '10px',
                         fontWeight: 700
                       }}>
-                        AGENDADO
+                        {ag.status === 'AGENDADO_INSTAGRAM' ? 'NO INSTAGRAM' : 'AGENDADO'}
                       </div>
                     </div>
                   );
