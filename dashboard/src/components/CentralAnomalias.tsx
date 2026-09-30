@@ -150,42 +150,57 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
     }
   };
 
-  // Registra manualmente um post pelo link do Instagram
+  // Registra manualmente um ou mais posts pelos links do Instagram (separados por espaço, vírgula ou quebra de linha)
   const handleRegistrarPorLink = async () => {
     if (!viralModalItem || !linkManual.trim()) return;
+    const links = Array.from(new Set(linkManual.split(/[\s,;]+/).map(l => l.trim()).filter(Boolean)));
     setLinkManualErro(null);
     setLinkManualLoading(true);
+    const erros: string[] = [];
+    const registrados: any[] = [];
+    let jaExistia = false;
     try {
-      const res = await fetch('/api/anomalias/registrar-post-viral', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: viralModalItem.username,
-          post_url: linkManual.trim(),
-          data_coleta: viralModalItem.data_coleta
-        })
-      });
-      const json = await res.json();
-      if (json.success && json.post) {
-        // Injeta o post como top_post no modal atual
-        setViralData((prev: any) => ({
-          ...prev,
-          top_post: json.post,
-          posts_na_janela: [
-            json.post,
-            ...(prev?.posts_na_janela || []).filter((p: any) => p.post_id !== json.post.post_id && p.shortcode !== json.post.shortcode)
-          ],
-          sugestao_viral: null,
-          total_posts_janela: Math.max(1, prev?.total_posts_janela || 1),
-          registrado_manualmente: true,
-          ja_existia: json.ja_existia
-        }));
-        setLinkManual('');
-      } else {
-        setLinkManualErro(json.error || 'Erro ao registrar post');
+      for (const link of links) {
+        try {
+          const res = await fetch('/api/anomalias/registrar-post-viral', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              username: viralModalItem.username,
+              post_url: link,
+              data_coleta: viralModalItem.data_coleta
+            })
+          });
+          const json = await res.json();
+          if (json.success && json.post) {
+            registrados.push(json.post);
+            jaExistia = !!json.ja_existia;
+          } else {
+            erros.push(`${link}: ${json.error || 'Erro ao registrar post'}`);
+          }
+        } catch (e: any) {
+          erros.push(`${link}: ${e.message || 'Erro de conexão'}`);
+        }
       }
-    } catch (e: any) {
-      setLinkManualErro(e.message || 'Erro de conexão');
+      if (registrados.length > 0) {
+        setViralData((prev: any) => {
+          const novos = registrados.map(r => r.post_id ?? r.shortcode);
+          const restantes = (prev?.posts_na_janela || []).filter((p: any) =>
+            !registrados.some(r => p.post_id === r.post_id || (r.shortcode && p.shortcode === r.shortcode)));
+          return {
+            ...prev,
+            top_post: registrados[0],
+            posts_na_janela: [...registrados, ...restantes],
+            sugestao_viral: null,
+            total_posts_janela: Math.max(registrados.length, prev?.total_posts_janela || 1),
+            registrado_manualmente: true,
+            ja_existia: jaExistia && novos.length === 1
+          };
+        });
+        // Mantém no campo apenas os links que falharam, para nova tentativa
+        setLinkManual(erros.length ? links.filter(l => erros.some(e => e.startsWith(l + ':'))).join('\n') : '');
+      }
+      if (erros.length) setLinkManualErro(erros.join(' | '));
     } finally {
       setLinkManualLoading(false);
     }
@@ -1484,16 +1499,24 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                     </p>
                     {/* Input de link manual */}
                     <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', flexDirection: 'column' }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: '#FFB800', textTransform: 'uppercase' }}>
-                        🔗 Já sabe o link do post viral? Cole aqui:
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#FFB800', textTransform: 'uppercase', display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span>🔗 Já sabe o link do post viral? Cole aqui (um ou mais):</span>
+                        <a
+                          href={`https://www.instagram.com/${viralModalItem.username}/`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: '#00F0FF', textDecoration: 'none', textTransform: 'none', fontWeight: 700 }}
+                        >
+                          Abrir perfil @{viralModalItem.username} ↗
+                        </a>
                       </span>
                       <div style={{ display: 'flex', gap: 8, width: '100%' }}>
-                        <input
-                          type="text"
+                        <textarea
+                          rows={2}
                           value={linkManual}
                           onChange={e => { setLinkManual(e.target.value); setLinkManualErro(null); }}
-                          placeholder="https://www.instagram.com/p/ABC123/ ou /reel/..."
-                          onKeyDown={e => e.key === 'Enter' && handleRegistrarPorLink()}
+                          placeholder="https://www.instagram.com/p/ABC123/ ou /reel/... (vários: um por linha)"
+                          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleRegistrarPorLink(); } }}
                           style={{
                             flex: 1,
                             background: '#0D1117',
@@ -1503,7 +1526,8 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                             color: 'white',
                             fontSize: 12,
                             outline: 'none',
-                            fontFamily: 'monospace'
+                            fontFamily: 'monospace',
+                            resize: 'vertical'
                           }}
                         />
                         <button
@@ -1527,7 +1551,7 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                           }}
                         >
                           {linkManualLoading ? <RefreshCw size={12} className="anomalias-spin" /> : <ExternalLink size={12} />}
-                          {linkManualLoading ? 'Registrando...' : 'Registrar Post'}
+                          {linkManualLoading ? 'Registrando...' : 'Registrar Post(s)'}
                         </button>
                       </div>
                       {linkManualErro && (
@@ -1649,16 +1673,24 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
               {/* Campo de Link Manual no rodapé (apenas quando já há post exibido, para permitir troca) */}
               {!!(viralData.top_post || viralData.sugestao_viral) && (
                 <div style={{ padding: '10px 20px', borderBottom: '1px solid #21262D' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', marginBottom: 6 }}>
-                    🔗 Registrar outro post por link (opcional)
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span>🔗 Registrar outro(s) post(s) por link (opcional)</span>
+                    <a
+                      href={`https://www.instagram.com/${viralModalItem.username}/`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: '#00F0FF', textDecoration: 'none', textTransform: 'none', fontWeight: 700 }}
+                    >
+                      Abrir perfil @{viralModalItem.username} ↗
+                    </a>
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <input
-                      type="text"
+                    <textarea
+                      rows={2}
                       value={linkManual}
                       onChange={e => { setLinkManual(e.target.value); setLinkManualErro(null); }}
-                      placeholder="https://www.instagram.com/p/ABC123/ ou /reel/..."
-                      onKeyDown={e => e.key === 'Enter' && handleRegistrarPorLink()}
+                      placeholder="https://www.instagram.com/p/ABC123/ ou /reel/... (vários: um por linha)"
+                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleRegistrarPorLink(); } }}
                       style={{
                         flex: 1,
                         background: '#161B22',
@@ -1668,7 +1700,8 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                         color: 'white',
                         fontSize: 12,
                         outline: 'none',
-                        fontFamily: 'monospace'
+                        fontFamily: 'monospace',
+                            resize: 'vertical'
                       }}
                     />
                     <button
@@ -1692,7 +1725,7 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                       }}
                     >
                       {linkManualLoading ? <RefreshCw size={12} className="anomalias-spin" /> : <ExternalLink size={12} />}
-                      {linkManualLoading ? 'Registrando...' : 'Registrar Post'}
+                      {linkManualLoading ? 'Registrando...' : 'Registrar Post(s)'}
                     </button>
                   </div>
                   {linkManualErro && (
