@@ -345,6 +345,43 @@ export async function GET() {
       }
     }
 
+    // Alcance acumulado do post em 24h/48h/72h após a publicação (último snapshot dentro da janela)
+    const postAlcanceJanelasMap: Record<string, { h24: number | null; h48: number | null; h72: number | null }> = {};
+    try {
+      const snapsPosts = await db.all(`
+        SELECT post_id, data_carga, views
+        FROM posts_metricas_snapshots
+        ORDER BY post_id, data_carga ASC
+      `).catch(() => []);
+      const toTs = (s: string) => new Date(String(s).replace(' ', 'T')).getTime();
+      const agoraMs = Date.now();
+      const snapsByPost: Record<string, { ts: number; v: number }[]> = {};
+      for (const s of snapsPosts) {
+        if (!s.post_id || !postDateMap[s.post_id]) continue;
+        const ts = toTs(s.data_carga);
+        if (isNaN(ts)) continue;
+        (snapsByPost[s.post_id] ||= []).push({ ts, v: Number(s.views) || 0 });
+      }
+      for (const [pid, pDate] of Object.entries(postDateMap)) {
+        const t0 = toTs(pDate);
+        if (isNaN(t0)) continue;
+        const list = snapsByPost[pid] || [];
+        const calc = (horas: number): number | null => {
+          const limite = t0 + horas * 3600 * 1000;
+          if (agoraMs < limite) return null; // janela ainda não fechou
+          let best: number | null = null;
+          for (const s of list) {
+            if (s.ts <= limite) best = Math.max(best ?? 0, s.v);
+            else break;
+          }
+          return best;
+        };
+        postAlcanceJanelasMap[pid] = { h24: calc(24), h48: calc(48), h72: calc(72) };
+      }
+    } catch (e) {
+      console.warn("Aviso ao calcular alcance 24h/48h/72h:", e);
+    }
+
     const posts = rawPosts.map((p: any) => {
       let formatoPadrao = p.formato || 'Imagem';
       const fUpper = (p.formato || '').toUpperCase();
@@ -375,6 +412,9 @@ export async function GET() {
         thumbnail_url: thumbnailUrl || mediaUrl,
         delta_views_coleta: postViewsDeltaMap[p.post_id] || 0,
         views_dia: postViewsDiaMap[p.post_id] || 0,
+        alcance_24h: postAlcanceJanelasMap[p.post_id]?.h24 ?? null,
+        alcance_48h: postAlcanceJanelasMap[p.post_id]?.h48 ?? null,
+        alcance_72h: postAlcanceJanelasMap[p.post_id]?.h72 ?? null,
         parou_atualizar: postParouAtualizarMap[p.post_id] ?? true
       };
     });

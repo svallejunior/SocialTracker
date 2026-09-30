@@ -5884,7 +5884,7 @@ export default function Dashboard() {
                     <th className={`sortable ${sortField === 'data_postagem' ? 'active' : ''}`} onClick={() => handleSort('data_postagem')}>
                       DATA {sortField === 'data_postagem' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                     </th>
-                    <th>MÍDIA / FORMATO</th>
+                    <th>MÍDIA</th>
                     <th className={`sortable ${sortField === 'likes' ? 'active' : ''}`} onClick={() => handleSort('likes')} title="Curtidas">
                       ❤️ {sortField === 'likes' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                     </th>
@@ -5915,6 +5915,7 @@ export default function Dashboard() {
                     <th className={`sortable ${sortField === 'taxa_engajamento' ? 'active' : ''}`} onClick={() => handleSort('taxa_engajamento')}>
                       Engajamento {sortField === 'taxa_engajamento' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                     </th>
+                    <th title="Alcance acumulado do post em 24h / 48h / 72h após a publicação">ALCANCE 24h/48h/72h</th>
                     <th className={`sortable ${sortField === 'performanceMultiplier' ? 'active' : ''}`} onClick={() => handleSort('performanceMultiplier')}>
                       Desempenho {sortField === 'performanceMultiplier' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                     </th>
@@ -6065,6 +6066,14 @@ export default function Dashboard() {
                           ) : (
                             <span style={{ color: '#8B949E', opacity: 0.6 }}>-</span>
                           )}
+                        </td>
+                        <td style={{ whiteSpace: 'nowrap', fontSize: '13px' }} title="Alcance em 24h / 48h / 72h após a publicação">
+                          {[post.alcance_24h, post.alcance_48h, post.alcance_72h].map((v, i) => (
+                            <span key={i}>
+                              {i > 0 && <span style={{ color: '#8B949E', opacity: 0.6 }}> / </span>}
+                              {v != null && Number(v) > 0 ? formatNumber(Number(v)) : <span style={{ color: '#8B949E', opacity: 0.6 }}>-</span>}
+                            </span>
+                          ))}
                         </td>
                         <td>
                           <span className={`performance-badge ${badgePerfClass}`}>
