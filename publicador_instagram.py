@@ -121,6 +121,13 @@ def _tabela_existe(conn, nome):
 
 def init_db_schema():
     conn = get_db_connection()
+    try:
+        _init_db_schema(conn)
+    finally:
+        conn.close()
+
+
+def _init_db_schema(conn):
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS automacao_config (
@@ -187,7 +194,7 @@ def init_db_schema():
         # Backfill idempotente: antes desta versão a publicação só existia na própria
         # linha do agendamento. publicado_em está em UTC → 'localtime' converte.
         c.execute("""
-            INSERT INTO automacao_publicacoes (
+            INSERT OR IGNORE INTO automacao_publicacoes (
                 id, agendamento_id, username, meta_account_id, tipo_postagem,
                 data_local, hora_local, publicado_em, status, meta_media_id,
                 erro_detalhe, arquivos, legenda, origem
@@ -257,7 +264,6 @@ def init_db_schema():
             )
 
     conn.commit()
-    conn.close()
 
 
 def registrar_publicacao(ag, status="PUBLICADO", meta_media_id="", erro="", origem="AGENDADOR", conn=None):
