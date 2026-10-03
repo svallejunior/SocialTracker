@@ -949,7 +949,7 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
             </div>
 
             {/* Gráfico de visualizações por dia do perfil selecionado (histórico completo) */}
-            <GraficoViewsDiarias username={activeProfile.username} />
+            {activeProfile.meu_perfil === 1 && <GraficoViewsDiarias username={activeProfile.username} />}
 
             {/* Tabela de Coletas do Perfil */}
             {itemsLoading ? (
