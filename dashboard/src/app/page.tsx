@@ -3231,6 +3231,7 @@ export default function Dashboard() {
     <div className="dashboard-container">
       {/* --- CABEÇALHO DO DASHBOARD --- */}
       <header className="app-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <a
           href="https://whimsical.com/svj8/gerou-lead-AKg9ULSb61KNUNUNWANtot"
           target="_blank"
@@ -3253,6 +3254,7 @@ export default function Dashboard() {
           <HelpCircle size={22} />
         </button>
         {showTaticas && <ModalTaticas onClose={() => setShowTaticas(false)} />}
+        </div>
 
         <div className="header-actions">
           {/* Navegação principal por Abas */}
