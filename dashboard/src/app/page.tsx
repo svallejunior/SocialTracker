@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
+import ModalTaticas from '../components/ModalTaticas';
 import nextDynamic from 'next/dynamic';
 import {
   TrendingUp, ExternalLink, LogOut, Calendar, Search, Users, MessageSquare, Eye, EyeOff, Heart, Filter,
@@ -2641,6 +2642,7 @@ export default function Dashboard() {
   // ── Estados da aba Controle ──────────────────────────────
   const [controleData, setControleData] = useState<any[]>([]);
   const [controleLoading, setControleLoading] = useState(false);
+  const [showTaticas, setShowTaticas] = useState(false);
   const [ultimaMetaExec, setUltimaMetaExec] = useState<string | null>(null);
   const ultimaMetaExecRef = useRef<string | null>(null);
   useEffect(() => {
@@ -3242,6 +3244,15 @@ export default function Dashboard() {
           </div>
           <div className="brand-name">SocialTracker</div>
         </a>
+        <button
+          onClick={() => setShowTaticas(true)}
+          title="Táticas"
+          aria-label="Abrir táticas"
+          style={{ background: 'none', border: 'none', color: '#8B949E', cursor: 'pointer', display: 'flex', padding: 4 }}
+        >
+          <HelpCircle size={22} />
+        </button>
+        {showTaticas && <ModalTaticas onClose={() => setShowTaticas(false)} />}
 
         <div className="header-actions">
           {/* Navegação principal por Abas */}
