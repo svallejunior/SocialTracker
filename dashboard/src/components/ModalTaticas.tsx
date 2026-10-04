@@ -3,11 +3,27 @@ import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Film, Repeat2, Archive } from 'lucide-react';
 
-const TATICAS = [
+type Tatica = {
+  icon: typeof Film;
+  titulo: string;
+  descricao: string;
+  detalhes?: string[];
+  recomendacao?: string;
+};
+
+const TATICAS: Tatica[] = [
   {
     icon: Film,
     titulo: 'Reels de teste',
     descricao: 'Publicar Reels de teste para medir o potencial de alcance de um formato, tema ou gancho antes de investir mais nele.',
+    detalhes: [
+      'Postar 4 Reels de teste por dia.',
+      'Intervalo ideal de no mínimo 2h entre eles.',
+      'Aumentar 2 Reels por dia, progressivamente.',
+      'Nunca ultrapassar 20 Reels por dia.',
+      'Intervalo mínimo obrigatório de 30 minutos entre eles.',
+    ],
+    recomendacao: 'Usar quando uma conta estiver flopada.',
   },
   {
     icon: Repeat2,
@@ -55,7 +71,7 @@ export default function ModalTaticas({ onClose }: { onClose: () => void }) {
           </button>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {TATICAS.map(({ icon: Icon, titulo, descricao }) => (
+          {TATICAS.map(({ icon: Icon, titulo, descricao, detalhes, recomendacao }) => (
             <div
               key={titulo}
               style={{
@@ -67,6 +83,16 @@ export default function ModalTaticas({ onClose }: { onClose: () => void }) {
               <div>
                 <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>{titulo}</div>
                 <div style={{ fontSize: 13, color: '#8B949E', lineHeight: 1.5 }}>{descricao}</div>
+                {detalhes && (
+                  <ul style={{ margin: '10px 0 0', paddingLeft: 18, fontSize: 13, lineHeight: 1.6 }}>
+                    {detalhes.map((d) => <li key={d}>{d}</li>)}
+                  </ul>
+                )}
+                {recomendacao && (
+                  <div style={{ marginTop: 10, fontSize: 13, color: '#D29922', fontWeight: 600 }}>
+                    Recomendação: {recomendacao}
+                  </div>
+                )}
               </div>
             </div>
           ))}
