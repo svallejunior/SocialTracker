@@ -401,27 +401,34 @@ const idToShortcode = (idInput: string | number): string => {
 const getInstagramPostUrl = (post: any): string => {
   if (!post) return '#';
 
-  if (post.shortcode && post.shortcode !== 'None' && post.shortcode !== 'null' && /[a-zA-Z]/.test(post.shortcode)) {
-    return `https://www.instagram.com/p/${post.shortcode}/`;
+  const username = String(post.username || '').replace(/^@/, '');
+  const isReels = post.formato === 'Reels' || (post.media_product_type || '').toUpperCase() === 'REELS';
+  // Alguns registros trazem o username no lugar do shortcode — isso não é um código de post válido
+  const shortcodeValido = post.shortcode && post.shortcode !== 'None' && post.shortcode !== 'null'
+    && /[a-zA-Z]/.test(post.shortcode)
+    && String(post.shortcode).toLowerCase() !== username.toLowerCase();
+
+  if (shortcodeValido) {
+    return `https://www.instagram.com/${isReels ? 'reel' : 'p'}/${post.shortcode}/`;
   }
 
-  const targetLink = post.link || post.url || '';
+  const targetLink = post.permalink || post.link || post.url || '';
   if (targetLink) {
     const match = String(targetLink).match(/\/p\/(\d+)\/?/);
     if (match && match[1]) {
       const converted = idToShortcode(match[1]);
       return `https://www.instagram.com/p/${converted}/`;
     }
-    if (targetLink.includes('/p/')) return targetLink;
+    if (/\/(p|reel|reels|tv)\/[^/]+/.test(String(targetLink)) && !/\/reels\/?$/.test(String(targetLink))) return targetLink;
   }
 
   if (post.post_id) {
     const code = idToShortcode(post.post_id);
-    if (code) return `https://www.instagram.com/p/${code}/`;
+    if (code && code.toLowerCase() !== username.toLowerCase()) return `https://www.instagram.com/p/${code}/`;
   }
 
-  if (post.username) {
-    return `https://www.instagram.com/${post.username}/`;
+  if (username) {
+    return `https://www.instagram.com/${username}/${isReels ? 'reels/' : ''}`;
   }
 
   return '#';
