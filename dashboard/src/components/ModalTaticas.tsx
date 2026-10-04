@@ -29,6 +29,13 @@ const TATICAS: Tatica[] = [
     icon: Repeat2,
     titulo: 'Reciclagem de Reels',
     descricao: 'Reaproveitar Reels que tiveram bom desempenho, republicando-os para alcançar novamente a audiência.',
+    detalhes: [
+      'Separar o take validado.',
+      'No dia seguinte, postar outro take até validar um novo.',
+      'Se der errado, no terceiro dia postar o take validado.',
+      'Testar novamente.',
+      'Padrão de rotina: reciclar 1 vídeo antigo, 1 vídeo novo, reciclar 1 vídeo antigo (repetir).',
+    ],
   },
   {
     icon: Archive,
