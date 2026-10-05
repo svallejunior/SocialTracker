@@ -1,7 +1,7 @@
 "use client";
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Film, Repeat2, Archive } from 'lucide-react';
+import { X, Film, Repeat2, Archive, ExternalLink } from 'lucide-react';
 
 type Tatica = {
   icon: typeof Film;
@@ -44,7 +44,20 @@ const TATICAS: Tatica[] = [
   },
 ];
 
+const LINKS = [
+  { titulo: 'WAN 2.2 - GERAR VIDEOS // I2V', url: 'https://bit.ly/4faEdBc' },
+  { titulo: 'WAN 2.2 - TRANSFER MOTION +18 // IMG2VID (FUNDOIMAGEM)', url: 'https://bit.ly/4yc0xTX' },
+  { titulo: 'WAN 2.2 - TRANSFER ECOMMERCE // IMG2VID (FUNDOVIDEO)', url: 'https://bit.ly/4i0Q9J3' },
+  { titulo: 'WAN2.2 - LIP SYNC REALISTA (PRO) // I2V', url: 'https://bit.ly/4vhowy9' },
+  { titulo: 'QWEN - ROTAÇÃO 360° CONSITENTE // IMG2IMG e TXT2IMG', url: 'https://bit.ly/44jxe46' },
+  { titulo: 'QWEN - CLONAR POSES // IMG2IMG', url: 'https://bit.ly/3R8BksD' },
+  { titulo: 'Z IMAGE TURBO - GERAR IMAGENS FOTOREALISTAS // TXT2IMG', url: 'https://bit.ly/4vWUqRF' },
+  { titulo: 'QWEN - TROCA DE ROUPA E TROCA DE COR // IMG2IMG', url: 'https://bit.ly/4fuxgMJ' },
+  { titulo: 'FLUX - FACE SWAP (PRO) // IMG2IMG', url: 'https://bit.ly/3TepspL' },
+];
+
 export default function ModalTaticas({ onClose }: { onClose: () => void }) {
+  const [aba, setAba] = useState<'taticas' | 'links'>('taticas');
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -68,7 +81,22 @@ export default function ModalTaticas({ onClose }: { onClose: () => void }) {
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h2 style={{ fontSize: 20, fontWeight: 800, margin: 0 }}>Táticas</h2>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {([['taticas', 'Táticas'], ['links', 'Links']] as const).map(([id, label]) => (
+              <button
+                key={id}
+                onClick={() => setAba(id)}
+                style={{
+                  padding: '6px 16px', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 14,
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  background: aba === id ? '#388BFD' : 'transparent',
+                  color: aba === id ? '#fff' : '#8B949E',
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <button
             onClick={onClose}
             aria-label="Fechar"
@@ -77,6 +105,26 @@ export default function ModalTaticas({ onClose }: { onClose: () => void }) {
             <X size={20} />
           </button>
         </div>
+        {aba === 'links' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {LINKS.map(({ titulo, url }) => (
+              <a
+                key={url}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+                  padding: '12px 14px', borderRadius: 10, textDecoration: 'none', color: '#E6EDF3',
+                  background: '#161B22', border: '1px solid rgba(255,255,255,0.08)', fontSize: 13, fontWeight: 600,
+                }}
+              >
+                <span>{titulo}</span>
+                <ExternalLink size={16} color="#388BFD" style={{ flexShrink: 0 }} />
+              </a>
+            ))}
+          </div>
+        ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {TATICAS.map(({ icon: Icon, titulo, descricao, detalhes, recomendacao }) => (
             <div
@@ -104,6 +152,7 @@ export default function ModalTaticas({ onClose }: { onClose: () => void }) {
             </div>
           ))}
         </div>
+        )}
       </div>
     </div>,
     document.body
