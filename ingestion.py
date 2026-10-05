@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import sqlite3
 from datetime import datetime, timezone, timedelta
@@ -16,6 +17,7 @@ def conectar_db(db_path=None):
     conn.execute('PRAGMA synchronous = NORMAL;')
     conn.execute('PRAGMA busy_timeout = 30000;')
     return conn
+import requests
 from apify_client import ApifyClient
 
 # Força UTF-8 no stdout/stderr no Windows
@@ -159,6 +161,14 @@ def inicializar_banco():
             cursor.execute("ALTER TABLE perfis_historico ADD COLUMN revisado_manualmente INTEGER DEFAULT 0")
         except sqlite3.OperationalError:
             pass
+        # Controle de recuo (backoff) de perfis que o Apify não consegue ler — evita pagar todo dia
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS coleta_falhas (
+                username TEXT PRIMARY KEY,
+                falhas INTEGER DEFAULT 0,
+                ultima_tentativa TEXT
+            )
+        """)
         conn.commit()
     finally:
         conn.close()
@@ -278,6 +288,168 @@ def atualizar_status_perfil(username, novo_status):
                 except Exception:
                     pass
 
+# --- ECONOMIA DE CRÉDITOS APIFY ---
+FALHAS_PARA_RECUAR = 2   # após N falhas seguidas do Apify o perfil entra em recuo
+DIAS_DE_RECUO = 7        # em recuo, o Apify só tenta de novo após N dias
+
+_discovery_contas = None  # cache das contas Meta usadas como "lupa" na business_discovery
+
+
+def _contas_discovery():
+    """Contas Meta configuradas, com tokens do Facebook Login primeiro (IGAA por último)."""
+    global _discovery_contas
+    if _discovery_contas is None:
+        try:
+            from meta_ingestion import obter_contas_meta_configuradas
+            contas = obter_contas_meta_configuradas()
+        except Exception as e:
+            print(f"⚠️ Business Discovery indisponível (contas Meta): {e}")
+            contas = []
+        _discovery_contas = sorted(contas, key=lambda c: c["token"].startswith("IGAA"))
+    return _discovery_contas
+
+
+def consultar_business_discovery(username):
+    """
+    Lê seguidores/seguindo/posts de qualquer conta Business/Creator via Meta (gratuito).
+    Retorna (status, dados): 'OK', 'NAO_DISPONIVEL' (conta pessoal/inexistente) ou 'API_ERROR'.
+    """
+    from meta_ingestion import graph_api_base
+
+    username = username.strip().lstrip("@")
+    if not re.fullmatch(r"[A-Za-z0-9_.]+", username):
+        return "NAO_DISPONIVEL", None
+
+    contas = _contas_discovery()
+    if not contas:
+        return "API_ERROR", None
+
+    for conta in contas:
+        try:
+            res = requests.get(
+                f"{graph_api_base(conta['token'])}/{conta['account_id']}",
+                params={
+                    "fields": f"business_discovery.username({username}){{followers_count,follows_count,media_count}}",
+                    "access_token": conta["token"],
+                },
+                timeout=20,
+            )
+            corpo = res.json()
+        except Exception:
+            continue
+
+        bd = corpo.get("business_discovery") if res.status_code == 200 else None
+        if bd and bd.get("followers_count") is not None:
+            return "OK", {
+                "followers": bd.get("followers_count") or 0,
+                "following": bd.get("follows_count") or 0,
+                "posts": bd.get("media_count") or 0,
+            }
+
+        erro = corpo.get("error", {})
+        if erro.get("code") == 110 or erro.get("error_subcode") == 2207013:
+            return "NAO_DISPONIVEL", None
+        # Token expirado, limite de requisições, etc. → tenta a próxima conta Meta
+
+    return "API_ERROR", None
+
+
+def coletado_hoje(username):
+    """True se já existe leitura válida (com seguidores) de hoje para o perfil."""
+    try:
+        conn = conectar_db()
+        try:
+            row = conn.execute("""
+                SELECT 1 FROM perfis_historico
+                WHERE LOWER(username) = LOWER(?) AND SUBSTR(data_coleta, 1, 10) = ?
+                  AND inativo = 0 AND seguidores > 0
+                LIMIT 1
+            """, (username, agora_brasil().strftime('%Y-%m-%d'))).fetchone()
+            return row is not None
+        finally:
+            conn.close()
+    except Exception:
+        return False
+
+
+def em_recuo(username):
+    """True se o Apify falhou várias vezes seguidas neste perfil e ainda está no período de recuo."""
+    try:
+        conn = conectar_db()
+        try:
+            row = conn.execute(
+                "SELECT falhas, ultima_tentativa FROM coleta_falhas WHERE LOWER(username) = LOWER(?)",
+                (username,)
+            ).fetchone()
+        finally:
+            conn.close()
+        if not row or (row[0] or 0) < FALHAS_PARA_RECUAR or not row[1]:
+            return False
+        ultima = datetime.strptime(row[1], '%Y-%m-%d').date()
+        return (agora_brasil().date() - ultima).days < DIAS_DE_RECUO
+    except Exception:
+        return False
+
+
+def registrar_resultado_coleta(username, sucesso):
+    """Zera o contador de falhas em caso de sucesso; incrementa quando o Apify não traz dados."""
+    try:
+        conn = conectar_db()
+        try:
+            if sucesso:
+                conn.execute("DELETE FROM coleta_falhas WHERE LOWER(username) = LOWER(?)", (username,))
+            else:
+                conn.execute("""
+                    INSERT INTO coleta_falhas (username, falhas, ultima_tentativa) VALUES (LOWER(?), 1, ?)
+                    ON CONFLICT(username) DO UPDATE SET falhas = falhas + 1, ultima_tentativa = excluded.ultima_tentativa
+                """, (username, agora_brasil().strftime('%Y-%m-%d')))
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"Aviso ao registrar controle de falhas de @{username}: {e}")
+
+
+def coletar_perfil(user, ignorar_coletado_hoje=False):
+    """
+    Coleta um perfil sem Meta API oficial, gastando o mínimo possível de créditos Apify:
+    1) pula se já coletado hoje; 2) Meta Business Discovery (gratuito); 3) Apify (com recuo).
+    Retorna 'OK', 'SKIP', 'NOT_FOUND' ou 'API_ERROR'.
+    """
+    if not ignorar_coletado_hoje and coletado_hoje(user):
+        print(f"@{user} já coletado hoje, pulando (economia de créditos).")
+        return "SKIP"
+
+    status_res, dados = consultar_business_discovery(user)
+    if status_res == "OK":
+        print(f"@{user} coletado via Meta Business Discovery (gratuito).")
+        salvar_no_banco(user, dados, inativo=0)
+        atualizar_status_perfil(user, 'ATIVO')
+        registrar_resultado_coleta(user, True)
+        return "OK"
+
+    if not client:
+        return "API_ERROR"
+
+    if not ignorar_coletado_hoje and em_recuo(user):
+        print(f"@{user} em recuo após falhas seguidas no Apify; nova tentativa só após {DIAS_DE_RECUO} dias.")
+        return "SKIP"
+    if ignorar_coletado_hoje and coletado_hoje(user):
+        print(f"@{user} já coletado hoje, Apify não foi acionado (economia de créditos).")
+        return "SKIP"
+
+    status_res, dados = consultar_apify(user)
+    if status_res == "OK" and dados:
+        salvar_no_banco(user, dados, inativo=0)
+        atualizar_status_perfil(user, 'ATIVO')
+        registrar_resultado_coleta(user, True)
+        return "OK"
+    if status_res == "NOT_FOUND":
+        registrar_resultado_coleta(user, False)
+        return "NOT_FOUND"
+    return "API_ERROR"
+
+
 def rodar_ingestao_diaria(meta_only=False):
     # 0. Garante estrutura do banco
     try:
@@ -310,8 +482,7 @@ def rodar_ingestao_diaria(meta_only=False):
         return
 
     if not client:
-        print("⚠️ AVISO: Cliente Apify não inicializado. Finalizando rotina (apenas perfis Meta coletados).")
-        return
+        print("⚠️ Cliente Apify não inicializado: perfis sem Meta serão coletados só via Business Discovery.")
 
     perfis = get_perfis_ativos()
     if not perfis:
@@ -324,14 +495,13 @@ def rodar_ingestao_diaria(meta_only=False):
         print("Todos os perfis ativos já foram atualizados via Meta API oficial!")
         return
 
-    print(f"Iniciando coleta Apify para {len(perfis_restantes)} perfis restantes sem Meta API.")
+    print(f"Iniciando coleta (Business Discovery + Apify) para {len(perfis_restantes)} perfis restantes sem Meta API.")
 
     for user in perfis_restantes:
         try:
-            status_res, dados = consultar_apify(user)
-            if status_res == "OK" and dados:
-                salvar_no_banco(user, dados, inativo=0)
-                atualizar_status_perfil(user, 'ATIVO')
+            status_res = coletar_perfil(user)
+            if status_res in ("OK", "SKIP"):
+                pass
             elif status_res == "NOT_FOUND":
                 print(f"Perfil @{user} não encontrado no Instagram. Marcando como INDISPONIVEL (sem gravar data de coleta).")
                 # Não inserimos registro em perfis_historico quando não há dados —
@@ -442,12 +612,16 @@ if __name__ == "__main__":
                 print(f"Aviso Meta API para @{target_user}: {e}")
 
             if not coletado_meta:
-                print(f"Recorrendo ao Apify para @{target_user}...")
-                status_res, dados = consultar_apify(target_user)
-                if status_res == "OK" and dados:
-                    salvar_no_banco(target_user, dados, inativo=0)
-                    atualizar_status_perfil(target_user, 'ATIVO')
-                    print(f"Coleta concluída com sucesso para @{target_user} via Apify.")
+                try:
+                    inicializar_banco()
+                except Exception as e:
+                    print(f"⚠️ Aviso na inicialização do banco: {e}")
+                print(f"Meta API não cobre @{target_user}; tentando Business Discovery e, se preciso, Apify...")
+                status_res = coletar_perfil(target_user, ignorar_coletado_hoje=True)
+                if status_res == "OK":
+                    print(f"Coleta concluída com sucesso para @{target_user}.")
+                elif status_res == "SKIP":
+                    print(f"@{target_user} já tem leitura de hoje; nenhuma nova consulta paga foi feita.")
                 elif status_res == "NOT_FOUND":
                     print(f"AVISO: @{target_user} não encontrado ou dados indisponíveis. Nenhuma alteração gravada no banco.")
                     # Status INDISPONIVEL atualizado sem gravar data de coleta
