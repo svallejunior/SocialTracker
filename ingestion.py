@@ -188,7 +188,7 @@ def inicializar_banco():
 
 
 def salvar_no_banco(username, dados, inativo=0, perfil_ativo=True):
-    # perfil_ativo=False: grava só o histórico, sem reativar o perfil nem gerar alerta de anomalia
+    # perfil_ativo=False: leitura de linha de base (sem avaliar anomalia); quem chama decide o status
     followers = dados.get('followers', 0) if dados else 0
     following = dados.get('following', 0) if dados else 0
     posts = dados.get('posts', 0) if dados else 0
@@ -438,8 +438,8 @@ def coletar_perfil(user, manual=False, perfil_ativo=True):
     1) Meta Business Discovery (gratuito, sempre primeiro); 2) Apify, só se perfil_ativo.
     - rotina diária (manual=False): pula perfil já coletado hoje e respeita o recuo de falhas do Apify.
     - manual=True (clique no dashboard): sempre tenta a Meta; o Apify só é pulado se já houver leitura de hoje.
-    - perfil_ativo=False (INATIVO/MORREU/INDISPONIVEL): só Meta, grava histórico sem reativar o perfil
-      e sem gerar alerta de anomalia.
+    - perfil_ativo=False (INATIVO/MORREU/INDISPONIVEL): só Meta, nunca Apify. Se a Meta ler o perfil,
+      ele volta para ATIVO (a primeira leitura é linha de base, sem alerta de anomalia).
     Retorna 'OK', 'SKIP', 'NOT_FOUND' ou 'API_ERROR'.
     """
     if not manual and coletado_hoje(user):
@@ -449,11 +449,14 @@ def coletar_perfil(user, manual=False, perfil_ativo=True):
 
     status_res, dados = consultar_business_discovery(user)
     if status_res == "OK":
-        print(f"@{user} coletado via Meta Business Discovery (gratuito)" + ("." if perfil_ativo else " [perfil fora do acompanhamento ativo: status mantido]."))
-        salvar_no_banco(user, dados, inativo=0, perfil_ativo=perfil_ativo)
         if perfil_ativo:
-            atualizar_status_perfil(user, 'ATIVO')
-            registrar_resultado_coleta(user, True)
+            print(f"@{user} coletado via Meta Business Discovery (gratuito).")
+        else:
+            print(f"@{user} (inativo) lido via Meta Business Discovery: voltando para ATIVO.")
+        # Leitura de perfil que estava inativo vira só linha de base (sem avaliar anomalia contra dado antigo)
+        salvar_no_banco(user, dados, inativo=0, perfil_ativo=perfil_ativo)
+        atualizar_status_perfil(user, 'ATIVO')
+        registrar_resultado_coleta(user, True)
         return "OK"
 
     if not perfil_ativo:
@@ -551,7 +554,8 @@ def rodar_ingestao_diaria(meta_only=False):
 
 
 def _coletar_inativos_via_meta(contas_meta_processadas):
-    """Perfis INATIVO/MORREU/INDISPONIVEL: só Meta Business Discovery (gratuito), nunca Apify."""
+    """Perfis INATIVO/MORREU/INDISPONIVEL: só Meta Business Discovery (gratuito), nunca Apify.
+    Os que a Meta conseguir ler voltam para ATIVO e passam a ser coletados normalmente."""
     inativos = [u for u in get_perfis_inativos() if u.lower().strip().lstrip("@") not in contas_meta_processadas]
     if not inativos:
         return
@@ -563,7 +567,7 @@ def _coletar_inativos_via_meta(contas_meta_processadas):
                 coletados += 1
         except Exception as e:
             print(f"❌ Erro ao verificar perfil inativo @{user}: {e}. Continuando...")
-    print(f"Perfis inativos com leitura via Meta hoje: {coletados}/{len(inativos)}.")
+    print(f"Perfis inativos reativados via Meta: {coletados}/{len(inativos)}.")
 
 def consultar_apify(username):
     """
