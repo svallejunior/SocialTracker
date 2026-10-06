@@ -65,11 +65,12 @@ def get_perfis_ativos():
         conn.close()
 
 def get_perfis_inativos():
-    """Perfis fora do acompanhamento ativo (INATIVO, MORREU, INDISPONIVEL): só consultados via Meta."""
+    """Perfis não ativos que ainda são verificados via Meta (MORREU, INDISPONIVEL).
+    Perfis INATIVO (removidos pelo usuário) ficam de fora: não sofrem nenhuma ação."""
     conn = conectar_db()
     cursor = conn.cursor()
     try:
-        cursor.execute("SELECT username FROM perfis_monitorados WHERE status IS NOT NULL AND status != 'ATIVO'")
+        cursor.execute("SELECT username FROM perfis_monitorados WHERE status IS NOT NULL AND status NOT IN ('ATIVO', 'INATIVO')")
         return [row[0] for row in cursor.fetchall()]
     except Exception as e:
         print(f"⚠️ Aviso ao ler perfis inativos: {e}")
@@ -376,6 +377,21 @@ def consultar_business_discovery(username):
     return "API_ERROR", None
 
 
+def perfil_esta_inativo(username):
+    """True se o usuário marcou o perfil como INATIVO: nenhuma coleta nem alteração deve ocorrer."""
+    try:
+        conn = conectar_db()
+        try:
+            row = conn.execute(
+                "SELECT status FROM perfis_monitorados WHERE LOWER(username) = LOWER(?)", (username,)
+            ).fetchone()
+        finally:
+            conn.close()
+        return bool(row and (row[0] or '').upper() == 'INATIVO')
+    except Exception:
+        return False
+
+
 def coletado_hoje(username):
     """True se já existe leitura válida (com seguidores) de hoje para o perfil."""
     try:
@@ -438,10 +454,15 @@ def coletar_perfil(user, manual=False, perfil_ativo=True):
     1) Meta Business Discovery (gratuito, sempre primeiro); 2) Apify, só se perfil_ativo.
     - rotina diária (manual=False): pula perfil já coletado hoje e respeita o recuo de falhas do Apify.
     - manual=True (clique no dashboard): sempre tenta a Meta; o Apify só é pulado se já houver leitura de hoje.
-    - perfil_ativo=False (INATIVO/MORREU/INDISPONIVEL): só Meta, nunca Apify. Se a Meta ler o perfil,
+    - perfil_ativo=False (MORREU/INDISPONIVEL): só Meta, nunca Apify. Se a Meta ler o perfil,
       ele volta para ATIVO (a primeira leitura é linha de base, sem alerta de anomalia).
+    - perfil marcado como INATIVO pelo usuário: nunca é consultado nem alterado (em nenhum modo).
     Retorna 'OK', 'SKIP', 'NOT_FOUND' ou 'API_ERROR'.
     """
+    if perfil_esta_inativo(user):
+        print(f"@{user} está marcado como INATIVO: nenhuma consulta nem alteração foi feita.")
+        return "SKIP"
+
     if not manual and coletado_hoje(user):
         if perfil_ativo:
             print(f"@{user} já coletado hoje, pulando (economia de créditos).")
@@ -554,7 +575,7 @@ def rodar_ingestao_diaria(meta_only=False):
 
 
 def _coletar_inativos_via_meta(contas_meta_processadas):
-    """Perfis INATIVO/MORREU/INDISPONIVEL: só Meta Business Discovery (gratuito), nunca Apify.
+    """Perfis MORREU/INDISPONIVEL: só Meta Business Discovery (gratuito), nunca Apify.
     Os que a Meta conseguir ler voltam para ATIVO e passam a ser coletados normalmente."""
     inativos = [u for u in get_perfis_inativos() if u.lower().strip().lstrip("@") not in contas_meta_processadas]
     if not inativos:
@@ -677,7 +698,7 @@ if __name__ == "__main__":
                 if status_res == "OK":
                     print(f"Coleta concluída com sucesso para @{target_user}.")
                 elif status_res == "SKIP":
-                    print(f"@{target_user} já tem leitura de hoje; nenhuma nova consulta paga foi feita.")
+                    print(f"Nenhuma nova consulta paga foi feita para @{target_user} (inativo, já coletado hoje ou em recuo).")
                 elif status_res == "NOT_FOUND":
                     print(f"AVISO: @{target_user} não encontrado ou dados indisponíveis. Nenhuma alteração gravada no banco.")
                     # Status INDISPONIVEL atualizado sem gravar data de coleta
