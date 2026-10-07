@@ -10,6 +10,7 @@ import {
   ChevronLeft, ChevronRight, Info, Maximize2, Eye, EyeOff, Crop, Smartphone
 } from 'lucide-react';
 import ModalAjusteCorte from './ModalAjusteCorte';
+import AvisoJanelaHorario from './AvisoJanelaHorario';
 
 interface Profile {
   username: string;
@@ -5214,6 +5215,14 @@ function FormularioAgendamento({
                   </div>
                 </div>
               )}
+
+              <AvisoJanelaHorario
+                modoHora={modoHora}
+                horaFixa={horaFixa}
+                horaJanelaInicio={horaJanelaInicio}
+                horaJanelaFim={horaJanelaFim}
+                variacaoMinutos={variacaoMinutos}
+              />
             </div>
           </div>
         )}
@@ -5516,6 +5525,14 @@ function FormularioAgendamento({
                   </div>
                 </div>
               )}
+
+              <AvisoJanelaHorario
+                modoHora={modoHora}
+                horaFixa={horaFixa}
+                horaJanelaInicio={horaJanelaInicio}
+                horaJanelaFim={horaJanelaFim}
+                variacaoMinutos={variacaoMinutos}
+              />
             </div>
           </div>
         )}
