@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Send, Search, CheckCheck, RefreshCw, Inbox, Link2, Power, PowerOff,
-  ShoppingBag, MessageSquare, UserPlus, X, Users
+  ShoppingBag, MessageSquare, UserPlus, X, Users, Package
 } from 'lucide-react';
 
 function errMsg(err: unknown): string {
@@ -348,6 +348,18 @@ export default function CentralTelegram() {
                 >
                   <UserPlus size={14} />
                 </button>
+                <a
+                  href="/telegram-pacotes"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Cadastrar/editar pacotes (VIP, Amiguinhos e avulsos) — abre em outra aba"
+                  style={{
+                    color: '#FFC107', borderRadius: 6, padding: 4, border: '1px solid transparent',
+                    display: 'flex', alignItems: 'center', textDecoration: 'none'
+                  }}
+                >
+                  <Package size={14} />
+                </a>
                 <button onClick={carregarLeads} style={{ background: 'none', border: 'none', color: '#8B949E', cursor: 'pointer' }}>
                   <RefreshCw size={14} className={loadingLeads ? 'animate-spin' : ''} />
                 </button>
