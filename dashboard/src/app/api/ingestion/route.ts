@@ -65,9 +65,11 @@ export async function POST(request: NextRequest) {
               }));
             } else {
               console.error(`[API Ingestion] Erro real no script:`, error.message);
+              // Mostra ao usuário a mensagem "ERRO: ..." do script, em vez do texto genérico do exec
+              const erroScript = fullOutput.split('\n').map(l => l.trim()).find(l => l.startsWith('ERRO:'));
               resolve(NextResponse.json({
                 success: false,
-                error: error.message,
+                error: erroScript ? erroScript.replace(/^ERRO:\s*/, '') : error.message,
                 stdout: fullOutput
               }, { status: 500 }));
             }

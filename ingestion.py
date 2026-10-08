@@ -293,6 +293,7 @@ def atualizar_status_perfil(username, novo_status):
 FALHAS_PARA_RECUAR = 2   # após N falhas seguidas do Apify o perfil entra em recuo
 DIAS_DE_RECUO = 7        # em recuo, o Apify só tenta de novo após N dias
 
+_apify_sem_credito = False  # vira True quando o Apify recusa por limite mensal: evita chamadas inúteis na mesma execução
 _discovery_contas = None  # cache das contas Meta usadas como "lupa" na business_discovery
 _discovery_rr = 0         # rodízio entre as contas, para não concentrar chamadas em um só token
 
@@ -463,6 +464,10 @@ def coletar_perfil(user, manual=False):
     if not client:
         return "API_ERROR"
 
+    if _apify_sem_credito:
+        print(f"Apify sem créditos neste ciclo: @{user} não será consultado no Apify.")
+        return "API_ERROR"
+
     if not manual and em_recuo(user):
         print(f"@{user} em recuo após falhas seguidas no Apify; nova tentativa só após {DIAS_DE_RECUO} dias.")
         return "SKIP"
@@ -615,6 +620,11 @@ def consultar_apify(username):
 
         except Exception as e:
             print(f"Erro ao consultar @{username}: {e}")
+            if "limit exceeded" in str(e).lower():
+                # Limite mensal do Apify esgotado: repetir não adianta e atrasa a resposta
+                global _apify_sem_credito
+                _apify_sem_credito = True
+                return "API_ERROR", None
             if tentativa < MAX_TENTATIVAS:
                 print(f"  Aguardando para tentar novamente...")
                 import time
@@ -661,6 +671,9 @@ if __name__ == "__main__":
                     # Status INDISPONIVEL atualizado sem gravar data de coleta
                     atualizar_status_perfil(target_user, 'INDISPONIVEL')
                 else:
-                    print(f"⚠️ Falha na API ao consultar @{target_user}. Status mantido sem alterações.")
+                    # Falha real: a rota do dashboard só reporta erro se o script sair com código != 0
+                    motivo = "o Apify está sem créditos (limite mensal esgotado)" if _apify_sem_credito else "o Apify também falhou"
+                    print(f"ERRO: não foi possível coletar @{target_user}: a Meta não retornou dados (conta pessoal ou sem acesso) e {motivo}. Status mantido sem alterações.")
+                    sys.exit(1)
     else:
         rodar_ingestao_diaria()
