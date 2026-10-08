@@ -2685,6 +2685,13 @@ export default function Dashboard() {
           alert("⏳ A coleta completa está em execução em segundo plano no servidor (o processo leva alguns minutos). Os dados estão sendo atualizados no painel gradativamente!");
           return;
         }
+        // A rota devolve { success:false, error } com status 500 quando a coleta falha: mostra o motivo
+        let motivo: string | null = null;
+        try { motivo = JSON.parse(text)?.error || null; } catch { /* resposta não-JSON */ }
+        if (motivo) {
+          alert(`❌ ${motivo}`);
+          return;
+        }
         throw new Error(`Servidor respondeu com status ${res.status}`);
       }
 
