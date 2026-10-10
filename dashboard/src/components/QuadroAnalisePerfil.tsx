@@ -12,6 +12,7 @@ import AvatarModelo from './AvatarModelo';
 interface QuadroAnalisePerfilProps {
   profiles?: any[];
   controleData?: any[];
+  onModeloChange?: (username: string) => void;
 }
 
 export interface RegistroAnalise {
@@ -158,7 +159,7 @@ function IndicadorTendencia({
   );
 }
 
-export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }: QuadroAnalisePerfilProps) {
+export default function QuadroAnalisePerfil({ profiles = [], controleData = [], onModeloChange }: QuadroAnalisePerfilProps) {
   // Lista unificada das "Minhas Modelos"
   const modelos = useMemo(() => {
     const mapaCtrl = new Map((controleData || []).map((c: any) => [(c.username || '').toLowerCase(), c]));
@@ -199,6 +200,10 @@ export default function QuadroAnalisePerfil({ profiles = [], controleData = [] }
       setSelectedUsername(modelos[0].username);
     }
   }, [modelos, selectedUsername]);
+
+  useEffect(() => {
+    if (selectedUsername) onModeloChange?.(selectedUsername);
+  }, [selectedUsername, onModeloChange]);
 
   // Registros de análise
   const [registros, setRegistros] = useState<RegistroAnalise[]>([]);

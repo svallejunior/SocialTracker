@@ -40,10 +40,18 @@ function Painel({ titulo, cor, children }: { titulo: string; cor: string; childr
 }
 
 // Evolução semana a semana (dados de /api/analise) de uma das minhas contas
-export default function GraficoSemanasRegistradas({ modelos }: { modelos: Modelo[] }) {
-  const [escolhida, setEscolhida] = useState('');
-  // Sem escolha explícita, mostra a primeira modelo da lista
-  const username = escolhida || modelos[0]?.username || '';
+export default function GraficoSemanasRegistradas({ modelos, usernameSelecionado = '' }: { modelos: Modelo[]; usernameSelecionado?: string }) {
+  const [escolhida, setEscolhida] = useState(usernameSelecionado);
+
+  // A modelo escolhida no Tratamento por Conta passa a ser a do gráfico; o select continua podendo trocar
+  useEffect(() => {
+    if (usernameSelecionado) setEscolhida(usernameSelecionado);
+  }, [usernameSelecionado]);
+
+  // Sem escolha válida na lista, mostra a primeira modelo
+  const username = modelos.some(m => m.username.toLowerCase() === escolhida.toLowerCase())
+    ? modelos.find(m => m.username.toLowerCase() === escolhida.toLowerCase())!.username
+    : modelos[0]?.username || '';
   const [registros, setRegistros] = useState<RegistroAnalise[]>([]);
   const [loading, setLoading] = useState(false);
   const [versao, setVersao] = useState(0);

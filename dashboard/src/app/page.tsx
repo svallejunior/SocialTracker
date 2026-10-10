@@ -2105,6 +2105,7 @@ export default function Dashboard() {
   const [acompSortField, setAcompSortField] = useState<string>('meu_perfil');
   const [acompSortDir, setAcompSortDir] = useState<'asc' | 'desc'>('desc');
   const [abaGrafico, setAbaGrafico] = useState<'projecao' | 'semanas'>('projecao');
+  const [modeloAnaliseSelecionada, setModeloAnaliseSelecionada] = useState('');
   const [showEvolutionChart, setShowEvolutionChart] = useState(false);
   // Edição inline de Primeira Postagem
   const [editingPrimeiraPostagem, setEditingPrimeiraPostagem] = useState<string | null>(null);
@@ -5432,7 +5433,7 @@ export default function Dashboard() {
           ==================================================== */}
       {activeTab === 'graficos' && (
         <>
-          <QuadroAnalisePerfil profiles={profiles} controleData={controleData} />
+          <QuadroAnalisePerfil profiles={profiles} controleData={controleData} onModeloChange={setModeloAnaliseSelecionada} />
           {/* === BLOCO ÚNICO DE GRÁFICOS: PROJEÇÃO | SEMANAS REGISTRADAS === */}
           <div className="followers-history-box">
             <div style={{ display: 'flex', gap: 6, background: '#161B22', padding: 4, borderRadius: 8, border: '1px solid #30363D', width: 'fit-content', marginBottom: 20 }}>
@@ -5464,6 +5465,7 @@ export default function Dashboard() {
               <GraficoProjecao meusPerfis={profiles.filter(p => Number(p.meu_perfil) === 1)} todosPerfis={profiles} />
             ) : (
               <GraficoSemanasRegistradas
+                usernameSelecionado={modeloAnaliseSelecionada}
                 modelos={profiles
                   .filter(p => Number(p.meu_perfil) === 1 && p.status !== 'MORREU' && !(p.status_controle || '').includes('Morreu'))
                   .sort((a, b) => (Number(b.seguidores) || 0) - (Number(a.seguidores) || 0))}
