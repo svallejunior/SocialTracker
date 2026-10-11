@@ -5,10 +5,12 @@ import Link from 'next/link';
 import {
   Clock, RefreshCw, Calendar, CheckCircle2, TrendingUp,
   TrendingDown, Users, Layers, ExternalLink,
-  AlertCircle, Sparkles, Image as ImageIcon, Film, PlayCircle, Camera
+  AlertCircle, Sparkles, Image as ImageIcon, Film, PlayCircle, Camera,
+  Eye, BadgeCheck, ChevronRight, PlusCircle
 } from 'lucide-react';
 import LogoSplash from '@/components/LogoSplash';
 import AgendarMobileModal from '@/components/AgendarMobileModal';
+import SparklineWave from '@/components/SparklineWave';
 
 interface PostMobile {
   post_id: string;
@@ -33,6 +35,15 @@ interface PerfilMobile {
   variacao_dia: number;
   posts_dia: number;
   views_dia?: number;
+  views_delta_ultima_carga?: number;
+  curva_seguidores_dia?: number[];
+  curva_views_dia?: number[];
+  hoje_post_pub?: number;
+  hoje_post_ag?: number;
+  hoje_reels_pub?: number;
+  hoje_reels_ag?: number;
+  hoje_stories_pub?: number;
+  hoje_stories_ag?: number;
   ultimas_publicacoes?: PostMobile[];
   posts_hoje?: PostMobile[];
   meu_perfil?: boolean;
@@ -57,9 +68,36 @@ export default function MobileDashboard() {
 
   const fetchData = async () => {
     try {
-      const res = await fetch('/api/mobile/resumo');
+      const [res, resExtras] = await Promise.all([
+        fetch('/api/mobile/resumo'),
+        // Mesmas métricas do card do desktop (curvas do dia, views, publicados/agendados de hoje)
+        fetch('/api/data').catch(() => null)
+      ]);
       const json = await res.json();
       if (json.success && json.perfis && json.perfis.length > 0) {
+        const extrasByUser: Record<string, any> = {};
+        try {
+          const jsonExtras = resExtras ? await resExtras.json() : null;
+          for (const pe of (jsonExtras?.profiles || [])) {
+            extrasByUser[(pe.username || '').toLowerCase()] = pe;
+          }
+        } catch { /* sem extras: o card renderiza com zeros */ }
+
+        json.perfis = json.perfis.map((p: PerfilMobile) => {
+          const e = extrasByUser[(p.username || '').toLowerCase()] || {};
+          return {
+            ...p,
+            views_delta_ultima_carga: Number(e.views_delta_ultima_carga) || 0,
+            curva_seguidores_dia: e.curva_seguidores_dia,
+            curva_views_dia: e.curva_views_dia,
+            hoje_post_pub: Number(e.hoje_post_pub) || 0,
+            hoje_post_ag: Number(e.hoje_post_ag) || 0,
+            hoje_reels_pub: Number(e.hoje_reels_pub) || 0,
+            hoje_reels_ag: Number(e.hoje_reels_ag) || 0,
+            hoje_stories_pub: Number(e.hoje_stories_pub) || 0,
+            hoje_stories_ag: Number(e.hoje_stories_ag) || 0
+          };
+        });
         setData(json);
       } else {
         // Fallback: busca via /api/data
@@ -413,134 +451,133 @@ export default function MobileDashboard() {
               return (
                 <div
                   key={p.username}
-                  style={{
-                    background: '#949494',
-                    borderRadius: '18px',
-                    padding: '16px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '12px',
-                    boxShadow: '0 10px 30px -4px rgba(0, 0, 0, 0.5)',
-                    border: '1px solid rgba(255, 255, 255, 0.25)'
-                  }}
+                  className="modelo-card-mockup modelo-card-mobile"
                 >
-                  {/* Linha Superior: Foto, Nome e Total de Seguidores (Tipografia Escura de Alto Contraste no #949494) */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <div style={{
-                        width: '46px',
-                        height: '46px',
-                        borderRadius: '50%',
-                        overflow: 'hidden',
-                        background: '#16191E',
-                        border: '2px solid #0F172A',
-                        flexShrink: 0,
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
-                      }}>
+                  {/* Mesmo card do desktop: foto/nome/botão à esquerda, métricas e HOJE à direita */}
+                  <div className="modelo-card-mobile-top">
+                    <div className="modelo-col-left">
+                      <a
+                        href={`https://instagram.com/${p.username.replace('@', '')}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="modelo-photo-frame"
+                      >
                         {p.foto_url ? (
-                          <img src={p.foto_url} alt={p.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          <img
+                            src={p.foto_url}
+                            alt={p.nome || p.username}
+                            className="modelo-photo-img"
+                            referrerPolicy="no-referrer"
+                          />
                         ) : (
-                          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>
-                            👤
+                          <Users size={28} color="#8B949E" />
+                        )}
+                      </a>
+
+                      <div className="modelo-info-box">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <span className="modelo-title-name">{p.nome || p.username}</span>
+                          <BadgeCheck size={15} fill="#00FF66" color="#0B0E14" style={{ flexShrink: 0 }} />
+                        </div>
+                        <span className="modelo-sub-handle">@{p.username}</span>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="modelo-action-btn"
+                        onClick={() => setPerfilAgendando(perfilAgendando?.username === p.username ? null : p)}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <Camera size={14} />
+                          <span>Agendar</span>
+                        </div>
+                        <ChevronRight size={14} />
+                      </button>
+                    </div>
+
+                    <div className="modelo-col-right">
+                      <div className="modelo-metrics-grid">
+                        <div className="modelo-stat-box">
+                          <div className="modelo-stat-header">
+                            <Users size={12} color="#8B949E" />
+                            <span>SEGUIDORES</span>
                           </div>
-                        )}
+                          <div className="modelo-stat-val-row">
+                            <span className="modelo-stat-number">{formatNumero(p.seguidores)}</span>
+                            <span className="modelo-stat-badge" style={{
+                              background: p.variacao_dia < 0 ? 'rgba(248, 81, 73, 0.12)' : 'rgba(0, 255, 102, 0.12)',
+                              borderColor: p.variacao_dia < 0 ? 'rgba(248, 81, 73, 0.3)' : 'rgba(0, 255, 102, 0.3)',
+                              color: p.variacao_dia < 0 ? '#F85149' : '#00FF66'
+                            }}>
+                              {p.variacao_dia < 0 ? '↓' : '↑'} {p.variacao_dia >= 0 ? `+${formatNumero(p.variacao_dia)}` : formatNumero(p.variacao_dia)}
+                            </span>
+                          </div>
+                          <div className="modelo-stat-wave">
+                            <SparklineWave data={p.curva_seguidores_dia} color={p.variacao_dia < 0 ? '#F85149' : '#00FF66'} id={`mseg-${p.username}`} />
+                          </div>
+                        </div>
+
+                        <div className="modelo-stat-box">
+                          <div className="modelo-stat-header">
+                            <Eye size={12} color="#8B949E" />
+                            <span>ACESSOS HJ</span>
+                          </div>
+                          <div className="modelo-stat-val-row">
+                            <span className="modelo-stat-number">{p.views_dia && p.views_dia > 0 ? formatNumero(p.views_dia) : '0'}</span>
+                            <span className="modelo-stat-badge" style={{
+                              background: (p.views_delta_ultima_carga || 0) > 0 ? 'rgba(0, 255, 102, 0.12)' : 'rgba(255, 255, 255, 0.05)',
+                              borderColor: (p.views_delta_ultima_carga || 0) > 0 ? 'rgba(0, 255, 102, 0.3)' : 'rgba(255, 255, 255, 0.1)',
+                              color: (p.views_delta_ultima_carga || 0) > 0 ? '#00FF66' : '#8B949E'
+                            }}>
+                              ↑ {(p.views_delta_ultima_carga || 0) > 0 ? `+${formatNumero(p.views_delta_ultima_carga || 0)}` : '+0'}
+                            </span>
+                          </div>
+                          <div className="modelo-stat-wave">
+                            <SparklineWave data={p.curva_views_dia} color="#00FF66" id={`mviews-${p.username}`} />
+                          </div>
+                        </div>
                       </div>
 
-                      <div>
-                        <div style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', lineHeight: 1.2 }}>
-                          {p.nome || p.username}
+                      <div className="modelo-hoje-container">
+                        <div className="modelo-hoje-header">
+                          <Calendar size={12} color="#8B949E" />
+                          <span>HOJE</span>
                         </div>
-                        <div style={{ fontSize: '12px', color: '#2D3748', fontWeight: 600, marginTop: '2px' }}>
-                          @{p.username}
+                        <div className="modelo-hoje-grid">
+                          <div className="modelo-hoje-card card-reels">
+                            <div className="modelo-hoje-icon-circle circle-reels">
+                              <Film size={13} color="#EF4444" />
+                            </div>
+                            <span className="modelo-hoje-lbl lbl-reels">REELS</span>
+                            <div className="modelo-hoje-val-wrap">
+                              <span className="modelo-hoje-num">{p.hoje_reels_pub || 0}</span>
+                              <span className="modelo-hoje-plus val-reels">(+{p.hoje_reels_ag || 0})</span>
+                            </div>
+                          </div>
+                          <div className="modelo-hoje-card card-posts">
+                            <div className="modelo-hoje-icon-circle circle-posts">
+                              <ImageIcon size={13} color="#60A5FA" />
+                            </div>
+                            <span className="modelo-hoje-lbl lbl-posts">POSTS</span>
+                            <div className="modelo-hoje-val-wrap">
+                              <span className="modelo-hoje-num">{p.hoje_post_pub || 0}</span>
+                              <span className="modelo-hoje-plus val-posts">(+{p.hoje_post_ag || 0})</span>
+                            </div>
+                          </div>
+                          <div className="modelo-hoje-card card-stories">
+                            <div className="modelo-hoje-icon-circle circle-stories">
+                              <PlusCircle size={13} color="#FBBF24" />
+                            </div>
+                            <span className="modelo-hoje-lbl lbl-stories">STORIES</span>
+                            <div className="modelo-hoje-val-wrap">
+                              <span className="modelo-hoje-num">{p.hoje_stories_pub || 0}</span>
+                              <span className="modelo-hoje-plus val-stories">(+{p.hoje_stories_ag || 0})</span>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '17px', fontWeight: 800, color: '#0F172A' }}>
-                        {formatNumero(p.seguidores)}
-                        {p.variacao_dia > 0 && (
-                          <span style={{ fontSize: '12px', fontWeight: 800, color: '#0F172A' }}>
-                            {' '}(<span style={{ color: '#10B981' }}>+{p.variacao_dia}</span>)
-                          </span>
-                        )}
-                      </div>
-                      <div style={{ fontSize: '10px', color: '#2D3748', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.04em' }}>
-                        Seguidores
                       </div>
                     </div>
                   </div>
-
-                  {/* Linha do Meio: 3 Colunas de Métricas (Última Coleta, No Dia, Postagens) */}
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr 1fr',
-                    gap: '6px',
-                    background: '#16181D',
-                    borderRadius: '12px',
-                    padding: '10px',
-                    border: '1px solid rgba(0, 0, 0, 0.25)',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
-                  }}>
-                    {/* 1. Views ganhas no dia (soma das novas views dos posts) */}
-                    <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: '9px', color: '#9CA3AF', textTransform: 'uppercase', marginBottom: '4px', fontWeight: 700 }}>
-                        👁 Views Hoje
-                      </div>
-                      <div style={{ fontSize: '13px', fontWeight: 800, color: p.views_dia && p.views_dia > 0 ? '#00F0FF' : '#8B949E' }}>
-                        {p.views_dia && p.views_dia > 0 ? `+${formatNumero(p.views_dia)}` : '—'}
-                      </div>
-                    </div>
-
-                    {/* 2. Evolução no Dia */}
-                    <div style={{ textAlign: 'center', borderLeft: '1px solid rgba(255,255,255,0.08)', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
-                      <div style={{ fontSize: '9px', color: '#9CA3AF', textTransform: 'uppercase', marginBottom: '4px', fontWeight: 700 }}>
-                        No Dia
-                      </div>
-                      <div>
-                        {renderBadgeVariacao(p.variacao_dia)}
-                      </div>
-                    </div>
-
-                    {/* 3. Postagens */}
-                    <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: '9px', color: '#9CA3AF', textTransform: 'uppercase', marginBottom: '4px', fontWeight: 700 }}>
-                        Posts
-                      </div>
-                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }}>
-                        <Layers size={11} color="#00F0FF" />
-                        <span>{p.total_posts}</span>
-                        {p.posts_dia > 0 && (
-                          <span style={{ fontSize: '10px', color: '#10B981' }}>(+{p.posts_dia})</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Botão de agendamento de foto direto pelo celular */}
-                  {perfilAgendando?.username !== p.username && (
-                    <button
-                      onClick={() => setPerfilAgendando(p)}
-                      style={{
-                        width: '100%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '6px',
-                        background: 'rgba(15, 23, 42, 0.9)',
-                        color: '#00F0FF',
-                        border: 'none',
-                        borderRadius: '10px',
-                        padding: '10px',
-                        fontSize: '12px',
-                        fontWeight: 800,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <Camera size={14} />
-                      Agendar foto
-                    </button>
-                  )}
 
                   {/* Formulário de agendamento aberto DENTRO do card (mesmo padrão do
                       desktop) — evita o bug de overlay "fixed" sumir da tela no mobile. */}
@@ -556,14 +593,14 @@ export default function MobileDashboard() {
                   <div style={{
                     marginTop: '2px',
                     paddingTop: '10px',
-                    borderTop: '1px solid rgba(0, 0, 0, 0.15)',
+                    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '8px'
                   }}>
                     <div style={{
                       fontSize: '11px',
-                      color: '#0F172A',
+                      color: '#E5E7EB',
                       fontWeight: 800,
                       textTransform: 'uppercase',
                       letterSpacing: '0.04em',
@@ -572,10 +609,10 @@ export default function MobileDashboard() {
                       justifyContent: 'space-between'
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <Film size={13} color="#0F172A" />
+                        <Film size={13} color="#E5E7EB" />
                         Últimas Publicações ({postsList.length})
                       </div>
-                      <span style={{ fontSize: '10px', color: '#2D3748', fontWeight: 600, textTransform: 'none' }}>
+                      <span style={{ fontSize: '10px', color: '#8B949E', fontWeight: 600, textTransform: 'none' }}>
                         Até 5 mais recentes
                       </span>
                     </div>

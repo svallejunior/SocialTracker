@@ -2431,3 +2431,65 @@ body::after {
     opacity: 1;
   }
 }
+/* =========================================================================
+   CARD DA MODELO NA VERSÃO MOBILE (/mobile) — mesmo layout do desktop,
+   compactado para caber em ~360px: foto à esquerda, métricas à direita.
+   ========================================================================= */
+.modelo-card-mockup.modelo-card-mobile {
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 18px;
+  cursor: default;
+}
+.modelo-card-mockup.modelo-card-mobile:hover {
+  transform: none;
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+.modelo-card-mobile .modelo-card-mobile-top {
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  align-items: stretch;
+}
+.modelo-card-mobile .modelo-col-left {
+  width: 118px;
+  min-width: 118px;
+  gap: 8px;
+}
+.modelo-card-mobile .modelo-photo-frame {
+  height: 128px;
+  min-height: 128px;
+  border-radius: 14px;
+}
+.modelo-card-mobile .modelo-title-name { font-size: 13px; }
+.modelo-card-mobile .modelo-sub-handle { font-size: 10px; }
+.modelo-card-mobile .modelo-action-btn {
+  padding: 8px 10px;
+  font-size: 12px;
+  border-radius: 10px;
+}
+.modelo-card-mobile .modelo-col-right { gap: 8px; }
+.modelo-card-mobile .modelo-metrics-grid {
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.modelo-card-mobile .modelo-stat-box {
+  padding: 8px 8px 2px 8px;
+  border-radius: 12px;
+}
+.modelo-card-mobile .modelo-stat-header { font-size: 8px; gap: 3px; letter-spacing: 0.2px; }
+.modelo-card-mobile .modelo-stat-number { font-size: 17px; }
+.modelo-card-mobile .modelo-stat-badge { font-size: 9px; padding: 1px 5px; }
+.modelo-card-mobile .modelo-hoje-container {
+  padding: 8px;
+  gap: 6px;
+  border-radius: 12px;
+}
+.modelo-card-mobile .modelo-hoje-grid { gap: 5px; }
+.modelo-card-mobile .modelo-hoje-card { padding: 6px 2px; gap: 3px; border-radius: 10px; }
+.modelo-card-mobile .modelo-hoje-icon-circle { width: 22px; height: 22px; }
+.modelo-card-mobile .modelo-hoje-lbl { font-size: 8px; letter-spacing: 0.2px; }
+.modelo-card-mobile .modelo-hoje-num { font-size: 15px; }
+.modelo-card-mobile .modelo-hoje-plus { font-size: 9px; }
