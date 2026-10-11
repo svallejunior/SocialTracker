@@ -1052,6 +1052,34 @@ export default function ModalEvolucaoPost({
                                 </span>
                               </div>
                             )}
+
+                            {/* Fator: alcançado - esperado (mesma métrica usada no Esperado) */}
+                            {(() => {
+                              const alcancado = dataPoint?.expectedViews != null ? dataPoint?.views
+                                : dataPoint?.expectedLikes != null ? dataPoint?.likes
+                                : dataPoint?.expectedComentarios != null ? dataPoint?.comentarios
+                                : null;
+                              if (expectedVal == null || alcancado == null) return null;
+                              const fator = Number(alcancado) - Number(expectedVal);
+                              return (
+                                <div style={{
+                                  marginTop: '6px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  fontSize: '11px'
+                                }}>
+                                  <span style={{ color: '#C084FC', fontWeight: '700' }}>⚖️ Fator :</span>
+                                  <span style={{
+                                    fontWeight: '800',
+                                    fontFamily: 'monospace',
+                                    color: fator > 0 ? '#39FF14' : fator < 0 ? '#FF007A' : '#8B949E'
+                                  }}>
+                                    {fator > 0 ? '+' : ''}{formatNumber(Math.round(fator))}
+                                  </span>
+                                </div>
+                              );
+                            })()}
                           </div>
                         );
                       }}
