@@ -424,15 +424,16 @@ async function abrirConexao(): Promise<Db> {
     driver: sqlite3.Database
   });
 
-  // Configura busyTimeout de 10s no driver nativo sqlite3
-  db.getDatabaseInstance().configure('busyTimeout', 10000);
+  // busyTimeout de 30s (igual aos scripts Python): a ingestão do Meta mantém transações
+  // de escrita longas e 10s não bastava, gerando SQLITE_BUSY em salvamentos do dashboard.
+  db.getDatabaseInstance().configure('busyTimeout', 30000);
 
   // Garante WAL e timeout a nível de PRAGMA
   try {
     await db.exec(`
       PRAGMA journal_mode = WAL;
       PRAGMA synchronous = NORMAL;
-      PRAGMA busy_timeout = 10000;
+      PRAGMA busy_timeout = 30000;
     `);
   } catch (e) {
     // Silencia se PRAGMA já estiver ativo

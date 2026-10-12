@@ -14,6 +14,7 @@ export const metadata: Metadata = {
 };
 
 import FloatingLogButton from "@/components/FloatingLogButton";
+import AvisoFalhaSalvar from "@/components/AvisoFalhaSalvar";
 
 export default function RootLayout({
   children,
@@ -25,6 +26,7 @@ export default function RootLayout({
       <body>
         {children}
         <FloatingLogButton />
+        <AvisoFalhaSalvar />
       </body>
     </html>
   );
