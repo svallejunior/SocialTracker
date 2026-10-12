@@ -96,6 +96,19 @@ export default function ModalTaticas({ onClose }: { onClose: () => void }) {
                 {label}
               </button>
             ))}
+            <a
+              href="https://pagamentos.137-131-202-56.sslip.io/admin"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                padding: '6px 16px', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 14,
+                border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: '#8B949E',
+                textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6,
+              }}
+            >
+              Pagamentos
+              <ExternalLink size={13} />
+            </a>
           </div>
           <button
             onClick={onClose}
