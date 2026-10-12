@@ -45,15 +45,15 @@ const TATICAS: Tatica[] = [
 ];
 
 const LINKS = [
-  { titulo: 'WAN 2.2 - GERAR VIDEOS // I2V', url: 'https://bit.ly/4faEdBc' },
-  { titulo: 'WAN 2.2 - TRANSFER MOTION +18 // IMG2VID (FUNDOIMAGEM)', url: 'https://bit.ly/4yc0xTX' },
-  { titulo: 'WAN 2.2 - TRANSFER ECOMMERCE // IMG2VID (FUNDOVIDEO)', url: 'https://bit.ly/4i0Q9J3' },
-  { titulo: 'WAN2.2 - LIP SYNC REALISTA (PRO) // I2V', url: 'https://bit.ly/4vhowy9' },
-  { titulo: 'QWEN - ROTAÇÃO 360° CONSITENTE // IMG2IMG e TXT2IMG', url: 'https://bit.ly/44jxe46' },
-  { titulo: 'QWEN - CLONAR POSES // IMG2IMG', url: 'https://bit.ly/3R8BksD' },
-  { titulo: 'Z IMAGE TURBO - GERAR IMAGENS FOTOREALISTAS // TXT2IMG', url: 'https://bit.ly/4vWUqRF' },
-  { titulo: 'QWEN - TROCA DE ROUPA E TROCA DE COR // IMG2IMG', url: 'https://bit.ly/4fuxgMJ' },
-  { titulo: 'FLUX - FACE SWAP (PRO) // IMG2IMG', url: 'https://bit.ly/3TepspL' },
+  { titulo: 'GERAR VIDEOS DE IMAGEM', url: 'https://bit.ly/4faEdBc' },
+  { titulo: 'TRANSFER MOTION +18 // FUNDO DA IMAGEM', url: 'https://bit.ly/4yc0xTX' },
+  { titulo: 'TRANSFER ECOMMERCE // FUNDO DO VIDEO', url: 'https://bit.ly/4i0Q9J3' },
+  { titulo: 'LIP SYNC', url: 'https://bit.ly/4vhowy9' },
+  { titulo: 'ROTAÇÃO 360°', url: 'https://bit.ly/44jxe46' },
+  { titulo: 'CLONAR POSES', url: 'https://bit.ly/3R8BksD' },
+  { titulo: 'Z IMAGE TURBO - GERAR IMAGENS FOTOREALISTAS', url: 'https://bit.ly/4vWUqRF' },
+  { titulo: 'TROCA DE ROUPA E TROCA DE COR', url: 'https://bit.ly/4fuxgMJ' },
+  { titulo: 'FACE SWAP', url: 'https://bit.ly/3TepspL' },
 ];
 
 export default function ModalTaticas({ onClose }: { onClose: () => void }) {
@@ -125,33 +125,33 @@ export default function ModalTaticas({ onClose }: { onClose: () => void }) {
             ))}
           </div>
         ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {TATICAS.map(({ icon: Icon, titulo, descricao, detalhes, recomendacao }) => (
-            <div
-              key={titulo}
-              style={{
-                display: 'flex', gap: 14, padding: 14, borderRadius: 10,
-                background: '#161B22', border: '1px solid rgba(255,255,255,0.08)',
-              }}
-            >
-              <Icon size={22} color="#388BFD" style={{ flexShrink: 0, marginTop: 2 }} />
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>{titulo}</div>
-                <div style={{ fontSize: 13, color: '#8B949E', lineHeight: 1.5 }}>{descricao}</div>
-                {detalhes && (
-                  <ul style={{ margin: '10px 0 0', paddingLeft: 18, fontSize: 13, lineHeight: 1.6 }}>
-                    {detalhes.map((d) => <li key={d}>{d}</li>)}
-                  </ul>
-                )}
-                {recomendacao && (
-                  <div style={{ marginTop: 10, fontSize: 13, color: '#D29922', fontWeight: 600 }}>
-                    Recomendação: {recomendacao}
-                  </div>
-                )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {TATICAS.map(({ icon: Icon, titulo, descricao, detalhes, recomendacao }) => (
+              <div
+                key={titulo}
+                style={{
+                  display: 'flex', gap: 14, padding: 14, borderRadius: 10,
+                  background: '#161B22', border: '1px solid rgba(255,255,255,0.08)',
+                }}
+              >
+                <Icon size={22} color="#388BFD" style={{ flexShrink: 0, marginTop: 2 }} />
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>{titulo}</div>
+                  <div style={{ fontSize: 13, color: '#8B949E', lineHeight: 1.5 }}>{descricao}</div>
+                  {detalhes && (
+                    <ul style={{ margin: '10px 0 0', paddingLeft: 18, fontSize: 13, lineHeight: 1.6 }}>
+                      {detalhes.map((d) => <li key={d}>{d}</li>)}
+                    </ul>
+                  )}
+                  {recomendacao && (
+                    <div style={{ marginTop: 10, fontSize: 13, color: '#D29922', fontWeight: 600 }}>
+                      Recomendação: {recomendacao}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
         )}
       </div>
     </div>,
