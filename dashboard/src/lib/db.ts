@@ -400,7 +400,62 @@ async function ensureSchema(db: Db): Promise<void> {
       UNIQUE(tarefa_id, data_ref)
     );
     CREATE INDEX IF NOT EXISTS idx_produtividade_conclusoes_tarefa_data ON produtividade_conclusoes(tarefa_id, data_ref);
+
+    -- Quadro estilo Trello: modelos = colunas; cards-modelo (biblioteca) são arrastados para as colunas.
+    -- Cada card tem 1+ checks diários (reseta por data_ref).
+    CREATE TABLE IF NOT EXISTS produtividade_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      titulo TEXT NOT NULL,
+      checks_json TEXT NOT NULL DEFAULT '[]',
+      ativa INTEGER NOT NULL DEFAULT 1,
+      criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS produtividade_cards (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL,
+      titulo TEXT NOT NULL,
+      ativa INTEGER NOT NULL DEFAULT 1,
+      legacy_tarefa_id INTEGER,
+      criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_produtividade_cards_username ON produtividade_cards(username);
+
+    CREATE TABLE IF NOT EXISTS produtividade_checks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      card_id INTEGER NOT NULL REFERENCES produtividade_cards(id) ON DELETE CASCADE,
+      texto TEXT NOT NULL,
+      ordem INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_produtividade_checks_card ON produtividade_checks(card_id);
+
+    CREATE TABLE IF NOT EXISTS produtividade_check_conclusoes (
+      check_id INTEGER NOT NULL REFERENCES produtividade_checks(id) ON DELETE CASCADE,
+      data_ref TEXT NOT NULL,
+      concluida_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (check_id, data_ref)
+    );
   `);
+
+  // Migra as tarefas simples antigas para cards de 1 check (idempotente).
+  await db.run(`
+    INSERT INTO produtividade_cards (username, titulo, legacy_tarefa_id, criado_em)
+      SELECT t.username, t.texto, t.id, t.criado_em FROM produtividade_tarefas t
+      WHERE t.ativa = 1 AND NOT EXISTS (SELECT 1 FROM produtividade_cards c WHERE c.legacy_tarefa_id = t.id)
+  `);
+  const migrados = await db.run(`
+    INSERT INTO produtividade_checks (card_id, texto, ordem)
+      SELECT c.id, c.titulo, 0 FROM produtividade_cards c
+      WHERE c.legacy_tarefa_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM produtividade_checks k WHERE k.card_id = c.id)
+  `);
+  if (migrados.changes) {
+    await db.run(`
+      INSERT OR IGNORE INTO produtividade_check_conclusoes (check_id, data_ref, concluida_em)
+        SELECT k.id, o.data_ref, o.concluida_em FROM produtividade_conclusoes o
+        JOIN produtividade_cards c ON c.legacy_tarefa_id = o.tarefa_id
+        JOIN produtividade_checks k ON k.card_id = c.id
+    `);
+  }
 
   // Vínculo lançamento ↔ transação do CRM: cada venda registrada no CRM gera um
   // lançamento "recebido" no extrato da Análise, removido junto com a transação.
