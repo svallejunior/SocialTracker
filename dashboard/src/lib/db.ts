@@ -457,6 +457,37 @@ async function ensureSchema(db: Db): Promise<void> {
     `);
   }
 
+  // Cards "fixos" com comportamento especial (tipo) e rotina diária padrão na biblioteca.
+  for (const [tabela, coluna, ddl] of [
+    ['produtividade_templates', 'tipo', 'TEXT'],
+    ['produtividade_templates', 'fixo', 'INTEGER NOT NULL DEFAULT 0'],
+    ['produtividade_cards', 'tipo', 'TEXT'],
+  ] as const) {
+    const cols = await db.all(`PRAGMA table_info(${tabela})`);
+    if (!cols.some((c: any) => c.name === coluna)) {
+      await db.exec(`ALTER TABLE ${tabela} ADD COLUMN ${coluna} ${ddl}`);
+    }
+  }
+  await db.run(
+    `INSERT INTO produtividade_templates (titulo, checks_json, tipo, fixo)
+     SELECT 'Follow / Unfollow', ?, 'follow_unfollow', 1
+     WHERE NOT EXISTS (SELECT 1 FROM produtividade_templates WHERE tipo = 'follow_unfollow')`,
+    [JSON.stringify(['Seguir (meta do dia)', 'Deixar de seguir'])]
+  );
+  for (const titulo of [
+    'Verificar comentários e directs',
+    'Conferir agendamentos de posts e reels',
+    'Publicar stories do dia',
+    'Interação orgânica (15 min)',
+    'Acompanhar tração e métricas',
+  ]) {
+    await db.run(
+      `INSERT INTO produtividade_templates (titulo, checks_json)
+       SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM produtividade_templates WHERE titulo = ?)`,
+      [titulo, JSON.stringify([titulo]), titulo]
+    );
+  }
+
   // Vínculo lançamento ↔ transação do CRM: cada venda registrada no CRM gera um
   // lançamento "recebido" no extrato da Análise, removido junto com a transação.
   try {

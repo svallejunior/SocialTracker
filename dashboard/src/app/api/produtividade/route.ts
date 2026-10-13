@@ -32,16 +32,16 @@ export async function GET(request: NextRequest) {
     const vinculos = await db.all(`SELECT username, senha FROM produtividade_perfil_senha`);
 
     const templatesRaw = await db.all(
-      `SELECT id, titulo, checks_json FROM produtividade_templates WHERE ativa = 1 ORDER BY id ASC`
+      `SELECT id, titulo, checks_json, tipo, fixo FROM produtividade_templates WHERE ativa = 1 ORDER BY fixo DESC, id ASC`
     );
     const templates = (templatesRaw || []).map((t: any) => {
       let checks: string[] = [];
       try { checks = limparChecks(JSON.parse(t.checks_json)); } catch { /* json inválido */ }
-      return { id: t.id, titulo: t.titulo, checks };
+      return { id: t.id, titulo: t.titulo, checks, tipo: t.tipo || null, fixo: Number(t.fixo) === 1 };
     });
 
     const cardsRaw = await db.all(
-      `SELECT id, username, titulo FROM produtividade_cards WHERE ativa = 1 ORDER BY id ASC`
+      `SELECT id, username, titulo, tipo FROM produtividade_cards WHERE ativa = 1 ORDER BY id ASC`
     );
     const checksRaw = await db.all(
       `SELECT k.id, k.card_id, k.texto,
@@ -114,6 +114,10 @@ export async function POST(request: NextRequest) {
       if (checks.length === 0) checks.push(titulo);
       const id = Number(body.id) || 0;
       if (id) {
+        const atual = await db.get(`SELECT fixo FROM produtividade_templates WHERE id = ?`, [id]);
+        if (atual && Number(atual.fixo) === 1) {
+          return NextResponse.json({ success: false, error: 'card fixo não pode ser editado' }, { status: 400 });
+        }
         await db.run(
           `UPDATE produtividade_templates SET titulo = ?, checks_json = ? WHERE id = ?`,
           [titulo, JSON.stringify(checks), id]
@@ -130,7 +134,7 @@ export async function POST(request: NextRequest) {
     if (action === 'excluir_template') {
       const id = Number(body.id);
       if (!id) return NextResponse.json({ success: false, error: 'id é obrigatório' }, { status: 400 });
-      await db.run(`UPDATE produtividade_templates SET ativa = 0 WHERE id = ?`, [id]);
+      await db.run(`UPDATE produtividade_templates SET ativa = 0 WHERE id = ? AND fixo = 0`, [id]);
       return NextResponse.json({ success: true });
     }
 
@@ -142,7 +146,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: 'username e template_id são obrigatórios' }, { status: 400 });
       }
       const t = await db.get(
-        `SELECT titulo, checks_json FROM produtividade_templates WHERE id = ? AND ativa = 1`,
+        `SELECT titulo, checks_json, tipo FROM produtividade_templates WHERE id = ? AND ativa = 1`,
         [templateId]
       );
       if (!t) return NextResponse.json({ success: false, error: 'card-modelo não encontrado' }, { status: 404 });
@@ -151,8 +155,8 @@ export async function POST(request: NextRequest) {
       if (checks.length === 0) checks = [t.titulo];
 
       const card = await db.run(
-        `INSERT INTO produtividade_cards (username, titulo) VALUES (?, ?)`,
-        [username, t.titulo]
+        `INSERT INTO produtividade_cards (username, titulo, tipo) VALUES (?, ?, ?)`,
+        [username, t.titulo, t.tipo || null]
       );
       const novosChecks: { id: number; texto: string; concluida: boolean }[] = [];
       for (let i = 0; i < checks.length; i++) {
@@ -164,7 +168,7 @@ export async function POST(request: NextRequest) {
       }
       return NextResponse.json({
         success: true,
-        card: { id: card.lastID, username, titulo: t.titulo, checks: novosChecks }
+        card: { id: card.lastID, username, titulo: t.titulo, tipo: t.tipo || null, checks: novosChecks }
       });
     }
 

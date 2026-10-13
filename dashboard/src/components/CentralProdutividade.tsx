@@ -23,6 +23,7 @@ interface Card {
   id: number;
   username: string;
   titulo: string;
+  tipo?: string | null;
   checks: Check[];
 }
 
@@ -30,7 +31,17 @@ interface Template {
   id: number;
   titulo: string;
   checks: string[];
+  tipo?: string | null;
+  fixo?: boolean;
 }
+
+interface FollowStats {
+  follows: number;
+  unfollows: number;
+  meta: number;
+}
+
+const TIPO_FOLLOW = 'follow_unfollow';
 
 interface Vinculo {
   username: string;
@@ -83,6 +94,8 @@ export default function CentralProdutividade({ profiles = [], userRole = '', isM
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ texto: string; tipo: 'success' | 'error' } | null>(null);
   const [colunaAlvo, setColunaAlvo] = useState<string | null>(null);
+  const [followStats, setFollowStats] = useState<Record<string, FollowStats>>({});
+  const [editandoMeta, setEditandoMeta] = useState<{ username: string; valor: string } | null>(null);
   // Editor de card-modelo: id 0 = novo
   const [editor, setEditor] = useState<{ id: number; titulo: string; checks: string } | null>(null);
 
@@ -106,6 +119,10 @@ export default function CentralProdutividade({ profiles = [], userRole = '', isM
         setVinculos(data.vinculos || []);
         setTemplates(data.templates || []);
         setCards(data.cards || []);
+        const comFollow: string[] = Array.from(new Set<string>(
+          (data.cards || []).filter((c: Card) => c.tipo === TIPO_FOLLOW).map((c: Card) => c.username)
+        ));
+        if (comFollow.length) carregarStats(comFollow);
       } else {
         showToast(data.error || 'Erro ao carregar produtividade', 'error');
       }
@@ -119,6 +136,51 @@ export default function CentralProdutividade({ profiles = [], userRole = '', isM
   useEffect(() => {
     carregar();
   }, []);
+
+  // Follows/unfollows do dia vêm das leituras da Meta API (mesma fonte do modal de tarefas).
+  const carregarStats = async (usernames: string[]) => {
+    await Promise.all(usernames.map(async (u) => {
+      try {
+        const res = await fetch(`/api/controle/follow-stats?username=${encodeURIComponent(u)}`, { cache: 'no-store' });
+        const d = await res.json();
+        if (d.success) {
+          setFollowStats(prev => ({
+            ...prev,
+            [u]: { follows: Number(d.follows_dia) || 0, unfollows: Number(d.unfollows_dia) || 0, meta: Number(d.meta_dia) || 30 }
+          }));
+        }
+      } catch (err) {
+        console.warn('Erro ao buscar follow stats de', u, err);
+      }
+    }));
+  };
+
+
+  async function salvarMeta(username: string) {
+    const valor = Number(editandoMeta?.valor);
+    setEditandoMeta(null);
+    if (!Number.isFinite(valor) || valor < 1) return;
+    setFollowStats(prev => ({ ...prev, [username]: { ...(prev[username] || { follows: 0, unfollows: 0 }), meta: valor } }));
+    try {
+      await fetch('/api/controle/follow-stats', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, meta_dia: valor })
+      });
+    } catch (err) {
+      console.error(err);
+      showToast('Erro ao salvar meta', 'error');
+    }
+  }
+
+  // O check "Seguir" do card fixo é automático: conclui sozinho ao bater a meta do dia.
+  const checkFeito = (card: Card, k: Check, idx: number): boolean => {
+    if (card.tipo === TIPO_FOLLOW && idx === 0) {
+      const s = followStats[card.username];
+      return !!s && s.follows >= s.meta;
+    }
+    return k.concluida;
+  };
 
   const senhaPorUsername = useMemo(() => {
     const map: Record<string, string> = {};
@@ -188,9 +250,16 @@ export default function CentralProdutividade({ profiles = [], userRole = '', isM
   }
 
   async function aplicarTemplate(templateId: number, username: string) {
+    // Evita duplicar o card fixo na mesma coluna
+    const tpl = templates.find(t => t.id === templateId);
+    if (tpl?.fixo && cards.some(c => c.username === username && c.tipo === tpl.tipo)) {
+      showToast(`@${username} já tem o card ${tpl.titulo}`, 'error');
+      return;
+    }
     try {
       const data = await postar({ action: 'aplicar_template', template_id: templateId, username });
       setCards(prev => [...prev, data.card]);
+      if (data.card.tipo === TIPO_FOLLOW) carregarStats([username]);
     } catch (err) {
       console.error(err);
       showToast('Erro ao adicionar card à modelo', 'error');
@@ -200,7 +269,12 @@ export default function CentralProdutividade({ profiles = [], userRole = '', isM
   async function moverCard(cardId: number, username: string) {
     const card = cards.find(c => c.id === cardId);
     if (!card || card.username === username) return;
+    if (card.tipo === TIPO_FOLLOW && cards.some(c => c.username === username && c.tipo === TIPO_FOLLOW)) {
+      showToast(`@${username} já tem o card Follow / Unfollow`, 'error');
+      return;
+    }
     setCards(prev => prev.map(c => c.id === cardId ? { ...c, username } : c));
+    if (card.tipo === TIPO_FOLLOW) carregarStats([username]);
     try {
       await postar({ action: 'mover_card', card_id: cardId, username });
     } catch (err) {
@@ -358,23 +432,27 @@ export default function CentralProdutividade({ profiles = [], userRole = '', isM
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{t.titulo}</div>
                 <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>
-                  {t.checks.length} {t.checks.length === 1 ? 'check' : 'checks'}
+                  {t.tipo === TIPO_FOLLOW ? 'Fixo · contagem automática' : `${t.checks.length} ${t.checks.length === 1 ? 'check' : 'checks'}`}
                 </div>
               </div>
-              <button
-                onClick={() => setEditor({ id: t.id, titulo: t.titulo, checks: t.checks.join('\n') })}
-                title="Editar card"
-                style={{ background: 'transparent', border: 'none', color: '#8B949E', cursor: 'pointer', padding: 2, display: 'flex' }}
-              >
-                <Pencil size={13} />
-              </button>
-              <button
-                onClick={() => excluirTemplate(t)}
-                title="Excluir card"
-                style={{ background: 'transparent', border: 'none', color: '#8B949E', cursor: 'pointer', padding: 2, display: 'flex' }}
-              >
-                <Trash2 size={13} />
-              </button>
+              {!t.fixo && (
+                <>
+                  <button
+                    onClick={() => setEditor({ id: t.id, titulo: t.titulo, checks: t.checks.join('\n') })}
+                    title="Editar card"
+                    style={{ background: 'transparent', border: 'none', color: '#8B949E', cursor: 'pointer', padding: 2, display: 'flex' }}
+                  >
+                    <Pencil size={13} />
+                  </button>
+                  <button
+                    onClick={() => excluirTemplate(t)}
+                    title="Excluir card"
+                    style={{ background: 'transparent', border: 'none', color: '#8B949E', cursor: 'pointer', padding: 2, display: 'flex' }}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </>
+              )}
             </div>
           ))}
 
@@ -489,8 +567,8 @@ export default function CentralProdutividade({ profiles = [], userRole = '', isM
         <div style={{ display: 'flex', gap: 14, overflowX: 'auto', alignItems: 'flex-start', paddingBottom: 12 }}>
           {modelosDaLista.map(p => {
             const cardsModelo = cardsPorUsername[p.username] || [];
-            const todosChecks = cardsModelo.flatMap(c => c.checks);
-            const feitos = todosChecks.filter(k => k.concluida).length;
+            const todosChecks = cardsModelo.flatMap(c => c.checks.map((k, i) => checkFeito(c, k, i)));
+            const feitos = todosChecks.filter(Boolean).length;
             const total = todosChecks.length;
             const tudoFeito = total > 0 && feitos === total;
             const alvo = colunaAlvo === p.username;
@@ -536,7 +614,10 @@ export default function CentralProdutividade({ profiles = [], userRole = '', isM
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 40 }}>
                   {cardsModelo.map(card => {
-                    const ok = card.checks.length > 0 && card.checks.every(k => k.concluida);
+                    const ok = card.checks.length > 0 && card.checks.every((k, i) => checkFeito(card, k, i));
+                    const ehFollow = card.tipo === TIPO_FOLLOW;
+                    const st = followStats[card.username];
+                    const pct = st ? Math.min(100, Math.round((st.follows / (st.meta || 1)) * 100)) : 0;
                     return (
                       <div
                         key={card.id}
@@ -567,28 +648,78 @@ export default function CentralProdutividade({ profiles = [], userRole = '', isM
                             <Trash2 size={13} />
                           </button>
                         </div>
-                        {card.checks.map(k => (
-                          <button
-                            key={k.id}
-                            onClick={() => alternarCheck(card, k)}
-                            style={{
-                              display: 'flex', alignItems: 'flex-start', gap: 8, width: '100%',
-                              background: 'transparent', border: 'none', cursor: 'pointer',
-                              padding: '4px 0', textAlign: 'left'
-                            }}
-                          >
-                            {k.concluida
-                              ? <CheckCircle2 size={17} color="#00FFC8" style={{ flexShrink: 0 }} />
-                              : <Circle size={17} color="#8B949E" style={{ flexShrink: 0 }} />}
-                            <span style={{
-                              fontSize: 13, lineHeight: 1.35,
-                              color: k.concluida ? 'var(--text-secondary)' : 'var(--text-primary)',
-                              textDecoration: k.concluida ? 'line-through' : 'none'
-                            }}>
-                              {k.texto}
-                            </span>
-                          </button>
-                        ))}
+                        {card.checks.map((k, i) => {
+                          const feito = checkFeito(card, k, i);
+                          const auto = ehFollow && i === 0;
+                          return (
+                            <div key={k.id}>
+                              <div
+                                role="button"
+                                onClick={() => { if (!auto) alternarCheck(card, k); }}
+                                title={auto ? 'Conclui sozinho ao bater a meta do dia' : undefined}
+                                style={{
+                                  display: 'flex', alignItems: 'flex-start', gap: 8, width: '100%',
+                                  cursor: auto ? 'default' : 'pointer', padding: '4px 0', textAlign: 'left'
+                                }}
+                              >
+                                {feito
+                                  ? <CheckCircle2 size={17} color="#00FFC8" style={{ flexShrink: 0 }} />
+                                  : <Circle size={17} color="#8B949E" style={{ flexShrink: 0 }} />}
+                                <span style={{
+                                  flex: 1, fontSize: 13, lineHeight: 1.35,
+                                  color: feito ? 'var(--text-secondary)' : 'var(--text-primary)',
+                                  textDecoration: feito ? 'line-through' : 'none'
+                                }}>
+                                  {ehFollow ? (i === 0 ? 'Seguir' : 'Deixar de seguir') : k.texto}
+                                </span>
+                                {ehFollow && i === 0 && (
+                                  <span style={{ fontSize: 13, fontWeight: 800, color: feito ? '#00FFC8' : '#00F0FF' }}>
+                                    {st ? st.follows : '–'}/
+                                    {editandoMeta?.username === card.username ? (
+                                      <input
+                                        type="number"
+                                        autoFocus
+                                        value={editandoMeta.valor}
+                                        onClick={(e) => e.stopPropagation()}
+                                        onChange={(e) => setEditandoMeta({ username: card.username, valor: e.target.value })}
+                                        onBlur={() => salvarMeta(card.username)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') salvarMeta(card.username); }}
+                                        style={{
+                                          width: 44, background: '#0D1117', border: '1px solid #00F0FF',
+                                          borderRadius: 4, color: '#fff', fontSize: 12, textAlign: 'center', padding: '1px 3px'
+                                        }}
+                                      />
+                                    ) : (
+                                      <span
+                                        title="Clique para alterar a meta"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setEditandoMeta({ username: card.username, valor: String(st?.meta ?? 30) });
+                                        }}
+                                        style={{ cursor: 'pointer', borderBottom: '1px dashed #8B949E' }}
+                                      >
+                                        {st?.meta ?? 30}
+                                      </span>
+                                    )}
+                                  </span>
+                                )}
+                                {ehFollow && i === 1 && (
+                                  <span style={{ fontSize: 13, fontWeight: 800, color: '#FFAA00' }}>
+                                    {st ? st.unfollows : '–'} hoje
+                                  </span>
+                                )}
+                              </div>
+                              {auto && (
+                                <div style={{ height: 5, margin: '0 0 4px 25px', background: 'rgba(255,255,255,0.08)', borderRadius: 3, overflow: 'hidden' }}>
+                                  <div style={{
+                                    width: `${pct}%`, height: '100%', borderRadius: 3, transition: 'width 0.3s ease',
+                                    background: feito ? '#00FF66' : 'linear-gradient(90deg, #00F0FF, #00FF66)'
+                                  }} />
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     );
                   })}
