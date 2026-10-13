@@ -719,6 +719,7 @@ body::after {
 .social-table th:nth-child(n+4):nth-child(-n+6),
 .social-table td:nth-child(n+4):nth-child(-n+6) {
   background-color: rgba(205, 198, 175, 0.07);
+  text-align: right;
 }
 
 .social-table td:nth-child(n+4):nth-child(-n+6) {
