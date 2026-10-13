@@ -23,8 +23,14 @@ export async function GET(request: NextRequest) {
     // Data de hoje no fuso oficial de Brasília (UTC-3)
     const offsetMs = -3 * 60 * 60 * 1000;
     const dataHojeLocal = new Date(Date.now() + offsetMs);
-    const hojeStr = dataHojeLocal.toISOString().substring(0, 10);
+    const hojeReal = dataHojeLocal.toISOString().substring(0, 10);
+    // ?data=YYYY-MM-DD permite consultar um dia passado (padrão: hoje)
+    const dataParam = searchParams.get('data');
+    const hojeStr = dataParam && /^\d{4}-\d{2}-\d{2}$/.test(dataParam) && dataParam <= hojeReal ? dataParam : hojeReal;
     const limiteHoje = `${hojeStr} 00:00:00`;
+    const proxDia = new Date(`${hojeStr}T12:00:00Z`);
+    proxDia.setUTCDate(proxDia.getUTCDate() + 1);
+    const limiteFim = `${proxDia.toISOString().substring(0, 10)} 00:00:00`;
 
     // 1. Busca meta diária configurada para o perfil
     const cpRow = await db.get(
@@ -41,7 +47,7 @@ export async function GET(request: NextRequest) {
         AND seguindo IS NOT NULL
         AND seguindo > 0
         AND (
-          data_coleta >= ?
+          (data_coleta >= ? AND data_coleta < ?)
           OR data_coleta = (
             SELECT MAX(data_coleta)
             FROM perfis_historico
@@ -52,7 +58,7 @@ export async function GET(request: NextRequest) {
           )
         )
       ORDER BY data_coleta ASC, id ASC
-    `, [username, limiteHoje, username, limiteHoje]).catch(() => []);
+    `, [username, limiteHoje, limiteFim, username, limiteHoje]).catch(() => []);
 
     if (!rows || rows.length === 0) {
       return NextResponse.json({

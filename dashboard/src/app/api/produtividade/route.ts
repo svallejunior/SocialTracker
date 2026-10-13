@@ -12,6 +12,13 @@ function hoje(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+const RE_DATA = /^\d{4}-\d{2}-\d{2}$/;
+
+function dataValida(v: unknown): string | null {
+  const s = String(v ?? '');
+  return RE_DATA.test(s) ? s : null;
+}
+
 function limparChecks(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
   return raw.map(c => String(c ?? '').trim()).filter(Boolean).slice(0, 30);
@@ -26,7 +33,7 @@ function limparChecks(raw: unknown): string[] {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const dataRef = searchParams.get('data_ref') || hoje();
+    const dataRef = dataValida(searchParams.get('data_ref')) || hoje();
     const db = await getDb();
 
     const vinculos = await db.all(`SELECT username, senha FROM produtividade_perfil_senha`);
@@ -41,16 +48,22 @@ export async function GET(request: NextRequest) {
     });
 
     const cardsRaw = await db.all(
-      `SELECT id, username, titulo, tipo FROM produtividade_cards WHERE ativa = 1 ORDER BY id ASC`
+      `SELECT id, username, titulo, tipo FROM produtividade_cards WHERE ativa = 1 AND data_ref = ? ORDER BY id ASC`,
+      [dataRef]
     );
+    const contagensRaw = await db.all(
+      `SELECT data_ref, COUNT(*) as n FROM produtividade_cards WHERE ativa = 1 AND data_ref IS NOT NULL GROUP BY data_ref`
+    );
+    const contagens: Record<string, number> = {};
+    (contagensRaw || []).forEach((r: any) => { contagens[r.data_ref] = Number(r.n); });
     const checksRaw = await db.all(
       `SELECT k.id, k.card_id, k.texto,
               CASE WHEN o.check_id IS NULL THEN 0 ELSE 1 END as concluida
        FROM produtividade_checks k
-       JOIN produtividade_cards c ON c.id = k.card_id AND c.ativa = 1
+       JOIN produtividade_cards c ON c.id = k.card_id AND c.ativa = 1 AND c.data_ref = ?
        LEFT JOIN produtividade_check_conclusoes o ON o.check_id = k.id AND o.data_ref = ?
        ORDER BY k.ordem ASC, k.id ASC`,
-      [dataRef]
+      [dataRef, dataRef]
     );
     const checksPorCard: Record<number, any[]> = {};
     (checksRaw || []).forEach((k: any) => {
@@ -63,7 +76,8 @@ export async function GET(request: NextRequest) {
       data_ref: dataRef,
       vinculos: vinculos || [],
       templates,
-      cards
+      cards,
+      contagens
     });
   } catch (err: unknown) {
     console.error('[API Produtividade GET] Erro:', err);
@@ -154,9 +168,10 @@ export async function POST(request: NextRequest) {
       try { checks = limparChecks(JSON.parse(t.checks_json)); } catch { /* json inválido */ }
       if (checks.length === 0) checks = [t.titulo];
 
+      const dia = dataValida(body.data_ref) || hoje();
       const card = await db.run(
-        `INSERT INTO produtividade_cards (username, titulo, tipo) VALUES (?, ?, ?)`,
-        [username, t.titulo, t.tipo || null]
+        `INSERT INTO produtividade_cards (username, titulo, tipo, data_ref) VALUES (?, ?, ?, ?)`,
+        [username, t.titulo, t.tipo || null, dia]
       );
       const novosChecks: { id: number; texto: string; concluida: boolean }[] = [];
       for (let i = 0; i < checks.length; i++) {
@@ -170,6 +185,69 @@ export async function POST(request: NextRequest) {
         success: true,
         card: { id: card.lastID, username, titulo: t.titulo, tipo: t.tipo || null, checks: novosChecks }
       });
+    }
+
+    // Copia o quadro de um dia (todas as modelos) para um ou vários dias.
+    // Dias que já têm cards são pulados, a não ser que `substituir` seja true.
+    if (action === 'copiar_dia') {
+      const origem = dataValida(body.origem);
+      const destinos = Array.isArray(body.destinos)
+        ? Array.from(new Set<string>(body.destinos.map(dataValida).filter((d: string | null): d is string => !!d && d !== origem)))
+        : [];
+      if (!origem || destinos.length === 0) {
+        return NextResponse.json({ success: false, error: 'origem e destinos são obrigatórios' }, { status: 400 });
+      }
+      if (destinos.length > 93) {
+        return NextResponse.json({ success: false, error: 'máximo de 93 dias por cópia' }, { status: 400 });
+      }
+      const substituir = body.substituir === true;
+      const cardsOrigem = await db.all(
+        `SELECT id, username, titulo, tipo FROM produtividade_cards WHERE ativa = 1 AND data_ref = ? ORDER BY id ASC`,
+        [origem]
+      );
+      if (!cardsOrigem || cardsOrigem.length === 0) {
+        return NextResponse.json({ success: false, error: 'o dia de origem não tem cards' }, { status: 400 });
+      }
+      const checksOrigem = await db.all(
+        `SELECT card_id, texto, ordem FROM produtividade_checks
+         WHERE card_id IN (${cardsOrigem.map(() => '?').join(',')}) ORDER BY ordem ASC, id ASC`,
+        cardsOrigem.map((c: any) => c.id)
+      );
+      const checksPorCard: Record<number, { texto: string; ordem: number }[]> = {};
+      (checksOrigem || []).forEach((k: any) => { (checksPorCard[k.card_id] ||= []).push(k); });
+
+      const copiados: string[] = [];
+      const pulados: string[] = [];
+      await db.exec('BEGIN');
+      try {
+        for (const dia of destinos) {
+          const existentes = await db.get(
+            `SELECT COUNT(*) as n FROM produtividade_cards WHERE ativa = 1 AND data_ref = ?`, [dia]
+          );
+          if (Number(existentes?.n) > 0) {
+            if (!substituir) { pulados.push(dia); continue; }
+            await db.run(`UPDATE produtividade_cards SET ativa = 0 WHERE data_ref = ?`, [dia]);
+          }
+          for (const c of cardsOrigem) {
+            const novo = await db.run(
+              `INSERT INTO produtividade_cards (username, titulo, tipo, data_ref) VALUES (?, ?, ?, ?)`,
+              [c.username, c.titulo, c.tipo || null, dia]
+            );
+            for (const k of checksPorCard[c.id] || []) {
+              await db.run(
+                `INSERT INTO produtividade_checks (card_id, texto, ordem) VALUES (?, ?, ?)`,
+                [novo.lastID, k.texto, k.ordem]
+              );
+            }
+          }
+          copiados.push(dia);
+        }
+        await db.exec('COMMIT');
+      } catch (e) {
+        await db.exec('ROLLBACK');
+        throw e;
+      }
+      return NextResponse.json({ success: true, copiados, pulados });
     }
 
     if (action === 'mover_card') {

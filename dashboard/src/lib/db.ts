@@ -462,12 +462,19 @@ async function ensureSchema(db: Db): Promise<void> {
     ['produtividade_templates', 'tipo', 'TEXT'],
     ['produtividade_templates', 'fixo', 'INTEGER NOT NULL DEFAULT 0'],
     ['produtividade_cards', 'tipo', 'TEXT'],
+    ['produtividade_cards', 'data_ref', 'TEXT'],
   ] as const) {
     const cols = await db.all(`PRAGMA table_info(${tabela})`);
     if (!cols.some((c: any) => c.name === coluna)) {
       await db.exec(`ALTER TABLE ${tabela} ADD COLUMN ${coluna} ${ddl}`);
     }
   }
+  // Quadro por dia: cards antigos (sem dia) ficam no dia da migração (Brasília).
+  await db.run(
+    `UPDATE produtividade_cards SET data_ref = ? WHERE data_ref IS NULL`,
+    [new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10)]
+  );
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_produtividade_cards_dia ON produtividade_cards(data_ref, ativa)`);
   await db.run(
     `INSERT INTO produtividade_templates (titulo, checks_json, tipo, fixo)
      SELECT 'Follow / Unfollow', ?, 'follow_unfollow', 1

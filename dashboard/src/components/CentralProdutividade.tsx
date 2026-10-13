@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ClipboardCheck, Plus, Trash2, X, Pencil, GripVertical,
-  CheckCircle2, Circle, Link2, AlertCircle, RefreshCw
+  CheckCircle2, Circle, Link2, AlertCircle, RefreshCw,
+  ChevronLeft, ChevronRight, Copy
 } from 'lucide-react';
 
 interface Perfil {
@@ -58,13 +59,32 @@ const SENHAS = ['2802', '1707'] as const;
 const MIME_TEMPLATE = 'application/x-prod-template';
 const MIME_CARD = 'application/x-prod-card';
 
-// Data local (YYYY-MM-DD): o checklist reseta à meia-noite do fuso de quem usa.
-function dataLocal(): string {
-  const d = new Date();
+function fmtDia(d: Date): string {
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
   return `${d.getFullYear()}-${mm}-${dd}`;
 }
+
+// Data local (YYYY-MM-DD) de hoje no fuso de quem usa.
+function dataLocal(): string {
+  return fmtDia(new Date());
+}
+
+// Meio-dia local evita saltos de dia por fuso/horário de verão.
+function parseDia(s: string): Date {
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, m - 1, d, 12);
+}
+
+function addDias(s: string, n: number): string {
+  const d = parseDia(s);
+  d.setDate(d.getDate() + n);
+  return fmtDia(d);
+}
+
+const DIAS_SEMANA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+
+type PresetCopia = 'amanha' | 'prox7' | 'prox30' | 'fim_mes' | 'custom';
 
 async function postar(body: Record<string, unknown>) {
   const res = await fetch('/api/produtividade', {
@@ -94,6 +114,12 @@ export default function CentralProdutividade({ profiles = [], userRole = '', isM
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ texto: string; tipo: 'success' | 'error' } | null>(null);
   const [colunaAlvo, setColunaAlvo] = useState<string | null>(null);
+  const [dia, setDia] = useState<string>(() => dataLocal());
+  const [contagens, setContagens] = useState<Record<string, number>>({});
+  const [copia, setCopia] = useState<{
+    preset: PresetCopia; de: string; ate: string; diasSemana: number[]; substituir: boolean; enviando: boolean;
+  } | null>(null);
+  const seqCarga = useRef(0);
   const [followStats, setFollowStats] = useState<Record<string, FollowStats>>({});
   const [editandoMeta, setEditandoMeta] = useState<{ username: string; valor: string } | null>(null);
   // Editor de card-modelo: id 0 = novo
@@ -111,14 +137,17 @@ export default function CentralProdutividade({ profiles = [], userRole = '', isM
   }, [userRole, podeAlternarLista]);
 
   const carregar = async () => {
+    const minhaSeq = ++seqCarga.current;
     setLoading(true);
     try {
-      const res = await fetch(`/api/produtividade?data_ref=${dataLocal()}`);
+      const res = await fetch(`/api/produtividade?data_ref=${dia}`);
       const data = await res.json();
+      if (minhaSeq !== seqCarga.current) return; // o usuário já trocou de dia
       if (data.success) {
         setVinculos(data.vinculos || []);
         setTemplates(data.templates || []);
         setCards(data.cards || []);
+        setContagens(data.contagens || {});
         const comFollow: string[] = Array.from(new Set<string>(
           (data.cards || []).filter((c: Card) => c.tipo === TIPO_FOLLOW).map((c: Card) => c.username)
         ));
@@ -133,20 +162,33 @@ export default function CentralProdutividade({ profiles = [], userRole = '', isM
     setLoading(false);
   };
 
+  const diaRef = useRef(dia);
   useEffect(() => {
+    diaRef.current = dia;
+    setFollowStats({});
     carregar();
-  }, []);
+  }, [dia]);
+
+  const hojeStr = dataLocal();
+  const diaFuturo = dia > hojeStr;
 
   // Follows/unfollows do dia vêm das leituras da Meta API (mesma fonte do modal de tarefas).
+  // Dias futuros ainda não têm leitura: mostra 0 com a meta configurada.
   const carregarStats = async (usernames: string[]) => {
+    const diaAlvo = dia;
     await Promise.all(usernames.map(async (u) => {
       try {
-        const res = await fetch(`/api/controle/follow-stats?username=${encodeURIComponent(u)}`, { cache: 'no-store' });
+        const qs = `username=${encodeURIComponent(u)}${diaFuturo ? '' : `&data=${diaAlvo}`}`;
+        const res = await fetch(`/api/controle/follow-stats?${qs}`, { cache: 'no-store' });
         const d = await res.json();
-        if (d.success) {
+        if (d.success && diaAlvo === diaRef.current) {
           setFollowStats(prev => ({
             ...prev,
-            [u]: { follows: Number(d.follows_dia) || 0, unfollows: Number(d.unfollows_dia) || 0, meta: Number(d.meta_dia) || 30 }
+            [u]: {
+              follows: diaFuturo ? 0 : Number(d.follows_dia) || 0,
+              unfollows: diaFuturo ? 0 : Number(d.unfollows_dia) || 0,
+              meta: Number(d.meta_dia) || 30
+            }
           }));
         }
       } catch (err) {
@@ -257,8 +299,9 @@ export default function CentralProdutividade({ profiles = [], userRole = '', isM
       return;
     }
     try {
-      const data = await postar({ action: 'aplicar_template', template_id: templateId, username });
+      const data = await postar({ action: 'aplicar_template', template_id: templateId, username, data_ref: dia });
       setCards(prev => [...prev, data.card]);
+      setContagens(prev => ({ ...prev, [dia]: (prev[dia] || 0) + 1 }));
       if (data.card.tipo === TIPO_FOLLOW) carregarStats([username]);
     } catch (err) {
       console.error(err);
@@ -286,6 +329,7 @@ export default function CentralProdutividade({ profiles = [], userRole = '', isM
 
   async function excluirCard(card: Card) {
     setCards(prev => prev.filter(c => c.id !== card.id));
+    setContagens(prev => ({ ...prev, [dia]: Math.max(0, (prev[dia] || 1) - 1) }));
     try {
       await postar({ action: 'excluir_card', card_id: card.id });
     } catch (err) {
@@ -305,7 +349,7 @@ export default function CentralProdutividade({ profiles = [], userRole = '', isM
       await postar({
         action: novoEstado ? 'concluir_check' : 'desmarcar_check',
         check_id: check.id,
-        data_ref: dataLocal()
+        data_ref: dia
       });
     } catch (err) {
       console.error(err);
@@ -321,6 +365,58 @@ export default function CentralProdutividade({ profiles = [], userRole = '', isM
     const card = e.dataTransfer.getData(MIME_CARD);
     if (tpl) aplicarTemplate(Number(tpl), username);
     else if (card) moverCard(Number(card), username);
+  }
+
+  // ── Navegação por dia e cópia de quadros ──
+  const inicioSemana = (() => {
+    const d = parseDia(dia);
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // segunda-feira
+    return fmtDia(d);
+  })();
+  const diasDaSemana = Array.from({ length: 7 }, (_, i) => addDias(inicioSemana, i));
+  const rotuloDia = (s: string) => {
+    const d = parseDia(s);
+    return `${DIAS_SEMANA[d.getDay()]}, ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+  };
+  const qtdCardsDia = contagens[dia] || 0;
+
+  function destinosDaCopia(c: NonNullable<typeof copia>): string[] {
+    let inicio = addDias(dia, 1);
+    let fim = inicio;
+    if (c.preset === 'prox7') fim = addDias(dia, 7);
+    else if (c.preset === 'prox30') fim = addDias(dia, 30);
+    else if (c.preset === 'fim_mes') {
+      const d = parseDia(dia);
+      fim = fmtDia(new Date(d.getFullYear(), d.getMonth() + 1, 0, 12));
+    } else if (c.preset === 'custom') {
+      inicio = c.de; fim = c.ate;
+    }
+    const lista: string[] = [];
+    if (!inicio || !fim || inicio > fim) return lista;
+    for (let d = inicio; d <= fim && lista.length < 93; d = addDias(d, 1)) {
+      if (d !== dia && c.diasSemana.includes(parseDia(d).getDay())) lista.push(d);
+    }
+    return lista;
+  }
+
+  async function executarCopia(origem: string, destinos: string[], substituir: boolean) {
+    try {
+      const data = await postar({ action: 'copiar_dia', origem, destinos, substituir });
+      const n = data.copiados.length;
+      const p = data.pulados.length;
+      showToast(
+        n > 0
+          ? `Quadro copiado para ${n} ${n === 1 ? 'dia' : 'dias'}${p ? ` (${p} já tinham cards e foram pulados)` : ''}`
+          : `Nada copiado: ${p} ${p === 1 ? 'dia já tem' : 'dias já têm'} cards`,
+        n > 0 ? 'success' : 'error'
+      );
+      setCopia(null);
+      carregar();
+    } catch (err) {
+      console.error(err);
+      showToast(err instanceof Error ? err.message : 'Erro ao copiar quadro', 'error');
+      setCopia(c => c ? { ...c, enviando: false } : c);
+    }
   }
 
   const inputStyle: React.CSSProperties = {
@@ -355,7 +451,7 @@ export default function CentralProdutividade({ profiles = [], userRole = '', isM
             Produtividade
           </h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: 4 }}>
-            Arraste um card de cima para a coluna da modelo. Os checks resetam à meia-noite.
+            Arraste um card de cima para a coluna da modelo. Cada dia tem o seu quadro: monte hoje ou programe os próximos.
           </p>
         </div>
 
@@ -403,6 +499,248 @@ export default function CentralProdutividade({ profiles = [], userRole = '', isM
           )}
         </div>
       </div>
+
+      {/* Navegação por dia: semana atual, com a quantidade de cards programados em cada dia */}
+      <div style={{
+        marginBottom: 20, padding: 12, borderRadius: 12, display: 'flex', flexWrap: 'wrap',
+        alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color)'
+      }}>
+        <button
+          onClick={() => setDia(addDias(dia, -7))}
+          title="Semana anterior"
+          style={{ background: 'transparent', border: 'none', color: '#8B949E', cursor: 'pointer', display: 'flex', padding: 4 }}
+        >
+          <ChevronLeft size={18} />
+        </button>
+        {diasDaSemana.map(d => {
+          const sel = d === dia;
+          const ehHoje = d === hojeStr;
+          const n = contagens[d] || 0;
+          return (
+            <button
+              key={d}
+              onClick={() => setDia(d)}
+              style={{
+                minWidth: 82, padding: '7px 10px', borderRadius: 8, cursor: 'pointer', textAlign: 'center',
+                background: sel ? '#7100E2' : 'rgba(255,255,255,0.04)',
+                border: `1px solid ${sel ? '#7100E2' : ehHoje ? '#00F0FF' : 'var(--border-color)'}`,
+                color: sel ? '#fff' : 'var(--text-primary)'
+              }}
+            >
+              <div style={{ fontSize: 12, fontWeight: 800, textTransform: 'capitalize' }}>{rotuloDia(d)}</div>
+              <div style={{ fontSize: 10, marginTop: 2, color: sel ? 'rgba(255,255,255,0.8)' : n ? '#00FFC8' : '#8B949E' }}>
+                {ehHoje ? 'hoje · ' : ''}{n ? `${n} ${n === 1 ? 'card' : 'cards'}` : 'vazio'}
+              </div>
+            </button>
+          );
+        })}
+        <button
+          onClick={() => setDia(addDias(dia, 7))}
+          title="Próxima semana"
+          style={{ background: 'transparent', border: 'none', color: '#8B949E', cursor: 'pointer', display: 'flex', padding: 4 }}
+        >
+          <ChevronRight size={18} />
+        </button>
+
+        <input
+          type="date"
+          value={dia}
+          onChange={(e) => { if (e.target.value) setDia(e.target.value); }}
+          title="Ir para uma data"
+          style={{ ...inputStyle, width: 'auto', colorScheme: 'dark' }}
+        />
+        {dia !== hojeStr && (
+          <button
+            onClick={() => setDia(hojeStr)}
+            style={{
+              padding: '8px 12px', borderRadius: 8, background: 'rgba(0,240,255,0.1)',
+              border: '1px solid rgba(0,240,255,0.3)', color: '#00F0FF', cursor: 'pointer', fontSize: 13, fontWeight: 700
+            }}
+          >
+            Hoje
+          </button>
+        )}
+
+        <button
+          onClick={() => setCopia({
+            preset: 'amanha', de: addDias(dia, 1), ate: addDias(dia, 7),
+            diasSemana: [0, 1, 2, 3, 4, 5, 6], substituir: false, enviando: false
+          })}
+          disabled={qtdCardsDia === 0}
+          title={qtdCardsDia === 0 ? 'Este dia não tem cards para copiar' : 'Copiar este quadro para outros dias'}
+          style={{
+            marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8,
+            background: qtdCardsDia === 0 ? 'rgba(255,255,255,0.04)' : '#7100E2', border: 'none',
+            color: qtdCardsDia === 0 ? '#8B949E' : '#fff', cursor: qtdCardsDia === 0 ? 'not-allowed' : 'pointer',
+            fontWeight: 700, fontSize: 13
+          }}
+        >
+          <Copy size={14} />
+          Copiar este dia para…
+        </button>
+      </div>
+
+      {!loading && qtdCardsDia === 0 && (
+        <div style={{
+          marginBottom: 20, padding: '12px 16px', borderRadius: 12, display: 'flex', flexWrap: 'wrap',
+          alignItems: 'center', gap: 12, background: 'rgba(0,240,255,0.05)', border: '1px dashed rgba(0,240,255,0.35)',
+          color: 'var(--text-secondary)', fontSize: 13
+        }}>
+          <span style={{ flex: 1 }}>
+            Quadro de {rotuloDia(dia)} vazio. Arraste cards para as modelos para montar um novo
+            {contagens[addDias(dia, -1)] ? ', ou copie o dia anterior.' : '.'}
+          </span>
+          {contagens[addDias(dia, -1)] > 0 && (
+            <button
+              onClick={() => executarCopia(addDias(dia, -1), [dia], false)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8,
+                background: '#7100E2', border: 'none', color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 13
+              }}
+            >
+              <Copy size={14} />
+              Copiar do dia anterior
+            </button>
+          )}
+        </div>
+      )}
+
+      {copia && (() => {
+        const destinos = destinosDaCopia(copia);
+        const presets: { id: PresetCopia; rotulo: string }[] = [
+          { id: 'amanha', rotulo: 'Amanhã' },
+          { id: 'prox7', rotulo: 'Próximos 7 dias' },
+          { id: 'prox30', rotulo: 'Próximos 30 dias' },
+          { id: 'fim_mes', rotulo: 'Até o fim do mês' },
+          { id: 'custom', rotulo: 'Período…' }
+        ];
+        return (
+          <div
+            onClick={(e) => { if (e.target === e.currentTarget) setCopia(null); }}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(5,7,10,0.8)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16
+            }}
+          >
+            <div style={{
+              width: '100%', maxWidth: 460, borderRadius: 16, padding: 22,
+              background: '#0F1318', border: '1px solid #30363D', boxShadow: '0 25px 60px -15px rgba(0,0,0,0.8)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
+                <h3 style={{ flex: 1, fontSize: 17, fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
+                  Copiar quadro de {rotuloDia(dia)}
+                </h3>
+                <button
+                  onClick={() => setCopia(null)}
+                  style={{ background: 'transparent', border: 'none', color: '#8B949E', cursor: 'pointer', display: 'flex' }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 14px 0' }}>
+                {qtdCardsDia} {qtdCardsDia === 1 ? 'card' : 'cards'} de todas as modelos, com os checks zerados nos dias de destino.
+              </p>
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+                {presets.map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => setCopia({ ...copia, preset: p.id })}
+                    style={{
+                      padding: '6px 12px', borderRadius: 20, cursor: 'pointer', fontSize: 12, fontWeight: 700,
+                      background: copia.preset === p.id ? '#7100E2' : 'rgba(255,255,255,0.05)',
+                      border: `1px solid ${copia.preset === p.id ? '#7100E2' : 'var(--border-color)'}`,
+                      color: copia.preset === p.id ? '#fff' : 'var(--text-secondary)'
+                    }}
+                  >
+                    {p.rotulo}
+                  </button>
+                ))}
+              </div>
+
+              {copia.preset === 'custom' && (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+                  <input
+                    type="date" value={copia.de}
+                    onChange={(e) => setCopia({ ...copia, de: e.target.value })}
+                    style={{ ...inputStyle, colorScheme: 'dark' }}
+                  />
+                  <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>até</span>
+                  <input
+                    type="date" value={copia.ate}
+                    onChange={(e) => setCopia({ ...copia, ate: e.target.value })}
+                    style={{ ...inputStyle, colorScheme: 'dark' }}
+                  />
+                </div>
+              )}
+
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                Copiar só nestes dias da semana
+              </div>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+                {DIAS_SEMANA.map((nome, i) => {
+                  const on = copia.diasSemana.includes(i);
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => setCopia({
+                        ...copia,
+                        diasSemana: on ? copia.diasSemana.filter(x => x !== i) : [...copia.diasSemana, i]
+                      })}
+                      style={{
+                        flex: 1, padding: '6px 0', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700,
+                        textTransform: 'capitalize',
+                        background: on ? 'rgba(113,0,226,0.25)' : 'transparent',
+                        border: `1px solid ${on ? '#7100E2' : 'var(--border-color)'}`,
+                        color: on ? '#B794F6' : '#8B949E'
+                      }}
+                    >
+                      {nome}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-secondary)', marginBottom: 16, cursor: 'pointer' }}>
+                <input
+                  type="checkbox" checked={copia.substituir}
+                  onChange={(e) => setCopia({ ...copia, substituir: e.target.checked })}
+                />
+                Substituir o quadro dos dias que já têm cards (senão eles são pulados)
+              </label>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ flex: 1, fontSize: 12, color: destinos.length ? '#00FFC8' : '#FFB800', fontWeight: 700 }}>
+                  {destinos.length
+                    ? `${destinos.length} ${destinos.length === 1 ? 'dia' : 'dias'}: ${rotuloDia(destinos[0])}${destinos.length > 1 ? ` → ${rotuloDia(destinos[destinos.length - 1])}` : ''}`
+                    : 'Nenhum dia selecionado'}
+                </span>
+                <button
+                  onClick={() => setCopia(null)}
+                  style={{
+                    padding: '8px 14px', borderRadius: 8, background: 'transparent', border: '1px solid var(--border-color)',
+                    color: 'var(--text-secondary)', cursor: 'pointer', fontWeight: 600, fontSize: 13
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  disabled={destinos.length === 0 || copia.enviando}
+                  onClick={() => { setCopia({ ...copia, enviando: true }); executarCopia(dia, destinos, copia.substituir); }}
+                  style={{
+                    padding: '8px 16px', borderRadius: 8, border: 'none', fontWeight: 700, fontSize: 13,
+                    background: destinos.length === 0 ? 'rgba(255,255,255,0.06)' : '#7100E2',
+                    color: destinos.length === 0 ? '#8B949E' : '#fff',
+                    cursor: destinos.length === 0 || copia.enviando ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {copia.enviando ? 'Copiando...' : 'Copiar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Biblioteca de cards (parte superior) */}
       <div style={{
