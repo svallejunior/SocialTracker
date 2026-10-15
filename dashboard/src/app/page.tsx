@@ -2954,7 +2954,7 @@ export default function Dashboard() {
         const bAtivo = b.parou_atualizar ? 0 : 1;
         if (aAtivo !== bAtivo) return sortDirection === 'asc' ? aAtivo - bAtivo : bAtivo - aAtivo;
       }
-    } else if (['likes', 'comentarios'].includes(sortField)) {
+    } else if (['likes', 'comentarios', 'reposts', 'shares', 'saved'].includes(sortField)) {
       aVal = Number(aVal) || 0;
       bVal = Number(bVal) || 0;
     }
@@ -5785,6 +5785,15 @@ export default function Dashboard() {
                     <th className={`sortable ${sortField === 'comentarios' ? 'active' : ''}`} onClick={() => handleSort('comentarios')} title="Comentários">
                       💬 {sortField === 'comentarios' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                     </th>
+                    <th className={`sortable ${sortField === 'reposts' ? 'active' : ''}`} onClick={() => handleSort('reposts')} title="Republicações (reposts)">
+                      🔁 {sortField === 'reposts' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                    </th>
+                    <th className={`sortable ${sortField === 'shares' ? 'active' : ''}`} onClick={() => handleSort('shares')} title="Compartilhamentos / encaminhamentos">
+                      📤 {sortField === 'shares' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                    </th>
+                    <th className={`sortable ${sortField === 'saved' ? 'active' : ''}`} onClick={() => handleSort('saved')} title="Salvamentos">
+                      🔖 {sortField === 'saved' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                    </th>
                     <th
                       className={`sortable ${sortField === 'views' ? 'active' : ''}`}
                       onClick={() => handleSort('views')}
@@ -5869,6 +5878,9 @@ export default function Dashboard() {
                         </td>
                         <td>{formatNumber(post.likes)}</td>
                         <td>{formatNumber(post.comentarios)}</td>
+                        <td>{formatNumber(Number(post.reposts) || 0)}</td>
+                        <td>{formatNumber(Number(post.shares) || 0)}</td>
+                        <td>{formatNumber(Number(post.saved) || 0)}</td>
                         <td>
                           {hasViewsData && viewsVal > 0 ? (
                             <span style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>

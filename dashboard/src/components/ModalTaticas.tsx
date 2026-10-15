@@ -54,6 +54,7 @@ const LINKS = [
   { titulo: 'Z IMAGE TURBO - GERAR IMAGENS FOTOREALISTAS', url: 'https://bit.ly/4vWUqRF' },
   { titulo: 'TROCA DE ROUPA E TROCA DE COR', url: 'https://bit.ly/4fuxgMJ' },
   { titulo: 'FACE SWAP', url: 'https://bit.ly/3TepspL' },
+  { titulo: 'FICHA PERSONAGEM 8K', url: 'file:///D:/projetos/prompt/CharacterSheet/index.html' }
 ];
 
 export default function ModalTaticas({ onClose }: { onClose: () => void }) {
