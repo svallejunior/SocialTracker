@@ -716,13 +716,13 @@ body::after {
 }
 
 /* Faixa vertical prata/champagne (cor única) em curtidas, comentários e views (colunas 4–6) */
-.social-table th:nth-child(n+4):nth-child(-n+9),
-.social-table td:nth-child(n+4):nth-child(-n+9) {
+.social-table th:nth-child(n+4):nth-child(-n+7),
+.social-table td:nth-child(n+4):nth-child(-n+7) {
   background-color: rgba(205, 198, 175, 0.07);
   text-align: right;
 }
 
-.social-table td:nth-child(n+4):nth-child(-n+9) {
+.social-table td:nth-child(n+4):nth-child(-n+7) {
   color: #ffffff;
 }
 
