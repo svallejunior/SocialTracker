@@ -127,6 +127,9 @@ export async function GET(request: NextRequest) {
     // paginação — pendências são raras, vale continuar buscando em todo o
     // histórico do perfil em vez de limitar por página.
     const diasPorPagina = 15;
+    // Variação diária de "seguindo" a partir da qual conta como follow/unfollow em massa
+    // (nos perfis próprios o normal fica em até ~15/dia)
+    const LIMITE_VARIACAO_SEGUINDO_DIA = 20;
     const paginaParam = parseInt(searchParams.get('pagina') || '0', 10);
     const pagina = Number.isFinite(paginaParam) && paginaParam > 0 ? paginaParam : 0;
     const apenasPendentesQuery = mode === 'pendentes';
@@ -152,6 +155,7 @@ export async function GET(request: NextRequest) {
           h.*,
           LAG(h.seguidores) OVER (PARTITION BY h.username ORDER BY h.data_coleta, h.id) AS seguidores_anterior,
           LAG(h.total_posts) OVER (PARTITION BY h.username ORDER BY h.data_coleta, h.id) AS total_posts_anterior,
+          LAG(NULLIF(h.seguindo, 0)) OVER (PARTITION BY h.username ORDER BY h.data_coleta, h.id) AS seguindo_anterior,
           LAG(h.data_coleta) OVER (PARTITION BY h.username ORDER BY h.data_coleta, h.id) AS data_coleta_anterior,
           ROW_NUMBER() OVER (PARTITION BY h.username ORDER BY h.data_coleta DESC, h.id DESC) AS ordem_dia_desc
         FROM historico_diario h
@@ -208,6 +212,8 @@ export async function GET(request: NextRequest) {
         h.total_posts,
         h.seguidores_anterior,
         h.total_posts_anterior,
+        NULLIF(h.seguindo, 0) AS seguindo,
+        h.seguindo_anterior,
         h.data_coleta_anterior,
         COALESCE(h.tipo_janela, 'ORGANICO') AS tipo_janela,
         COALESCE(h.revisado_manualmente, 0) AS revisado_manualmente,
@@ -295,6 +301,18 @@ export async function GET(request: NextRequest) {
         gatilhos.push('EXPLOSAO_PERCENTUAL');
       }
 
+      // Follow/unfollow: variação do "seguindo" entre coletas (dado que o ingestion já grava, sem nova leitura de API).
+      // Leitura ausente/zerada em qualquer ponta é ignorada para não gerar falso alerta.
+      const seguindoAtual = item.seguindo !== null && item.seguindo !== undefined ? Number(item.seguindo) : null;
+      const seguindoAnterior = item.seguindo_anterior !== null && item.seguindo_anterior !== undefined ? Number(item.seguindo_anterior) : null;
+      const deltaSeguindo = seguindoAtual !== null && seguindoAnterior !== null ? seguindoAtual - seguindoAnterior : null;
+      const mediaDiariaSeguindo = deltaSeguindo !== null ? deltaSeguindo / diasIntervalo : 0;
+      if (mediaDiariaSeguindo >= LIMITE_VARIACAO_SEGUINDO_DIA) {
+        gatilhos.push('FOLLOW_ALTO');
+      } else if (mediaDiariaSeguindo <= -LIMITE_VARIACAO_SEGUINDO_DIA) {
+        gatilhos.push('UNFOLLOW_ALTO');
+      }
+
       return {
         id: item.id,
         username: item.username,
@@ -312,6 +330,8 @@ export async function GET(request: NextRequest) {
         pct_delta_s: Math.round(pctDeltaS * 10) / 10,
         delta_posts: deltaPosts,
         seg_anterior: segAnterior,
+        seguindo: seguindoAtual,
+        delta_seguindo: deltaSeguindo,
         gatilhos,
         dias_intervalo: diasIntervalo,
         media_diaria_delta_s: mediaDiariaDeltaS,

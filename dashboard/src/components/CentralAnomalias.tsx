@@ -27,6 +27,8 @@ interface AnomaliaItem {
   pct_delta_s: number;
   delta_posts: number;
   seg_anterior: number;
+  seguindo?: number | null;
+  delta_seguindo?: number | null;
   gatilhos: string[];
   dias_intervalo?: number;
   media_diaria_delta_s?: number;
@@ -1200,11 +1202,23 @@ export default function CentralAnomalias({ onCountUpdate }: CentralAnomaliasProp
                           <td>
                             {item.gatilhos && item.gatilhos.length > 0 ? (
                               <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                                {item.gatilhos.map((g, gi) => (
-                                  <span key={gi} className="anomalias-gatilho-badge">
-                                    {g === 'CRESCIMENTO_ALTO' ? '📈 Var. > 2% (≥10 seg)' : g === 'VOLUME_SEM_CONTEUDO' ? '📦 Sem Conteúdo' : '🔥 Explosão %'}
-                                  </span>
-                                ))}
+                                {item.gatilhos.map((g, gi) => {
+                                  const deltaSeguindo = item.delta_seguindo ?? 0;
+                                  const tituloSeguindo = `Seguindo: ${(item.seguindo ?? 0) - deltaSeguindo} → ${item.seguindo ?? 0}`;
+                                  return (
+                                    <span
+                                      key={gi}
+                                      className="anomalias-gatilho-badge"
+                                      title={g === 'FOLLOW_ALTO' || g === 'UNFOLLOW_ALTO' ? tituloSeguindo : undefined}
+                                    >
+                                      {g === 'CRESCIMENTO_ALTO' ? '📈 Var. > 2% (≥10 seg)'
+                                        : g === 'VOLUME_SEM_CONTEUDO' ? '📦 Sem Conteúdo'
+                                        : g === 'FOLLOW_ALTO' ? `➕ Follow +${deltaSeguindo}`
+                                        : g === 'UNFOLLOW_ALTO' ? `➖ Unfollow ${deltaSeguindo}`
+                                        : '🔥 Explosão %'}
+                                    </span>
+                                  );
+                                })}
                               </div>
                             ) : (
                               <span style={{ color: '#484F58', fontSize: 11 }}>Normal</span>
