@@ -103,10 +103,17 @@ def inicializar_estrutura_banco():
             reach INTEGER DEFAULT 0,
             saved INTEGER DEFAULT 0,
             shares INTEGER DEFAULT 0,
+            reposts INTEGER DEFAULT 0,
             total_interactions INTEGER DEFAULT 0,
             data_carga DATETIME NOT NULL
         )
     """)
+    c.execute("PRAGMA table_info(posts_metricas_snapshots)")
+    if "reposts" not in [col["name"] for col in c.fetchall()]:
+        try:
+            c.execute("ALTER TABLE posts_metricas_snapshots ADD COLUMN reposts INTEGER DEFAULT 0")
+        except Exception as e:
+            print(f"Aviso ao adicionar coluna reposts em posts_metricas_snapshots: {e}")
     c.execute("CREATE INDEX IF NOT EXISTS idx_posts_snapshots_post_id ON posts_metricas_snapshots(post_id)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_posts_snapshots_username ON posts_metricas_snapshots(username)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_posts_snapshots_data_carga ON posts_metricas_snapshots(data_carga)")
@@ -139,6 +146,7 @@ def inicializar_estrutura_banco():
         ("reach", "INTEGER DEFAULT 0"),
         ("saved", "INTEGER DEFAULT 0"),
         ("shares", "INTEGER DEFAULT 0"),
+        ("reposts", "INTEGER DEFAULT 0"),
         ("total_interactions", "INTEGER DEFAULT 0"),
         ("media_url", "TEXT"),
         ("thumbnail_url", "TEXT"),
@@ -306,6 +314,27 @@ def extrair_dados_perfil(account_id, token):
 _CODIGOS_RATE_LIMIT = (4, 17, 32, 613)
 
 
+def extrair_reposts(media_id, token):
+    """Busca a métrica `reposts` (Meta, dez/2025) em requisição separada: se a conta/versão
+    da API não suportar, só os reposts ficam de fora — reach/saved/shares/views não são afetados.
+    Retorna int, ou None se indisponível."""
+    try:
+        res = requests.get(
+            f"{graph_api_base(token)}/{media_id}/insights",
+            params={"metric": "reposts", "access_token": token},
+            timeout=10,
+        )
+        if res.status_code != 200:
+            return None
+        for item in res.json().get("data", []):
+            if item.get("name") == "reposts":
+                values = item.get("values", [])
+                return int(values[0].get("value", 0)) if values else 0
+    except Exception:
+        pass
+    return None
+
+
 def extrair_insights_post(media_id, media_type, media_product_type, token):
     """
     Tenta obter métricas avançadas (insights) de uma postagem específica.
@@ -335,6 +364,7 @@ def extrair_insights_post(media_id, media_type, media_product_type, token):
         "reach": 0,
         "saved": 0,
         "shares": 0,
+        "reposts": None,
         "views": 0,
         "total_interactions": 0
     }
@@ -349,6 +379,7 @@ def extrair_insights_post(media_id, media_type, media_product_type, token):
                 val = values[0].get("value", 0) if values else 0
                 if name in insights:
                     insights[name] = int(val)
+            insights["reposts"] = extrair_reposts(media_id, token)
             return insights
 
         if res.status_code == 429:
@@ -750,19 +781,26 @@ def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str, ac
             # persistente) — preserva TODOS os valores já gravados em vez de
             # zerar; próximo ciclo do cron tenta buscar de novo.
             c.execute("""
-                SELECT views, reach, saved, shares, total_interactions
+                SELECT views, reach, saved, shares, total_interactions, reposts
                 FROM posts_historico WHERE post_id = ?
             """, (post_id,))
             row_prev = c.fetchone()
             if row_prev:
-                views, reach, saved, shares, total_interactions = row_prev
+                views, reach, saved, shares, total_interactions, reposts = row_prev
+                reposts = reposts or 0
             else:
-                views = reach = saved = shares = total_interactions = 0
+                views = reach = saved = shares = total_interactions = reposts = 0
         else:
             views = int(insights.get("views", 0))
             reach = int(insights.get("reach", 0))
             saved = int(insights.get("saved", 0))
             shares = int(insights.get("shares", 0))
+            reposts = insights.get("reposts")
+            if reposts is None:
+                # Métrica indisponível nesta chamada: preserva o valor já gravado
+                c.execute("SELECT reposts FROM posts_historico WHERE post_id = ?", (post_id,))
+                row_rp = c.fetchone()
+                reposts = (row_rp[0] or 0) if row_rp else 0
             total_interactions = int(insights.get("total_interactions", (likes + comentarios + saved + shares)))
 
             # Proteção contra oscilação transitória da Meta API (quando a resposta veio OK mas com valor pontualmente vazio/zero)
@@ -794,9 +832,9 @@ def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str, ac
             INSERT INTO posts_historico (
                 post_id, username, data_postagem, formato, legenda,
                 likes, comentarios, views, taxa_engajamento, data_atualizacao,
-                shortcode, data_carga, permalink, media_product_type, reach, saved, shares, total_interactions,
+                shortcode, data_carga, permalink, media_product_type, reach, saved, shares, reposts, total_interactions,
                 media_url, thumbnail_url
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(post_id) DO UPDATE SET
                 likes = excluded.likes,
                 comentarios = excluded.comentarios,
@@ -804,6 +842,7 @@ def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str, ac
                 reach = excluded.reach,
                 saved = excluded.saved,
                 shares = excluded.shares,
+                reposts = excluded.reposts,
                 total_interactions = excluded.total_interactions,
                 taxa_engajamento = excluded.taxa_engajamento,
                 data_atualizacao = excluded.data_atualizacao,
@@ -817,7 +856,7 @@ def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str, ac
         """, (
             post_id, username, data_postagem, formato, legenda,
             likes, comentarios, views, taxa_engajamento, data_carga_str,
-            shortcode, data_carga_str, permalink, product_type, reach, saved, shares, total_interactions,
+            shortcode, data_carga_str, permalink, product_type, reach, saved, shares, reposts, total_interactions,
             media_url, thumbnail_url
         ))
         posts_salvos += 1
@@ -825,10 +864,10 @@ def salvar_dados_no_banco(username, dados_perfil, posts_data, data_carga_str, ac
         # Insere Snapshot de Evolução Temporal (posts_metricas_snapshots)
         c.execute("""
             INSERT INTO posts_metricas_snapshots (
-                post_id, username, likes, comentarios, views, reach, saved, shares, total_interactions, data_carga
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                post_id, username, likes, comentarios, views, reach, saved, shares, reposts, total_interactions, data_carga
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            post_id, username, likes, comentarios, views, reach, saved, shares, total_interactions, data_carga_str
+            post_id, username, likes, comentarios, views, reach, saved, shares, reposts, total_interactions, data_carga_str
         ))
         snapshots_salvos += 1
 
