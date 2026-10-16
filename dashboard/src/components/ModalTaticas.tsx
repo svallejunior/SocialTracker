@@ -57,10 +57,25 @@ const LINKS = [
   { titulo: 'FICHA PERSONAGEM 8K', url: 'file:///D:/projetos/prompt/CharacterSheet/index.html' }
 ];
 
-const NICHOS = ['FRASES', 'DANCINHA', 'SENSUAL', 'CHARADA', 'MEME'];
+type Nicho = { nome: string; descricao?: string; pros?: string; contras?: string };
+
+const NICHOS: Nicho[] = [
+  {
+    nome: 'FRASES',
+    descricao: 'Utilização de fotos ou vídeos com frases apenas... normalmente elas remetem para outro take. A intenção é que o lead fique lendo e aguardando a virada da ação após o tempo de gancho (3s).',
+    pros: 'Viralização',
+    contras: 'Atrai mais mulheres',
+  },
+  { nome: 'DANCINHA' },
+  { nome: 'SENSUAL' },
+  { nome: 'CHARADA' },
+  { nome: 'MEME' },
+];
 
 export default function ModalTaticas({ onClose }: { onClose: () => void }) {
   const [aba, setAba] = useState<'taticas' | 'links' | 'nicho'>('taticas');
+  const [nichoSel, setNichoSel] = useState<string | null>(null);
+  const nichoAtual = NICHOS.find((n) => n.nome === nichoSel);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -123,17 +138,41 @@ export default function ModalTaticas({ onClose }: { onClose: () => void }) {
         </div>
         {aba === 'nicho' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {NICHOS.map((nicho) => (
-              <div
-                key={nicho}
+            {NICHOS.map(({ nome }) => (
+              <button
+                key={nome}
+                onClick={() => setNichoSel(nichoSel === nome ? null : nome)}
                 style={{
-                  padding: '12px 14px', borderRadius: 10, fontSize: 14, fontWeight: 700,
+                  padding: '12px 14px', borderRadius: 10, fontSize: 14, fontWeight: 700, textAlign: 'left',
+                  cursor: 'pointer', color: '#E6EDF3', background: '#161B22',
+                  border: `1px solid ${nichoSel === nome ? '#388BFD' : 'rgba(255,255,255,0.08)'}`,
+                }}
+              >
+                {nome}
+              </button>
+            ))}
+            {nichoAtual && (
+              <div
+                style={{
+                  marginTop: 4, padding: 14, borderRadius: 10, fontSize: 13, lineHeight: 1.6,
                   background: '#161B22', border: '1px solid rgba(255,255,255,0.08)',
                 }}
               >
-                {nicho}
+                {nichoAtual.descricao ? (
+                  <>
+                    <div style={{ color: '#8B949E' }}>{nichoAtual.descricao}</div>
+                    {nichoAtual.pros && (
+                      <div style={{ marginTop: 10 }}><strong style={{ color: '#3FB950' }}>PRÓS:</strong> {nichoAtual.pros}</div>
+                    )}
+                    {nichoAtual.contras && (
+                      <div><strong style={{ color: '#F85149' }}>CONTRAS:</strong> {nichoAtual.contras}</div>
+                    )}
+                  </>
+                ) : (
+                  <div style={{ color: '#8B949E' }}>Descrição ainda não cadastrada para {nichoAtual.nome}.</div>
+                )}
               </div>
-            ))}
+            )}
           </div>
         ) : aba === 'links' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
