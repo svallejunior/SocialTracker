@@ -12,6 +12,8 @@ interface Perfil {
   nome?: string;
   foto_url?: string | null;
   meu_perfil?: number | boolean;
+  status?: string | null;
+  status_controle?: string | null;
 }
 
 interface Check {
@@ -100,6 +102,9 @@ async function postar(body: Record<string, unknown>) {
 export default function CentralProdutividade({ profiles = [], userRole = '', isMaster2802 = false }: CentralProdutividadeProps) {
   const minhasModelos = useMemo(() => {
     return (profiles || []).filter(p => {
+      // Perfis marcados como "morreu" não entram no quadro
+      const morreu = `${p.status || ''} ${p.status_controle || ''}`.toUpperCase().includes('MORREU');
+      if (morreu) return false;
       if (p.meu_perfil !== undefined) {
         return Number(p.meu_perfil) === 1 || p.meu_perfil === true;
       }
