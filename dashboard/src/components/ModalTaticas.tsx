@@ -57,8 +57,10 @@ const LINKS = [
   { titulo: 'FICHA PERSONAGEM 8K', url: 'file:///D:/projetos/prompt/CharacterSheet/index.html' }
 ];
 
+const NICHOS = ['FRASES', 'DANCINHA', 'SENSUAL', 'CHARADA', 'MEME'];
+
 export default function ModalTaticas({ onClose }: { onClose: () => void }) {
-  const [aba, setAba] = useState<'taticas' | 'links'>('taticas');
+  const [aba, setAba] = useState<'taticas' | 'links' | 'nicho'>('taticas');
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -83,7 +85,7 @@ export default function ModalTaticas({ onClose }: { onClose: () => void }) {
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <div style={{ display: 'flex', gap: 8 }}>
-            {([['taticas', 'Táticas'], ['links', 'Links']] as const).map(([id, label]) => (
+            {([['taticas', 'Táticas'], ['links', 'Links'], ['nicho', 'Nicho']] as const).map(([id, label]) => (
               <button
                 key={id}
                 onClick={() => setAba(id)}
@@ -119,7 +121,21 @@ export default function ModalTaticas({ onClose }: { onClose: () => void }) {
             <X size={20} />
           </button>
         </div>
-        {aba === 'links' ? (
+        {aba === 'nicho' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {NICHOS.map((nicho) => (
+              <div
+                key={nicho}
+                style={{
+                  padding: '12px 14px', borderRadius: 10, fontSize: 14, fontWeight: 700,
+                  background: '#161B22', border: '1px solid rgba(255,255,255,0.08)',
+                }}
+              >
+                {nicho}
+              </div>
+            ))}
+          </div>
+        ) : aba === 'links' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {LINKS.map(({ titulo, url }) => (
               <a
