@@ -92,6 +92,12 @@ const NICHOS: Nicho[] = [
     pros: 'Alta recomendação',
     contras: 'Atrai mulheres; depende de demanda viral; às vezes é difícil de reproduzir',
   },
+  {
+    nome: 'BISCOITO',
+    descricao: 'Resume-se apenas a mostrar a beleza da modelo... coisas simples, como se filmar em um espelho ou em um momento do dia a dia. O lead acha ela bonita e segue.',
+    pros: 'Light, consistente e durador',
+    contras: 'Mais difícil de viralizar',
+  },
 ];
 
 export default function ModalTaticas({ onClose }: { onClose: () => void }) {
