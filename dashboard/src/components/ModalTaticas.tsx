@@ -68,7 +68,12 @@ const NICHOS: Nicho[] = [
     pros: 'Viralização',
     contras: 'Atrai mais mulheres',
   },
-  { nome: 'DANCINHA' },
+  {
+    nome: 'DANCINHA',
+    descricao: 'Trata-se de motion control de movimentos de danças de pouca ação, mas sempre usando de atributos sensuais para obter atenção: seja roupa curta, apertada ou até marcando. Utilizar músicas e dancinhas da moda.',
+    pros: 'Simples de fazer',
+    contras: 'Repetitivo',
+  },
   { nome: 'SENSUAL' },
   { nome: 'CHARADA' },
   { nome: 'MEME' },
