@@ -74,9 +74,24 @@ const NICHOS: Nicho[] = [
     pros: 'Simples de fazer',
     contras: 'Repetitivo',
   },
-  { nome: 'SENSUAL' },
-  { nome: 'CHARADA' },
-  { nome: 'MEME' },
+  {
+    nome: 'SENSUAL',
+    descricao: 'Utilização dos mais diversos ganchos, mas sempre com o objetivo de mostrar o corpo e sensualizar. Usam das mais absurdas situações para segurar o público.',
+    pros: 'Viraliza bem',
+    contras: 'Risco de banimento; público pouco qualificado',
+  },
+  {
+    nome: 'CHARADA',
+    descricao: 'Utiliza a brecha de pouco QI do público para segurar a atenção na tentativa de raciocínio do mesmo em entender o que está ali.',
+    pros: 'Retém atenção, então reverte em público',
+    contras: 'Chato demais e retém inclusive mulheres',
+  },
+  {
+    nome: 'MEME',
+    descricao: 'Repete tudo que viraliza, seja trend, meme, etc.',
+    pros: 'Alta recomendação',
+    contras: 'Atrai mulheres; depende de demanda viral; às vezes é difícil de reproduzir',
+  },
 ];
 
 export default function ModalTaticas({ onClose }: { onClose: () => void }) {
