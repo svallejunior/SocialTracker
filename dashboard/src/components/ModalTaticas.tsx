@@ -54,7 +54,9 @@ const LINKS = [
   { titulo: 'Z IMAGE TURBO - GERAR IMAGENS FOTOREALISTAS', url: 'https://bit.ly/4vWUqRF' },
   { titulo: 'TROCA DE ROUPA E TROCA DE COR', url: 'https://bit.ly/4fuxgMJ' },
   { titulo: 'FACE SWAP', url: 'https://bit.ly/3TepspL' },
-  { titulo: 'FICHA PERSONAGEM 8K', url: 'file:///D:/projetos/prompt/CharacterSheet/index.html' }
+  { titulo: 'FICHA PERSONAGEM 8K', url: 'D:/projetos/prompt/CharacterSheet/index.html' },
+  { titulo: 'FICHA PERSONAGEM 8K 2', url: 'D:/projetos/prompt/CharacterSheet/ficha-simples.html' },
+  { titulo: 'FICHA ROSTO/CORPO', url: 'D:/projetos/prompt/CharacterSheet/fichas-rosto-corpo.html' }
 ];
 
 type Nicho = { nome: string; descricao?: string; pros?: string; contras?: string };
